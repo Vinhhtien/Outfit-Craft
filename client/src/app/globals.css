@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fafaf9;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --border: #e7e5e4;
+  --muted: #78716c;
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --font-sans: var(--font-geist-sans);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1c1917;
+    --foreground: #fafaf9;
+    --card: #292524;
+    --border: #44403c;
+    --muted: #a8a29e;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+/* Nen ca-ro cho vung canvas -> nhin ro anh PNG da tach nen. */
+.canvas-checker {
+  background-image:
+    linear-gradient(45deg, #e7e5e4 25%, transparent 25%),
+    linear-gradient(-45deg, #e7e5e4 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e7e5e4 75%),
+    linear-gradient(-45deg, transparent 75%, #e7e5e4 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}

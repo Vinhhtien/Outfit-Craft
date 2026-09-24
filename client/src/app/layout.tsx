@@ -1,0 +1,22 @@
+import type { Metadata } from 'next';
+import { Geist } from 'next/font/google';
+import './globals.css';
+import { AuthProvider } from '@/components/layout/AuthProvider';
+
+const geist = Geist({ variable: '--font-geist-sans', subsets: ['latin', 'vietnamese'] });
+
+export const metadata: Metadata = {
+  title: 'OutfitCraft — Tủ đồ số của bạn',
+  description:
+    'Số hóa tủ quần áo, tách nền tự động, phối đồ kéo-thả và gợi ý trang phục theo thời tiết.',
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="vi">
+      <body className={`${geist.variable} antialiased`}>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
+    </html>
+  );
+}

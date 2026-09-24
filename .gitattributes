@@ -1,0 +1,11 @@
+# Chuan hoa line ending giua Windows / macOS / Linux
+# Tranh conflict gia khi cac thanh vien dung he dieu hanh khac nhau
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
