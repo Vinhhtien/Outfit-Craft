@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorMessage } from '@/lib/api';
-import { AuthLayout, AuthField, AuthSubmitButton } from '@/components/layout/AuthLayout';
+import { AuthLayout, AuthField, AuthSubmitButton, AuthTabs } from '@/components/layout/AuthLayout';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -39,9 +39,11 @@ export default function RegisterPage() {
 
   return (
     <AuthLayout>
-      <h1 className="mb-6 text-center font-serif-display text-[26px] font-medium text-[#1F453E]">
+      <h1 className="mb-5 text-center font-serif-display text-[26px] font-medium text-[#1F453E]">
         Tạo tài khoản
       </h1>
+
+      <AuthTabs active="register" />
 
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">

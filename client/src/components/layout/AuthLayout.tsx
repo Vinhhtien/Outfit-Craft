@@ -1,9 +1,11 @@
 'use client';
 
 import { forwardRef } from 'react';
+import Link from 'next/link';
+import { ScallopBanner } from './ScallopBanner';
 
-/* ---------------- Logo (Outfit viet tay + CRAFT co chan) ---------------- */
-export function BrandLogo({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
+/* ---------------- Logo (Outfit viet tay + CRAFT co chan, xep ngang) ---------------- */
+export function BrandLogo({ size = 'md' }: { size?: 'md' | 'sm' }) {
   if (size === 'sm') {
     return (
       <span className="inline-flex items-baseline gap-1 leading-none text-white">
@@ -14,48 +16,39 @@ export function BrandLogo({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
   }
 
   return (
-    <div className="flex flex-col items-center leading-none text-[#1F453E]">
-      <span className="relative z-10 mb-[-10px] font-script text-6xl -rotate-3 xl:text-7xl">
-        Outfit
-      </span>
-      <span className="font-serif-display text-5xl font-normal tracking-[0.22em] xl:text-6xl">
+    <span className="inline-flex items-baseline gap-2 leading-none text-[#1F453E]">
+      <span className="font-script text-3xl -rotate-3 sm:text-4xl">Outfit</span>
+      <span className="font-serif-display text-xl font-normal tracking-[0.2em] sm:text-2xl">
         CRAFT
       </span>
-    </div>
+    </span>
   );
 }
 
-/* ---------------- Khung chung: cot trai + card + footer ---------------- */
+/* ---------------- Khung chung: banner + card + footer ---------------- */
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col justify-between bg-[#FAF9F5] font-jakarta text-[#1F453E]">
-      <main className="flex flex-1 flex-col lg:flex-row">
-        {/* Branding panel */}
-        <aside className="hidden flex-col justify-between border-r border-[#DFE6C5] bg-[#EBF0D6] p-10 lg:flex lg:w-[45%] xl:p-14">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1F453E]">
+      {/* Banner ke soc + vien luon song, dung chung voi /wardrobe */}
+      <ScallopBanner innerClassName="items-center px-6 py-5 sm:px-8">
+        <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4">
+          <p className="hidden text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1F453E] sm:block">
             Digital Atelier · Est. 2026
           </p>
-
-          <div className="flex flex-col items-center text-center">
-            <BrandLogo />
-            <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#1F453E]">
-              Wardrobe · Studio
-            </p>
-            <p className="mt-5 text-[15px] text-[#2C4C45]">Tủ đồ số và trợ lý phối đồ của bạn</p>
-          </div>
-
-          <p className="text-xs font-medium text-[#1F453E]">Đà Nẵng</p>
-        </aside>
-
-        {/* Form area */}
-        <section className="flex flex-1 flex-col items-center justify-center p-6 sm:p-12 lg:w-[55%]">
-          <div className="mb-8 lg:hidden">
+          <div className="col-start-2">
             <BrandLogo />
           </div>
-          <div className="w-full max-w-[420px] rounded-xl border border-[#E5E7EB] bg-white p-8 shadow-[0_2px_12px_rgba(0,0,0,0.03)] sm:p-10">
-            {children}
-          </div>
-        </section>
+          <p className="hidden text-right text-[11px] font-semibold uppercase tracking-[0.2em] text-[#1F453E] sm:block">
+            Wardrobe · Studio
+          </p>
+        </div>
+      </ScallopBanner>
+
+      {/* Form area */}
+      <main className="flex flex-1 items-center justify-center px-6 py-10">
+        <div className="w-full max-w-[420px] rounded-xl border border-[#E5E7EB] bg-white p-8 shadow-[0_2px_12px_rgba(0,0,0,0.03)] sm:p-10">
+          {children}
+        </div>
       </main>
 
       {/* Footer */}
@@ -118,5 +111,24 @@ export function AuthSubmitButton({
       )}
       {children}
     </button>
+  );
+}
+
+/* ---------------- Tab chuyen Dang nhap / Dang ky (chi la 2 link dieu huong) ---------------- */
+export function AuthTabs({ active }: { active: 'login' | 'register' }) {
+  const tab = (isActive: boolean) =>
+    `rounded-full py-2 text-center text-[11px] font-bold uppercase tracking-wider transition-colors ${
+      isActive ? 'bg-[#1F453E] text-white shadow-xs' : 'text-[#1F453E] hover:bg-[#E2ECC8]/60'
+    }`;
+
+  return (
+    <div className="mb-6 grid grid-cols-2 gap-1 rounded-full border border-[#E2E8F0] bg-[#FAF9F5] p-1">
+      <Link href="/login" aria-current={active === 'login' ? 'page' : undefined} className={tab(active === 'login')}>
+        Đăng nhập
+      </Link>
+      <Link href="/register" aria-current={active === 'register' ? 'page' : undefined} className={tab(active === 'register')}>
+        Đăng ký
+      </Link>
+    </div>
   );
 }

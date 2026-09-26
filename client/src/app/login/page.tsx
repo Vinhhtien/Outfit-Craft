@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorMessage } from '@/lib/api';
-import { AuthLayout, AuthField, AuthSubmitButton } from '@/components/layout/AuthLayout';
+import { AuthLayout, AuthField, AuthSubmitButton, AuthTabs } from '@/components/layout/AuthLayout';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,9 +35,11 @@ export default function LoginPage() {
       <h1 className="text-center font-serif-display text-[26px] font-medium text-[#1F453E]">
         Đăng nhập OutfitCraft
       </h1>
-      <p className="mb-7 mt-1.5 text-center text-[13px] text-[#71807B]">
+      <p className="mb-5 mt-1.5 text-center text-[13px] text-[#71807B]">
         Tủ đồ số và trợ lý phối đồ của bạn
       </p>
+
+      <AuthTabs active="login" />
 
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
