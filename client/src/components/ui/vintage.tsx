@@ -109,12 +109,15 @@ export function VModal({
   title,
   children,
   wide,
+  serifTitle,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   wide?: boolean;
+  /** Tieu de font Serif (Playfair) thay vi Sans dam. */
+  serifTitle?: boolean;
 }) {
   if (!open) return null;
 
@@ -130,7 +133,15 @@ export function VModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between gap-4">
-          <h2 className="text-lg font-bold">{title}</h2>
+          <h2
+            className={
+              serifTitle
+                ? 'font-serif-display text-xl font-semibold text-[#1F453E]'
+                : 'text-lg font-bold'
+            }
+          >
+            {title}
+          </h2>
           <button
             type="button"
             onClick={onClose}

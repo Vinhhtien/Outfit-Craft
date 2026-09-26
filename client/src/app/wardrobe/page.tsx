@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Shirt, Search } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
+import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { AddItemModal } from '@/components/wardrobe/AddItemModal';
 import { ItemCard } from '@/components/wardrobe/ItemCard';
 import { VButton, VChip, VSpinner } from '@/components/ui/vintage';
@@ -58,32 +59,19 @@ export default function WardrobePage() {
     <ProtectedLayout fullBleed hideFooter>
       <div className="flex-1 bg-[#FAF9F5] font-jakarta text-[#1F453E]">
         {/* Banner ke soc + vien luon song */}
-        <section>
-          <div className="bg-[repeating-linear-gradient(90deg,#E2ECC8_0px,#E2ECC8_28px,#EAF2D3_28px,#EAF2D3_56px)]">
-            <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-4 pb-8 pt-10">
-              <div>
-                <h1 className="font-serif-display text-4xl font-normal uppercase tracking-wide text-[#1F453E]">
-                  Tủ đồ của tôi
-                </h1>
-                <p className="mt-1 text-sm font-medium text-[#2C4C45]">
-                  {items.length} món đồ đã số hóa
-                </p>
-              </div>
-              <VButton onClick={() => setModalOpen(true)}>
-                <Plus size={16} /> Thêm món đồ
-              </VButton>
-            </div>
+        <ScallopBanner>
+          <div>
+            <h1 className="font-serif-display text-4xl font-normal uppercase tracking-wide text-[#1F453E]">
+              Tủ đồ của tôi
+            </h1>
+            <p className="mt-1 text-sm font-medium text-[#2C4C45]">
+              {items.length} món đồ đã số hóa
+            </p>
           </div>
-          <svg className="block h-4 w-full" aria-hidden="true">
-            <defs>
-              <pattern id="wardrobe-scallop" width="56" height="16" patternUnits="userSpaceOnUse">
-                <path d="M0 0 A14 14 0 0 0 28 0" fill="#E2ECC8" stroke="#1F453E" strokeWidth="1.5" />
-                <path d="M28 0 A14 14 0 0 0 56 0" fill="#EAF2D3" stroke="#1F453E" strokeWidth="1.5" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="16" fill="url(#wardrobe-scallop)" />
-          </svg>
-        </section>
+          <VButton onClick={() => setModalOpen(true)}>
+            <Plus size={16} /> Thêm món đồ
+          </VButton>
+        </ScallopBanner>
 
         <div className="mx-auto max-w-6xl px-4 py-8">
           <div className="mb-6 space-y-4">

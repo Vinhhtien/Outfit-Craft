@@ -25,8 +25,13 @@ export interface OutfitCanvasHandle {
 
 export const OutfitCanvas = forwardRef<
   OutfitCanvasHandle,
-  { onSelectionChange?: (hasSelection: boolean) => void; onDirty?: () => void }
->(function OutfitCanvas({ onSelectionChange, onDirty }, ref) {
+  {
+    onSelectionChange?: (hasSelection: boolean) => void;
+    onDirty?: () => void;
+    /** Ti le hien thi (chi CSS). Kich thuoc that cua canvas van la CANVAS_WIDTH x CANVAS_HEIGHT. */
+    scale?: number;
+  }
+>(function OutfitCanvas({ onSelectionChange, onDirty, scale = 1 }, ref) {
   const elRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<Canvas | null>(null);
   const [ready, setReady] = useState(false);
@@ -140,11 +145,24 @@ export const OutfitCanvas = forwardRef<
   );
 
   return (
-    <div className="relative inline-block rounded-2xl border border-[var(--border)] canvas-checker overflow-hidden">
-      <canvas ref={elRef} />
+    <div
+      className="relative box-content overflow-hidden rounded-xl border border-dashed border-[#869BB2]/50 bg-white"
+      style={{ width: CANVAS_WIDTH * scale, height: CANVAS_HEIGHT * scale }}
+    >
+      {/* Thu nho bang transform: Fabric tu quy doi toa do chuot qua getBoundingClientRect. */}
+      <div
+        style={{
+          width: CANVAS_WIDTH,
+          height: CANVAS_HEIGHT,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+        }}
+      >
+        <canvas ref={elRef} />
+      </div>
       {!ready && (
-        <div className="absolute inset-0 grid place-items-center bg-[var(--card)]/60">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
+        <div className="absolute inset-0 grid place-items-center bg-white/60">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#1F453E] border-t-transparent" />
         </div>
       )}
     </div>

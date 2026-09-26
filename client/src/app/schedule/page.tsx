@@ -10,7 +10,8 @@ import {
 } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
-import { Button, Modal, Spinner, EmptyState } from '@/components/ui';
+import { ScallopBanner } from '@/components/layout/ScallopBanner';
+import { VModal, VSpinner } from '@/components/ui/vintage';
 import { outfitApi, scheduleApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import type { Outfit, ScheduleEntry } from '@/types';
@@ -97,141 +98,162 @@ export default function SchedulePage() {
   };
 
   return (
-    <ProtectedLayout>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Lịch trang phục</h1>
-          <p className="text-sm text-[var(--muted)]">
-            Lên kế hoạch mặc gì cho từng ngày.
-          </p>
-        </div>
+    <ProtectedLayout fullBleed hideFooter>
+      <div className="flex min-h-[calc(100dvh-64px)] flex-1 flex-col bg-[#FAF9F5] font-jakarta text-[#1F453E]">
+        <ScallopBanner compact innerClassName="max-w-7xl items-center px-6 py-3 lg:px-10">
+          <div>
+            <h1 className="font-serif-display text-2xl font-normal uppercase leading-tight tracking-wider text-[#1F453E] sm:text-3xl">
+              Lịch trang phục
+            </h1>
+            <p className="mt-0.5 text-xs font-medium text-[#2C4C45]">
+              Lên kế hoạch mặc gì cho từng ngày.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setMonth(addMonths(month, -1))}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] hover:bg-black/5"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="w-32 text-center text-sm font-medium capitalize">
-            {format(month, 'MMMM yyyy', { locale: vi })}
-          </span>
-          <button
-            onClick={() => setMonth(addMonths(month, 1))}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--border)] hover:bg-black/5"
-          >
-            <ChevronRight size={16} />
-          </button>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#1F453E]/25 bg-white/95 px-2 py-1.5 shadow-2xs">
+            <button
+              onClick={() => setMonth(addMonths(month, -1))}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-[#1F453E] transition-colors hover:bg-[#1F453E] hover:text-white"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="min-w-[120px] px-3 text-center text-xs font-bold capitalize tracking-wide text-[#1F453E] sm:text-sm">
+              {format(month, 'MMMM yyyy', { locale: vi })}
+            </span>
+            <button
+              onClick={() => setMonth(addMonths(month, 1))}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-[#1F453E] transition-colors hover:bg-[#1F453E] hover:text-white"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </ScallopBanner>
+
+        <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-6 py-4 lg:px-10">
+          {error && (
+            <p className="mb-4 rounded-xl border border-[#E5A99E] bg-[#FDF2F0] px-4 py-2.5 text-sm text-[#8C2D19]">
+              {error}
+            </p>
+          )}
+
+          {loading ? (
+            <div className="grid flex-1 place-items-center py-20">
+              <VSpinner />
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-[#1F453E]/20 bg-white shadow-[0_6px_24px_rgba(31,69,62,0.05)]">
+              <div className="grid grid-cols-7 border-b border-[#1F453E]/15 bg-[#E2ECC8]/55">
+                {WEEKDAYS.map((d) => (
+                  <div
+                    key={d}
+                    className="border-r border-[#1F453E]/10 py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.15em] text-[#1F453E] last:border-r-0"
+                  >
+                    {d}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid flex-1 auto-rows-fr grid-cols-7">
+                {days.map((day) => {
+                  const entry = entryFor(day);
+                  const inMonth = isSameMonth(day, month);
+                  const today = isToday(day);
+
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      className={`group relative min-h-[92px] border-b border-r border-[#1F453E]/10 p-2 transition-colors sm:min-h-[105px] [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0 ${
+                        !inMonth
+                          ? 'bg-[#F6F5F0]/80 text-[#869BB2]/70'
+                          : today
+                            ? 'bg-[#E2ECC8]/15 hover:bg-[#FAF9F5]'
+                            : 'bg-white hover:bg-[#FAF9F5]'
+                      }`}
+                    >
+                      <span
+                        className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                          today
+                            ? 'bg-[#1F453E] font-bold text-white shadow-2xs'
+                            : inMonth
+                              ? 'font-semibold text-[#1F453E]'
+                              : 'font-semibold'
+                        }`}
+                      >
+                        {format(day, 'd')}
+                      </span>
+
+                      {entry ? (
+                        <div className={`mt-1 ${inMonth ? '' : 'opacity-60'}`}>
+                          <div className="relative grid aspect-square place-items-center overflow-hidden rounded-lg border border-[#1F453E]/15 bg-[#FAF9F5] p-1">
+                            {entry.outfit?.thumbnailUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={entry.outfit.thumbnailUrl}
+                                alt={entry.outfit.name}
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            ) : (
+                              <CalendarDays size={16} className="text-[#869BB2]" />
+                            )}
+
+                            {entry.isWorn && (
+                              <span
+                                title="Đã mặc"
+                                className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-[#1F453E] text-[#E2ECC8] shadow-2xs"
+                              >
+                                <Check size={10} />
+                              </span>
+                            )}
+                          </div>
+
+                          <p
+                            className="mt-0.5 truncate text-[10px] font-medium text-[#1F453E]"
+                            title={entry.outfit?.name}
+                          >
+                            {entry.outfit?.name}
+                          </p>
+
+                          <div className="absolute inset-x-2 bottom-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            {!entry.isWorn && (
+                              <button
+                                onClick={() => void handleMarkWorn(entry)}
+                                title="Đánh dấu đã mặc"
+                                className="grid h-5 flex-1 place-items-center rounded-full border border-[#869BB2] bg-white text-[10px] text-[#1F453E] hover:bg-[#E2ECC8]/50"
+                              >
+                                <Check size={11} />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => void handleRemove(entry)}
+                              title="Bỏ khỏi ngày này"
+                              className="grid h-5 flex-1 place-items-center rounded-full border border-[#E5A99E] bg-[#FDF2F0] text-[#8C2D19] hover:bg-[#F9E1DC]"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        inMonth && (
+                          <button
+                            onClick={() => setPickerDate(day)}
+                            title="Gán outfit cho ngày này"
+                            className="mt-1 grid h-[58px] w-full cursor-pointer place-items-center rounded-lg border border-dashed border-[#869BB2]/60 text-[#869BB2] opacity-0 transition-opacity hover:border-[#1F453E] hover:text-[#1F453E] group-hover:opacity-100"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-      )}
-
-      {loading ? (
-        <div className="grid place-items-center py-20">
-          <Spinner />
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-          <div className="grid grid-cols-7 border-b border-[var(--border)]">
-            {WEEKDAYS.map((d) => (
-              <div
-                key={d}
-                className="py-2 text-center text-xs font-medium text-[var(--muted)]"
-              >
-                {d}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7">
-            {days.map((day) => {
-              const entry = entryFor(day);
-              const inMonth = isSameMonth(day, month);
-
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={`group relative min-h-[92px] border-b border-r border-[var(--border)] p-1.5 ${
-                    inMonth ? '' : 'opacity-40'
-                  }`}
-                >
-                  <span
-                    className={`inline-grid h-6 w-6 place-items-center rounded-full text-xs ${
-                      isToday(day)
-                        ? 'bg-[var(--primary)] font-semibold text-white'
-                        : 'text-[var(--muted)]'
-                    }`}
-                  >
-                    {format(day, 'd')}
-                  </span>
-
-                  {entry ? (
-                    <div className="mt-1">
-                      <div className="canvas-checker relative grid aspect-square place-items-center overflow-hidden rounded-lg border border-[var(--border)]">
-                        {entry.outfit?.thumbnailUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={entry.outfit.thumbnailUrl}
-                            alt={entry.outfit.name}
-                            className="max-h-full max-w-full object-contain"
-                          />
-                        ) : (
-                          <CalendarDays size={16} className="text-[var(--muted)]" />
-                        )}
-
-                        {entry.isWorn && (
-                          <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-green-500 text-white">
-                            <Check size={10} />
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="mt-0.5 truncate text-[10px]" title={entry.outfit?.name}>
-                        {entry.outfit?.name}
-                      </p>
-
-                      <div className="absolute inset-x-1.5 bottom-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        {!entry.isWorn && (
-                          <button
-                            onClick={() => void handleMarkWorn(entry)}
-                            title="Đánh dấu đã mặc"
-                            className="grid h-5 flex-1 place-items-center rounded bg-green-500 text-white"
-                          >
-                            <Check size={11} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => void handleRemove(entry)}
-                          title="Bỏ khỏi ngày này"
-                          className="grid h-5 flex-1 place-items-center rounded bg-red-500 text-white"
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    inMonth && (
-                      <button
-                        onClick={() => setPickerDate(day)}
-                        title="Gán outfit cho ngày này"
-                        className="mt-1 grid h-[58px] w-full place-items-center rounded-lg border border-dashed border-[var(--border)] text-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--primary)] hover:text-[var(--primary)] group-hover:opacity-100"
-                      >
-                        <Plus size={14} />
-                      </button>
-                    )
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Modal chon outfit */}
-      <Modal
+      <VModal
         open={Boolean(pickerDate)}
         onClose={() => setPickerDate(null)}
         title={
@@ -240,12 +262,15 @@ export default function SchedulePage() {
             : 'Chọn outfit'
         }
         wide
+        serifTitle
       >
         {outfits.length === 0 ? (
-          <EmptyState
-            title="Chưa có outfit nào"
-            description="Hãy sang trang Phối đồ để tạo outfit đầu tiên."
-          />
+          <div className="grid place-items-center rounded-2xl border border-dashed border-[#869BB2] bg-[#FAF9F5] py-12 text-center">
+            <p className="font-serif-display text-lg font-semibold text-[#1F453E]">Chưa có outfit nào</p>
+            <p className="mt-1 max-w-sm text-sm text-[#6B7B76]">
+              Hãy sang trang Phối đồ để tạo outfit đầu tiên.
+            </p>
+          </div>
         ) : (
           <div className="grid max-h-[60vh] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
             {outfits.map((o) => (
@@ -253,9 +278,9 @@ export default function SchedulePage() {
                 key={o._id}
                 disabled={assigning}
                 onClick={() => void handleAssign(o._id)}
-                className="rounded-xl border border-[var(--border)] p-2 text-left transition-colors hover:border-[var(--primary)] disabled:opacity-50"
+                className="rounded-xl border border-[#CBD5E1] bg-[#FAF9F5] p-2.5 text-left transition-all hover:border-[#1F453E] hover:bg-[#E2ECC8]/30 disabled:opacity-50"
               >
-                <div className="canvas-checker grid aspect-square place-items-center overflow-hidden rounded-lg">
+                <div className="grid aspect-square place-items-center overflow-hidden rounded-lg bg-white">
                   {o.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -264,15 +289,15 @@ export default function SchedulePage() {
                       className="max-h-full max-w-full object-contain"
                     />
                   ) : (
-                    <CalendarDays size={20} className="text-[var(--muted)]" />
+                    <CalendarDays size={20} className="text-[#869BB2]" />
                   )}
                 </div>
-                <p className="mt-1.5 truncate text-sm font-medium">{o.name}</p>
+                <p className="mt-1.5 truncate text-sm font-semibold text-[#1F453E]">{o.name}</p>
               </button>
             ))}
           </div>
         )}
-      </Modal>
+      </VModal>
     </ProtectedLayout>
   );
 }
