@@ -5,8 +5,20 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { Navbar } from './Navbar';
 
-/** Bao boc cac trang can dang nhap: chan render cho den khi xac thuc xong. */
-export function ProtectedLayout({ children }: { children: React.ReactNode }) {
+/**
+ * Bao boc cac trang can dang nhap: chan render cho den khi xac thuc xong.
+ * `fullBleed`: trang tu quan ly be rong/padding (vd. banner tran vien o /wardrobe).
+ * `hideFooter`: an footer chung.
+ */
+export function ProtectedLayout({
+  children,
+  fullBleed,
+  hideFooter,
+}: {
+  children: React.ReactNode;
+  fullBleed?: boolean;
+  hideFooter?: boolean;
+}) {
   const { user, isLoading } = useAuthStore();
   const router = useRouter();
 
@@ -25,9 +37,24 @@ export function ProtectedLayout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen">
+    <div className="flex min-h-screen flex-col">
       <Navbar />
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      {fullBleed ? (
+        <main className="flex flex-1 flex-col">{children}</main>
+      ) : (
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+      )}
+      {!hideFooter && (
+        <footer className="border-t border-[#16352F] bg-[#1F453E] px-8 py-8 font-jakarta text-white">
+          <div className="mx-auto max-w-6xl">
+            <p className="flex items-baseline leading-none">
+              <span className="font-script text-3xl text-[#E2ECC8]">Outfit</span>
+              <span className="ml-1.5 font-serif-display text-xl tracking-[0.2em] text-white">CRAFT</span>
+            </p>
+            <p className="mt-3 text-sm text-white/80">Mỗi món đồ cũ là một câu chuyện mới.</p>
+          </div>
+        </footer>
+      )}
     </div>
   );
 }

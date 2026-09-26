@@ -3,10 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Shirt } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorMessage } from '@/lib/api';
-import { Button, Input } from '@/components/ui';
+import { AuthLayout, AuthField, AuthSubmitButton } from '@/components/layout/AuthLayout';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,20 +31,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="grid min-h-screen place-items-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <span className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-[var(--primary)] text-white">
-            <Shirt size={22} />
-          </span>
-          <h1 className="text-2xl font-semibold">Đăng nhập OutfitCraft</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Tủ đồ số và trợ lý phối đồ của bạn
-          </p>
-        </div>
+    <AuthLayout>
+      <h1 className="text-center font-serif-display text-[26px] font-medium text-[#1F453E]">
+        Đăng nhập OutfitCraft
+      </h1>
+      <p className="mb-7 mt-1.5 text-center text-[13px] text-[#71807B]">
+        Tủ đồ số và trợ lý phối đồ của bạn
+      </p>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <Input
+      <form onSubmit={handleSubmit}>
+        <div className="space-y-4">
+          <AuthField
             label="Email"
             type="email"
             required
@@ -53,7 +49,7 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="ban@example.com"
           />
-          <Input
+          <AuthField
             label="Mật khẩu"
             type="password"
             required
@@ -65,19 +61,17 @@ export default function LoginPage() {
           {error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
           )}
+        </div>
 
-          <Button type="submit" loading={loading} className="w-full">
-            Đăng nhập
-          </Button>
-        </form>
+        <AuthSubmitButton loading={loading}>Đăng nhập</AuthSubmitButton>
+      </form>
 
-        <p className="mt-4 text-center text-sm text-[var(--muted)]">
-          Chưa có tài khoản?{' '}
-          <Link href="/register" className="font-medium text-[var(--primary)]">
-            Đăng ký ngay
-          </Link>
-        </p>
-      </div>
-    </div>
+      <p className="mt-5 text-center text-xs text-[#71807B]">
+        Chưa có tài khoản?{' '}
+        <Link href="/register" className="font-semibold text-[#1F453E] underline underline-offset-2">
+          Đăng ký ngay
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }
