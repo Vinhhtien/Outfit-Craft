@@ -32,7 +32,7 @@ export const getSuggestion = asyncHandler(async (req, res) => {
 
   const items = await ClothingItem.find({ owner, isArchived: false });
   if (items.length === 0) {
-    throw ApiError.badRequest('Tu do cua ban dang trong. Hay them vai mon do truoc.');
+    throw ApiError.badRequest('Tủ đồ của bạn đang trống. Hãy thêm vài món đồ trước.');
   }
 
   const weather = await getWeather(city);

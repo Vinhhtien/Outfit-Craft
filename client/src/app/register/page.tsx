@@ -3,10 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Shirt } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorMessage } from '@/lib/api';
-import { Button, Input } from '@/components/ui';
+import { AuthLayout, AuthField, AuthSubmitButton, AuthTabs } from '@/components/layout/AuthLayout';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -39,19 +38,18 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="grid min-h-screen place-items-center px-4 py-8">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <span className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-[var(--primary)] text-white">
-            <Shirt size={22} />
-          </span>
-          <h1 className="text-2xl font-semibold">Tạo tài khoản</h1>
-        </div>
+    <AuthLayout>
+      <h1 className="mb-5 text-center font-serif-display text-[26px] font-medium text-[#1F453E]">
+        Tạo tài khoản
+      </h1>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <Input label="Tên hiển thị" required value={form.displayName} onChange={set('displayName')} />
-          <Input label="Email" type="email" required value={form.email} onChange={set('email')} />
-          <Input
+      <AuthTabs active="register" />
+
+      <form onSubmit={handleSubmit}>
+        <div className="space-y-4">
+          <AuthField label="Tên hiển thị" required value={form.displayName} onChange={set('displayName')} />
+          <AuthField label="Email" type="email" required value={form.email} onChange={set('email')} />
+          <AuthField
             label="Mật khẩu"
             type="password"
             required
@@ -60,7 +58,7 @@ export default function RegisterPage() {
             onChange={set('password')}
             placeholder="Tối thiểu 6 ký tự"
           />
-          <Input
+          <AuthField
             label="Thành phố (cho gợi ý thời tiết)"
             value={form.defaultCity}
             onChange={set('defaultCity')}
@@ -70,19 +68,17 @@ export default function RegisterPage() {
           {error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
           )}
+        </div>
 
-          <Button type="submit" loading={loading} className="w-full">
-            Đăng ký
-          </Button>
-        </form>
+        <AuthSubmitButton loading={loading}>Đăng ký</AuthSubmitButton>
+      </form>
 
-        <p className="mt-4 text-center text-sm text-[var(--muted)]">
-          Đã có tài khoản?{' '}
-          <Link href="/login" className="font-medium text-[var(--primary)]">
-            Đăng nhập
-          </Link>
-        </p>
-      </div>
-    </div>
+      <p className="mt-5 text-center text-xs text-[#71807B]">
+        Đã có tài khoản?{' '}
+        <Link href="/login" className="font-semibold text-[#1F453E] underline underline-offset-2">
+          Đăng nhập
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }

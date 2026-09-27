@@ -12,6 +12,15 @@ const NAV = [
   { href: '/schedule', label: 'Lịch', icon: CalendarDays },
 ];
 
+/** Chu viet tat cho avatar: "Linh Mai" -> "LM", "imlinggiang" -> "I". */
+function initials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  const first = words[0][0];
+  const last = words.length > 1 ? words[words.length - 1][0] : '';
+  return (first + last).toUpperCase();
+}
+
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -23,29 +32,28 @@ export function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--card)]/90 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-        <Link href="/wardrobe" className="flex items-center gap-2 font-semibold">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--primary)] text-white">
-            <Shirt size={16} />
-          </span>
-          OutfitCraft
+    <header className="sticky top-0 z-50 h-16 border-b border-[#16352F] bg-[#1F453E] font-jakarta text-white">
+      <div className="mx-auto flex h-full max-w-6xl items-center gap-4 px-4">
+        <Link href="/wardrobe" className="flex shrink-0 items-baseline leading-none">
+          <span className="font-script text-2xl text-[#E2ECC8]">Outfit</span>
+          <span className="ml-1 font-serif-display text-lg tracking-[0.2em] text-white">CRAFT</span>
         </Link>
 
-        <nav className="flex flex-1 items-center gap-1">
+        <nav className="flex flex-1 items-center justify-center gap-2">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                title={label}
+                className={`flex items-center rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all sm:px-5 ${
                   active
-                    ? 'bg-[var(--primary)] text-white'
-                    : 'text-[var(--muted)] hover:bg-black/5 hover:text-[var(--foreground)]'
+                    ? 'border-white bg-[#E2ECC8] text-[#1F453E] shadow-sm'
+                    : 'border-white/60 bg-[#7C90A0]/80 text-white hover:bg-[#869BB2]'
                 }`}
               >
-                <Icon size={15} />
+                <Icon size={15} className="sm:hidden" />
                 <span className="hidden sm:inline">{label}</span>
               </Link>
             );
@@ -53,14 +61,20 @@ export function Navbar() {
         </nav>
 
         {user && (
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-[var(--muted)] sm:inline">
+          <div className="flex shrink-0 items-center gap-3">
+            <span className="hidden text-sm font-medium text-[#E2ECC8] md:inline">
               {user.displayName}
+            </span>
+            <span
+              title={user.displayName}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DCE6C3] font-serif-display text-xs font-bold text-[#1F453E]"
+            >
+              {initials(user.displayName)}
             </span>
             <button
               onClick={handleLogout}
               title="Đăng xuất"
-              className="rounded-lg p-2 text-[var(--muted)] transition-colors hover:bg-black/5 hover:text-red-500"
+              className="rounded-full p-1.5 text-white/80 transition-colors hover:text-white"
             >
               <LogOut size={16} />
             </button>

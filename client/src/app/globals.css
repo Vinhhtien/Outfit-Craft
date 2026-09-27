@@ -18,6 +18,9 @@
   --color-muted: var(--muted);
   --color-primary: var(--primary);
   --font-sans: var(--font-geist-sans);
+  --font-script: var(--font-pacifico);
+  --font-serif-display: var(--font-playfair);
+  --font-jakarta: var(--font-plus-jakarta);
 }
 
 @media (prefers-color-scheme: dark) {

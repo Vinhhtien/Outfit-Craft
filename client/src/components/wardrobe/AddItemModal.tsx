@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { Upload, Wand2, X } from 'lucide-react';
-import { Button, Input, Select, Chip, Modal } from '@/components/ui';
+import { VButton, VInput, VSelect, VChip, VModal, VLabel } from '@/components/ui/vintage';
 import { removeBackground, resizeImage } from '@/lib/backgroundRemoval';
 import { extractColors } from '@/lib/colorExtract';
 import { itemApi } from '@/lib/services';
@@ -147,20 +147,20 @@ export function AddItemModal({
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title="Thêm món đồ mới" wide>
+    <VModal open={open} onClose={handleClose} title="Thêm món đồ mới" wide>
       {step === 'pick' && (
         <div>
           <button
             onClick={() => fileRef.current?.click()}
-            className="grid w-full place-items-center gap-2 rounded-xl border-2 border-dashed border-[var(--border)] py-12 transition-colors hover:border-[var(--primary)]"
+            className="grid w-full place-items-center gap-2 rounded-xl border-2 border-dashed border-[#869BB2] bg-[#FAF9F5] py-12 transition-colors hover:border-[#1F453E]"
           >
-            <Upload size={28} className="text-[var(--muted)]" />
-            <span className="font-medium">Chọn ảnh món đồ</span>
-            <span className="text-xs text-[var(--muted)]">
+            <Upload size={28} className="text-[#869BB2]" />
+            <span className="font-semibold text-[#1F453E]">Chọn ảnh món đồ</span>
+            <span className="text-xs text-[#6B7B76]">
               JPG, PNG hoặc WebP · tối đa 10MB
             </span>
           </button>
-          <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[var(--muted)]">
+          <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[#6B7B76]">
             <Wand2 size={13} />
             Nền ảnh sẽ được tách tự động ngay trên trình duyệt
           </p>
@@ -185,15 +185,15 @@ export function AddItemModal({
 
       {step === 'processing' && (
         <div className="grid place-items-center gap-3 py-12">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
-          <p className="font-medium">{progress.stage || 'Đang xử lý'}...</p>
-          <div className="h-1.5 w-56 overflow-hidden rounded-full bg-black/10">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#1F453E] border-t-transparent" />
+          <p className="font-semibold text-[#1F453E]">{progress.stage || 'Đang xử lý'}...</p>
+          <div className="h-1.5 w-56 overflow-hidden rounded-full bg-[#E2ECC8]">
             <div
-              className="h-full bg-[var(--primary)] transition-all"
+              className="h-full bg-[#1F453E] transition-all"
               style={{ width: `${Math.round(progress.value * 100)}%` }}
             />
           </div>
-          <p className="max-w-xs text-center text-xs text-[var(--muted)]">
+          <p className="max-w-xs text-center text-xs text-[#6B7B76]">
             Lần đầu sử dụng cần tải model AI nên có thể mất một chút thời gian.
           </p>
         </div>
@@ -202,20 +202,20 @@ export function AddItemModal({
       {step === 'form' && (
         <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
           <div>
-            <div className="canvas-checker grid aspect-square place-items-center overflow-hidden rounded-xl border border-[var(--border)]">
+            <div className="canvas-checker grid aspect-square place-items-center overflow-hidden rounded-xl border border-[#CBD5E1]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={previewUrl} alt="Ảnh đã tách nền" className="max-h-full object-contain" />
             </div>
             <button
               onClick={reset}
-              className="mt-2 flex w-full items-center justify-center gap-1 text-xs text-[var(--muted)] hover:text-red-500"
+              className="mt-2 flex w-full items-center justify-center gap-1 text-xs text-[#6B7B76] hover:text-red-500"
             >
               <X size={12} /> Chọn ảnh khác
             </button>
           </div>
 
           <div className="space-y-3">
-            <Input
+            <VInput
               label="Tên món đồ"
               required
               value={form.name}
@@ -223,7 +223,7 @@ export function AddItemModal({
               placeholder="Áo sơ mi trắng"
             />
 
-            <Select
+            <VSelect
               label="Danh mục"
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value as Category })}
@@ -231,9 +231,9 @@ export function AddItemModal({
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
               ))}
-            </Select>
+            </VSelect>
 
-            <Input
+            <VInput
               label="Thương hiệu (không bắt buộc)"
               value={form.brand}
               onChange={(e) => setForm({ ...form, brand: e.target.value })}
@@ -241,13 +241,13 @@ export function AddItemModal({
 
             {form.colors.length > 0 && (
               <div>
-                <span className="mb-1 block text-sm font-medium">Màu chủ đạo</span>
+                <VLabel>Màu chủ đạo</VLabel>
                 <div className="flex gap-2">
                   {form.colors.map((c) => (
                     <span
                       key={c}
                       title={c}
-                      className="h-7 w-7 rounded-full border border-[var(--border)]"
+                      className="h-7 w-7 rounded-full border border-[#CBD5E1]"
                       style={{ backgroundColor: c }}
                     />
                   ))}
@@ -256,46 +256,46 @@ export function AddItemModal({
             )}
 
             <div>
-              <span className="mb-1.5 block text-sm font-medium">Phong cách</span>
+              <VLabel>Phong cách</VLabel>
               <div className="flex flex-wrap gap-1.5">
                 {STYLES.map((s) => (
-                  <Chip
+                  <VChip
                     key={s}
                     active={form.styles.includes(s)}
                     onClick={() => setForm({ ...form, styles: toggle(form.styles, s) })}
                   >
                     {s}
-                  </Chip>
+                  </VChip>
                 ))}
               </div>
             </div>
 
             <div>
-              <span className="mb-1.5 block text-sm font-medium">Mùa phù hợp</span>
+              <VLabel>Mùa phù hợp</VLabel>
               <div className="flex flex-wrap gap-1.5">
                 {SEASONS.map((s) => (
-                  <Chip
+                  <VChip
                     key={s}
                     active={form.seasons.includes(s)}
                     onClick={() => setForm({ ...form, seasons: toggle(form.seasons, s) })}
                   >
                     {SEASON_LABELS[s]}
-                  </Chip>
+                  </VChip>
                 ))}
               </div>
             </div>
 
             <div>
-              <span className="mb-1.5 block text-sm font-medium">Dịp mặc</span>
+              <VLabel>Dịp mặc</VLabel>
               <div className="flex flex-wrap gap-1.5">
                 {OCCASIONS.map((o) => (
-                  <Chip
+                  <VChip
                     key={o}
                     active={form.occasions.includes(o)}
                     onClick={() => setForm({ ...form, occasions: toggle(form.occasions, o) })}
                   >
                     {OCCASION_LABELS[o]}
-                  </Chip>
+                  </VChip>
                 ))}
               </div>
             </div>
@@ -305,21 +305,21 @@ export function AddItemModal({
             )}
 
             <div className="flex gap-2 pt-1">
-              <Button variant="secondary" onClick={handleClose} className="flex-1">
+              <VButton variant="outline" onClick={handleClose} className="flex-1">
                 Hủy
-              </Button>
-              <Button
+              </VButton>
+              <VButton
                 onClick={handleSave}
                 loading={saving}
                 disabled={!form.name.trim()}
                 className="flex-1"
               >
                 Lưu vào tủ
-              </Button>
+              </VButton>
             </div>
           </div>
         </div>
       )}
-    </Modal>
+    </VModal>
   );
 }
