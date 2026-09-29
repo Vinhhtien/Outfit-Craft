@@ -6,8 +6,17 @@ import type {
 
 /* ---------------- Auth ---------------- */
 export const authApi = {
+  // ===== NEW: Register OTP =====
+  /** Buoc 1: tao tai khoan cho xac thuc + gui OTP. Goi lai voi cung du lieu = "Gui lai ma OTP". */
   register: (body: { email: string; password: string; displayName: string; defaultCity?: string }) =>
-    api.post<ApiResponse<{ token: string; user: User }>>('/auth/register', body).then((r) => r.data.data),
+    api.post<ApiResponse<{ email: string }>>('/auth/register', body).then((r) => r.data),
+
+  /** Buoc 2: xac thuc OTP, server tra token + user giong login. */
+  verifyRegistration: (email: string, otp: string) =>
+    api
+      .post<ApiResponse<{ token: string; user: User }>>('/auth/verify-registration', { email, otp })
+      .then((r) => r.data.data),
+  // ===== END NEW =====
 
   login: (body: { email: string; password: string }) =>
     api.post<ApiResponse<{ token: string; user: User }>>('/auth/login', body).then((r) => r.data.data),

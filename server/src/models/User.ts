@@ -11,6 +11,13 @@ export const hashResetToken = (token: string) =>
   crypto.createHash('sha256').update(token).digest('hex');
 // ===== END NEW =====
 
+// ===== NEW: Register OTP =====
+/** Thoi han ma OTP dang ky. */
+export const REGISTRATION_OTP_TTL_MS = 10 * 60 * 1000;
+/** Nhap sai qua so lan nay thi ma OTP bi huy, phai gui lai ma moi (chong brute-force 6 so). */
+export const REGISTRATION_OTP_MAX_ATTEMPTS = 5;
+// ===== END NEW =====
+
 export interface IUser extends Document {
   _id: Types.ObjectId;
   email: string;
@@ -31,6 +38,14 @@ export interface IUser extends Document {
   resetPasswordExpire?: Date;
   /** Tao token moi, luu ban hash vao document (chua save), tra ve token goc de gui email. */
   createPasswordResetToken(): string;
+  // ===== END NEW =====
+  // ===== NEW: Register OTP =====
+  isVerified: boolean;
+  registrationOtp?: string;
+  registrationOtpExpire?: Date;
+  registrationOtpAttempts?: number;
+  /** Sinh OTP 6 so moi, luu ban hash vao document (chua save), tra ve OTP goc de gui email. */
+  createRegistrationOtp(): string;
   // ===== END NEW =====
 }
 
@@ -56,6 +71,14 @@ const userSchema = new Schema<IUser>(
     resetPasswordToken: { type: String, select: false },
     resetPasswordExpire: { type: Date, select: false },
     // ===== END NEW =====
+    // ===== NEW: Register OTP =====
+    // Tai khoan cu (tao truoc khi co OTP) khong co field nay trong DB. Khi query dung
+    // { isVerified: false } de chi bat tai khoan dang cho xac thuc, khong dinh tai khoan cu.
+    isVerified: { type: Boolean, default: false },
+    registrationOtp: { type: String, select: false },
+    registrationOtpExpire: { type: Date, select: false },
+    registrationOtpAttempts: { type: Number, select: false },
+    // ===== END NEW =====
   },
   { timestamps: true }
 );
@@ -76,6 +99,17 @@ userSchema.methods.createPasswordResetToken = function (): string {
   this.resetPasswordToken = hashResetToken(token);
   this.resetPasswordExpire = new Date(Date.now() + RESET_PASSWORD_TTL_MS);
   return token;
+};
+// ===== END NEW =====
+
+// ===== NEW: Register OTP =====
+userSchema.methods.createRegistrationOtp = function (): string {
+  // randomInt dung CSPRNG, khong dung Math.random() cho ma bao mat.
+  const otp = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+  this.registrationOtp = hashResetToken(otp);
+  this.registrationOtpExpire = new Date(Date.now() + REGISTRATION_OTP_TTL_MS);
+  this.registrationOtpAttempts = 0;
+  return otp;
 };
 // ===== END NEW =====
 

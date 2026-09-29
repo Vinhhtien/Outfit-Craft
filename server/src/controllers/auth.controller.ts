@@ -9,6 +9,9 @@ import { JwtPayload } from '../types/index.js';
 import { hashResetToken } from '../models/User.js';
 import { sendEmail } from '../utils/sendEmail.js';
 // ===== END NEW =====
+// ===== NEW: Register OTP =====
+import { REGISTRATION_OTP_MAX_ATTEMPTS } from '../models/User.js';
+// ===== END NEW =====
 // ===== NEW: Update Profile =====
 import { uploadBuffer, destroyImage } from '../services/upload.service.js';
 // ===== END NEW =====
@@ -29,17 +32,111 @@ function signToken(payload: JwtPayload): string {
   return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as jwt.SignOptions);
 }
 
+// ===== NEW: Register OTP =====
+// Dang ky 2 buoc: POST /register tao tai khoan isVerified:false + gui OTP qua email,
+// POST /verify-registration xac thuc OTP roi moi tra JWT (tu dong dang nhap).
 export const register = asyncHandler(async (req, res) => {
-  const { email, password, displayName, defaultCity } = req.body;
+  const { email, password, displayName, defaultCity } = req.body as z.infer<typeof registerSchema>;
 
-  if (await User.exists({ email })) {
-    throw ApiError.conflict('Email nay da duoc dang ky');
+  // Tai khoan dang cho xac thuc -> cho dang ky lai: ghi de thong tin va gui ma moi
+  // (cung la co che "Gui lai ma OTP"). Query { isVerified: false } khong khop tai khoan cu
+  // chua co field nay, nen tai khoan cu / da xac thuc van bi chan 409 nhu truoc.
+  let user = await User.findOne({ email, isVerified: false });
+  if (!user) {
+    if (await User.exists({ email })) {
+      throw ApiError.conflict('Email nay da duoc dang ky');
+    }
+    user = new User({ email, isVerified: false });
   }
 
-  const user = await User.create({ email, password, displayName, defaultCity });
-  const token = signToken({ sub: user._id.toString(), email: user.email });
+  user.password = password; // pre('save') se hash bang bcrypt
+  user.displayName = displayName;
+  if (defaultCity !== undefined) user.defaultCity = defaultCity;
+  const otp = user.createRegistrationOtp();
+  await user.save();
+
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: 'OutfitCraft - Mã xác nhận đăng ký',
+      title: 'Xác thực email',
+      paragraphs: [
+        `Xin chào ${user.displayName},`,
+        `Mã xác nhận đăng ký tài khoản OutfitCraft của bạn là: ${otp}`,
+        'Mã có hiệu lực trong 10 phút. Vui lòng không chia sẻ mã này với bất kỳ ai.',
+      ],
+      note: 'Nếu bạn không đăng ký tài khoản OutfitCraft, hãy bỏ qua email này.',
+    });
+  } catch (err) {
+    // Tai khoan van o trang thai cho xac thuc -> user bam dang ky lai la duoc gui ma moi.
+    console.error('[register] Gui email OTP that bai:', err);
+    throw new ApiError(500, 'Khong the gui email xac nhan luc nay, vui long thu lai sau');
+  }
 
   res.status(201).json({
+    success: true,
+    message: 'Ma OTP da duoc gui den email cua ban',
+    data: { email: user.email },
+  });
+});
+
+export const verifyRegistrationSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Email khong hop le'),
+  otp: z.string().trim().regex(/^\d{6}$/, 'Ma OTP gom 6 chu so'),
+});
+
+export const verifyRegistration = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body as z.infer<typeof verifyRegistrationSchema>;
+
+  // Tru 1 luot thu TRUOC khi so ma, trong 1 lenh nguyen tu -> ban song song hang loat request
+  // cung khong vuot qua REGISTRATION_OTP_MAX_ATTEMPTS lan doan.
+  const pending = await User.findOneAndUpdate(
+    {
+      email,
+      isVerified: false,
+      registrationOtpExpire: { $gt: new Date() },
+      registrationOtpAttempts: { $lt: REGISTRATION_OTP_MAX_ATTEMPTS },
+    },
+    { $inc: { registrationOtpAttempts: 1 } },
+    { new: true }
+  ).select('+registrationOtp');
+
+  if (!pending) {
+    const current = await User.findOne({ email, isVerified: false }).select(
+      '+registrationOtp +registrationOtpExpire +registrationOtpAttempts'
+    );
+    if (current?.registrationOtp && current.registrationOtpExpire && current.registrationOtpExpire <= new Date()) {
+      throw new ApiError(410, 'Ma OTP da het han, vui long gui lai ma moi');
+    }
+    if (current?.registrationOtp) {
+      throw new ApiError(429, 'Ban da nhap sai qua nhieu lan, vui long gui lai ma moi');
+    }
+    // Khong ton tai / da xac thuc roi: khong tiet lo chi tiet.
+    throw ApiError.badRequest('Ma OTP khong hop le, vui long dang ky lai');
+  }
+
+  const hashedOtp = hashResetToken(otp);
+  if (pending.registrationOtp !== hashedOtp) {
+    throw ApiError.badRequest('Ma OTP khong dung');
+  }
+
+  // "Claim" OTP: kich hoat + xoa OTP trong cung 1 lenh -> ma chi dung duoc 1 lan.
+  const user = await User.findOneAndUpdate(
+    { _id: pending._id, isVerified: false, registrationOtp: hashedOtp },
+    {
+      $set: { isVerified: true },
+      $unset: { registrationOtp: 1, registrationOtpExpire: 1, registrationOtpAttempts: 1 },
+    },
+    { new: true }
+  );
+  if (!user) {
+    throw ApiError.badRequest('Ma OTP khong hop le, vui long gui lai ma moi');
+  }
+
+  // Tra ve giong het login de client tu dong dang nhap.
+  const token = signToken({ sub: user._id.toString(), email: user.email });
+
+  res.json({
     success: true,
     data: {
       token,
@@ -47,11 +144,13 @@ export const register = asyncHandler(async (req, res) => {
         id: user._id,
         email: user.email,
         displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
         defaultCity: user.defaultCity,
       },
     },
   });
 });
+// ===== END NEW =====
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -61,6 +160,15 @@ export const login = asyncHandler(async (req, res) => {
   if (!user || !(await user.comparePassword(password))) {
     throw ApiError.unauthorized('Email hoac mat khau khong dung');
   }
+
+  // ===== NEW: Register OTP =====
+  // Query DB truc tiep: { isVerified: false } chi khop tai khoan dang cho xac thuc OTP,
+  // tai khoan cu (khong co field nay) van dang nhap binh thuong. Tra 403, khong tra 401
+  // (401 lam client tu dang xuat - xem client/src/lib/api.ts).
+  if (await User.exists({ _id: user._id, isVerified: false })) {
+    throw ApiError.forbidden('Tai khoan chua xac thuc email, vui long dang ky lai de nhan ma OTP');
+  }
+  // ===== END NEW =====
 
   const token = signToken({ sub: user._id.toString(), email: user.email });
 

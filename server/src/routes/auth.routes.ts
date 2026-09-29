@@ -17,10 +17,23 @@ const forgotPasswordLimiter = rateLimit({
 // ===== NEW: Update Profile =====
 import { upload } from '../middlewares/upload.js';
 // ===== END NEW =====
+// ===== NEW: Register OTP =====
+/** Dang ky gio gui email OTP (ke ca "Gui lai ma") -> chan spam: 10 lan / 15 phut / IP. */
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Ban da gui qua nhieu yeu cau dang ky, vui long thu lai sau 15 phut' },
+});
+// ===== END NEW =====
 
 const router = Router();
 
-router.post('/register', validate(c.registerSchema), c.register);
+// ===== NEW: Register OTP =====
+router.post('/register', registerLimiter, validate(c.registerSchema), c.register);
+router.post('/verify-registration', validate(c.verifyRegistrationSchema), c.verifyRegistration);
+// ===== END NEW =====
 router.post('/login', validate(c.loginSchema), c.login);
 router.get('/me', protect, c.getMe);
 

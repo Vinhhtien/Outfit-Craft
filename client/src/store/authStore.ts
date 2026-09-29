@@ -10,7 +10,12 @@ interface AuthState {
   /** true khi dang kiem tra token luc tai trang - tranh nhay man hinh login. */
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (body: { email: string; password: string; displayName: string; defaultCity?: string }) => Promise<void>;
+  // ===== NEW: Register OTP =====
+  /** Gui form dang ky -> server gui OTP ve email. Tra ve email da chuan hoa de dung o buoc xac thuc. */
+  register: (body: { email: string; password: string; displayName: string; defaultCity?: string }) => Promise<string>;
+  /** Xac thuc OTP thanh cong -> luu token + user (tu dong dang nhap). */
+  verifyRegistration: (email: string, otp: string) => Promise<void>;
+  // ===== END NEW =====
   logout: () => void;
   /** Goi 1 lan khi app khoi dong de khoi phuc phien dang nhap. */
   hydrate: () => Promise<void>;
@@ -32,11 +37,18 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user });
   },
 
+  // ===== NEW: Register OTP =====
   register: async (body) => {
-    const { token, user } = await authApi.register(body);
+    const res = await authApi.register(body);
+    return res.data.email;
+  },
+
+  verifyRegistration: async (email, otp) => {
+    const { token, user } = await authApi.verifyRegistration(email, otp);
     tokenStore.set(token);
     set({ user });
   },
+  // ===== END NEW =====
 
   logout: () => {
     tokenStore.clear();
