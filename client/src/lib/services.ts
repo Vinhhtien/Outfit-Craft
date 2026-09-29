@@ -13,6 +13,19 @@ export const authApi = {
     api.post<ApiResponse<{ token: string; user: User }>>('/auth/login', body).then((r) => r.data.data),
 
   me: () => api.get<ApiResponse<User>>('/auth/me').then((r) => r.data.data),
+
+  // ===== NEW: Forgot / Reset / Change Password =====
+  forgotPassword: (email: string) =>
+    api.post<ApiResponse<null>>('/auth/forgot-password', { email }).then((r) => r.data),
+
+  resetPassword: (token: string, newPassword: string) =>
+    api
+      .put<ApiResponse<null>>(`/auth/reset-password/${encodeURIComponent(token)}`, { newPassword })
+      .then((r) => r.data),
+
+  changePassword: (oldPassword: string, newPassword: string) =>
+    api.put<ApiResponse<null>>('/auth/change-password', { oldPassword, newPassword }).then((r) => r.data),
+  // ===== END NEW =====
 };
 
 /* ---------------- Wardrobe ---------------- */

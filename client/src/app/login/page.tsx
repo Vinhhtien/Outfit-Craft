@@ -59,6 +59,13 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••"
           />
+          {/* ===== NEW: Forgot Password ===== */}
+          <div className="-mt-2 text-right">
+            <Link href="/forgot-password" className="text-xs font-semibold text-[#1F453E] underline-offset-2 hover:underline">
+              Quên mật khẩu?
+            </Link>
+          </div>
+          {/* ===== END NEW ===== */}
 
           {error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>

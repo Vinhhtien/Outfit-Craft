@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Shirt, LayoutGrid, Sparkles, CalendarDays, LogOut } from 'lucide-react';
+// ===== NEW: Change Password =====
+import { KeyRound } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
 const NAV = [
@@ -71,6 +73,15 @@ export function Navbar() {
             >
               {initials(user.displayName)}
             </span>
+            {/* ===== NEW: Change Password ===== */}
+            <Link
+              href="/profile/change-password"
+              title="Đổi mật khẩu"
+              className="rounded-full p-1.5 text-white/80 transition-colors hover:text-white"
+            >
+              <KeyRound size={16} />
+            </Link>
+            {/* ===== END NEW ===== */}
             <button
               onClick={handleLogout}
               title="Đăng xuất"
