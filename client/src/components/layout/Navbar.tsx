@@ -3,8 +3,6 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Shirt, LayoutGrid, Sparkles, CalendarDays, LogOut } from 'lucide-react';
-// ===== NEW: Change Password =====
-import { KeyRound } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
 const NAV = [
@@ -64,22 +62,30 @@ export function Navbar() {
 
         {user && (
           <div className="flex shrink-0 items-center gap-3">
-            <span className="hidden text-sm font-medium text-[#E2ECC8] md:inline">
-              {user.displayName}
-            </span>
-            <span
-              title={user.displayName}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DCE6C3] font-serif-display text-xs font-bold text-[#1F453E]"
-            >
-              {initials(user.displayName)}
-            </span>
-            {/* ===== NEW: Change Password ===== */}
+            {/* ===== NEW: Update Profile ===== */}
+            {/* Ten + avatar dan toi trang Ho so (gom ca Doi mat khau). */}
             <Link
-              href="/profile/change-password"
-              title="Đổi mật khẩu"
-              className="rounded-full p-1.5 text-white/80 transition-colors hover:text-white"
+              href="/profile"
+              title="Hồ sơ cá nhân"
+              className="flex items-center gap-3 rounded-full transition-opacity hover:opacity-90"
             >
-              <KeyRound size={16} />
+              <span className="hidden text-sm font-medium text-[#E2ECC8] md:inline">
+                {user.displayName}
+              </span>
+              {user.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.avatarUrl}
+                  alt={user.displayName}
+                  className={`h-8 w-8 rounded-full border object-cover ${
+                    pathname.startsWith('/profile') ? 'border-[#E2ECC8]' : 'border-white/60'
+                  }`}
+                />
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DCE6C3] font-serif-display text-xs font-bold text-[#1F453E]">
+                  {initials(user.displayName)}
+                </span>
+              )}
             </Link>
             {/* ===== END NEW ===== */}
             <button

@@ -26,6 +26,23 @@ export const authApi = {
   changePassword: (oldPassword: string, newPassword: string) =>
     api.put<ApiResponse<null>>('/auth/change-password', { oldPassword, newPassword }).then((r) => r.data),
   // ===== END NEW =====
+
+  // ===== NEW: Update Profile =====
+  /** Ho so hien tai - server dung chung GET /auth/me (tra document co _id). */
+  getProfile: () =>
+    api.get<ApiResponse<User & { _id?: string }>>('/auth/me').then((r) => {
+      const u = r.data.data;
+      return { ...u, id: u.id ?? u._id ?? '' } as User;
+    }),
+
+  /** FormData gom: displayName, defaultCity va (tuy chon) file 'avatar'. */
+  updateProfile: (formData: FormData) =>
+    api
+      .put<ApiResponse<User>>('/auth/profile', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data.data),
+  // ===== END NEW =====
 };
 
 /* ---------------- Wardrobe ---------------- */

@@ -14,6 +14,12 @@ interface AuthState {
   logout: () => void;
   /** Goi 1 lan khi app khoi dong de khoi phuc phien dang nhap. */
   hydrate: () => Promise<void>;
+  // ===== NEW: Update Profile =====
+  /** Ghi de mot phan thong tin user trong store (Navbar cap nhat ngay, khong can F5). */
+  updateUser: (patch: Partial<User>) => void;
+  /** Goi API cap nhat ho so roi dong bo lai store. */
+  updateProfile: (formData: FormData) => Promise<User>;
+  // ===== END NEW =====
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -52,4 +58,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: null, isLoading: false });
     }
   },
+
+  // ===== NEW: Update Profile =====
+  updateUser: (patch) =>
+    set((s) => (s.user ? { user: { ...s.user, ...patch } } : {})),
+
+  updateProfile: async (formData) => {
+    const user = await authApi.updateProfile(formData);
+    set((s) => ({ user: s.user ? { ...s.user, ...user } : user }));
+    return user;
+  },
+  // ===== END NEW =====
 }));

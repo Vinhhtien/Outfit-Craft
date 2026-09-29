@@ -9,6 +9,9 @@ import { JwtPayload } from '../types/index.js';
 import { hashResetToken } from '../models/User.js';
 import { sendEmail } from '../utils/sendEmail.js';
 // ===== END NEW =====
+// ===== NEW: Update Profile =====
+import { uploadBuffer, destroyImage } from '../services/upload.service.js';
+// ===== END NEW =====
 
 export const registerSchema = z.object({
   email: z.string().email('Email khong hop le'),
@@ -190,5 +193,71 @@ export const changePassword = asyncHandler(async (req, res) => {
   await user.save();
 
   res.json({ success: true, message: 'Doi mat khau thanh cong' });
+});
+// ===== END NEW =====
+
+// ===== NEW: Update Profile =====
+// Endpoint rieng voi change-password (Separation of Concerns): route nay KHONG dong toi password.
+// Chay sau upload.single('avatar') nen req.body la cac text field cua multipart/form-data.
+export const updateProfileSchema = z.object({
+  displayName: z
+    .string()
+    .trim()
+    .min(1, 'Ten hien thi khong duoc de trong')
+    .max(50, 'Ten hien thi toi da 50 ky tu')
+    .optional(),
+  defaultCity: z
+    .string()
+    .trim()
+    .min(1, 'Thanh pho khong duoc de trong')
+    .max(100, 'Ten thanh pho toi da 100 ky tu')
+    .optional(),
+});
+
+export const updateProfile = asyncHandler(async (req, res) => {
+  // Chong Mass Assignment: validate() da bo moi field ngoai 2 field tren
+  // (email/password/role... gui kem se bi bo qua); avatar chi lay tu req.file.
+  const { displayName, defaultCity } = req.body as z.infer<typeof updateProfileSchema>;
+
+  const user = await User.findById(req.user!.sub).select('+avatarPublicId');
+  if (!user) throw ApiError.notFound('Khong tim thay nguoi dung');
+
+  if (displayName !== undefined) user.displayName = displayName;
+  if (defaultCity !== undefined) user.defaultCity = defaultCity;
+
+  // Khong co file -> giu nguyen avatar cu.
+  const oldPublicId = user.avatarPublicId;
+  let uploadedPublicId: string | undefined;
+  if (req.file) {
+    const uploaded = await uploadBuffer(req.file.buffer, `outfitcraft/${user._id}/avatar`);
+    uploadedPublicId = uploaded.publicId;
+    user.avatarUrl = uploaded.url;
+    user.avatarPublicId = uploaded.publicId;
+  }
+
+  try {
+    await user.save();
+  } catch (err) {
+    // Luu DB that bai -> xoa anh vua upload de khong de rac tren Cloudinary.
+    await destroyImage(uploadedPublicId);
+    throw err;
+  }
+
+  // Chi xoa avatar cu sau khi avatar moi da duoc luu thanh cong.
+  if (uploadedPublicId && oldPublicId && oldPublicId !== uploadedPublicId) {
+    await destroyImage(oldPublicId);
+  }
+
+  res.json({
+    success: true,
+    message: 'Cap nhat ho so thanh cong',
+    data: {
+      id: user._id,
+      email: user.email,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      defaultCity: user.defaultCity,
+    },
+  });
 });
 // ===== END NEW =====

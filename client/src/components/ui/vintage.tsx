@@ -2,6 +2,10 @@
 
 import { forwardRef } from 'react';
 import { X } from 'lucide-react';
+// ===== NEW: Update Profile =====
+import { useEffect } from 'react';
+import { CheckCircle2 } from 'lucide-react';
+// ===== END NEW =====
 
 /*
  * Bo UI "Vintage Boutique" (xanh co vit #1F453E, xanh com #E2ECC8, nen kem #FAF9F5).
@@ -156,6 +160,43 @@ export function VModal({
     </div>
   );
 }
+
+// ===== NEW: Update Profile =====
+/* ---------------- Toast (thong bao nho goc duoi man hinh, tu an) ---------------- */
+export function VToast({
+  message,
+  onClose,
+  duration = 3000,
+}: {
+  /** null/'' -> an toast. */
+  message: string | null;
+  onClose: () => void;
+  duration?: number;
+}) {
+  useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(onClose, duration);
+    return () => clearTimeout(t);
+  }, [message, duration, onClose]);
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`pointer-events-none fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 transition-all duration-300 ${
+        message ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
+      }`}
+    >
+      {message && (
+        <div className="flex items-center gap-2 rounded-full border border-[#1F453E] bg-[#E2ECC8] px-5 py-2.5 font-jakarta text-sm font-semibold text-[#1F453E] shadow-lg">
+          <CheckCircle2 size={16} />
+          {message}
+        </div>
+      )}
+    </div>
+  );
+}
+// ===== END NEW =====
 
 /* ---------------- Spinner ---------------- */
 export function VSpinner({ className = '' }: { className?: string }) {

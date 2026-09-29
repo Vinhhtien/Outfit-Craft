@@ -17,6 +17,10 @@ export interface IUser extends Document {
   password: string;
   displayName: string;
   avatarUrl?: string;
+  // ===== NEW: Update Profile =====
+  /** publicId tren Cloudinary cua avatar hien tai - de xoa anh cu khi doi avatar. */
+  avatarPublicId?: string;
+  // ===== END NEW =====
   /** Thanh pho mac dinh de goi OpenWeatherMap khi vao trang Suggest. */
   defaultCity: string;
   createdAt: Date;
@@ -43,6 +47,9 @@ const userSchema = new Schema<IUser>(
     password: { type: String, required: true, minlength: 6, select: false },
     displayName: { type: String, required: true, trim: true, maxlength: 50 },
     avatarUrl: { type: String },
+    // ===== NEW: Update Profile =====
+    avatarPublicId: { type: String, select: false },
+    // ===== END NEW =====
     defaultCity: { type: String, default: 'Hanoi' },
     // ===== NEW: Forgot Password =====
     // select:false -> /auth/me tra ca document nen khong duoc lo hash token.
