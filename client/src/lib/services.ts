@@ -6,13 +6,52 @@ import type {
 
 /* ---------------- Auth ---------------- */
 export const authApi = {
+  // ===== NEW: Register OTP =====
+  /** Buoc 1: tao tai khoan cho xac thuc + gui OTP. Goi lai voi cung du lieu = "Gui lai ma OTP". */
   register: (body: { email: string; password: string; displayName: string; defaultCity?: string }) =>
-    api.post<ApiResponse<{ token: string; user: User }>>('/auth/register', body).then((r) => r.data.data),
+    api.post<ApiResponse<{ email: string }>>('/auth/register', body).then((r) => r.data),
+
+  /** Buoc 2: xac thuc OTP, server tra token + user giong login. */
+  verifyRegistration: (email: string, otp: string) =>
+    api
+      .post<ApiResponse<{ token: string; user: User }>>('/auth/verify-registration', { email, otp })
+      .then((r) => r.data.data),
+  // ===== END NEW =====
 
   login: (body: { email: string; password: string }) =>
     api.post<ApiResponse<{ token: string; user: User }>>('/auth/login', body).then((r) => r.data.data),
 
   me: () => api.get<ApiResponse<User>>('/auth/me').then((r) => r.data.data),
+
+  // ===== NEW: Forgot / Reset / Change Password =====
+  forgotPassword: (email: string) =>
+    api.post<ApiResponse<null>>('/auth/forgot-password', { email }).then((r) => r.data),
+
+  resetPassword: (token: string, newPassword: string) =>
+    api
+      .put<ApiResponse<null>>(`/auth/reset-password/${encodeURIComponent(token)}`, { newPassword })
+      .then((r) => r.data),
+
+  changePassword: (oldPassword: string, newPassword: string) =>
+    api.put<ApiResponse<null>>('/auth/change-password', { oldPassword, newPassword }).then((r) => r.data),
+  // ===== END NEW =====
+
+  // ===== NEW: Update Profile =====
+  /** Ho so hien tai - server dung chung GET /auth/me (tra document co _id). */
+  getProfile: () =>
+    api.get<ApiResponse<User & { _id?: string }>>('/auth/me').then((r) => {
+      const u = r.data.data;
+      return { ...u, id: u.id ?? u._id ?? '' } as User;
+    }),
+
+  /** FormData gom: displayName, defaultCity va (tuy chon) file 'avatar'. */
+  updateProfile: (formData: FormData) =>
+    api
+      .put<ApiResponse<User>>('/auth/profile', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data.data),
+  // ===== END NEW =====
 };
 
 /* ---------------- Wardrobe ---------------- */

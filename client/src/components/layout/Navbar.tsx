@@ -62,15 +62,32 @@ export function Navbar() {
 
         {user && (
           <div className="flex shrink-0 items-center gap-3">
-            <span className="hidden text-sm font-medium text-[#E2ECC8] md:inline">
-              {user.displayName}
-            </span>
-            <span
-              title={user.displayName}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DCE6C3] font-serif-display text-xs font-bold text-[#1F453E]"
+            {/* ===== NEW: Update Profile ===== */}
+            {/* Ten + avatar dan toi trang Ho so (gom ca Doi mat khau). */}
+            <Link
+              href="/profile"
+              title="Hồ sơ cá nhân"
+              className="flex items-center gap-3 rounded-full transition-opacity hover:opacity-90"
             >
-              {initials(user.displayName)}
-            </span>
+              <span className="hidden text-sm font-medium text-[#E2ECC8] md:inline">
+                {user.displayName}
+              </span>
+              {user.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.avatarUrl}
+                  alt={user.displayName}
+                  className={`h-8 w-8 rounded-full border object-cover ${
+                    pathname.startsWith('/profile') ? 'border-[#E2ECC8]' : 'border-white/60'
+                  }`}
+                />
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DCE6C3] font-serif-display text-xs font-bold text-[#1F453E]">
+                  {initials(user.displayName)}
+                </span>
+              )}
+            </Link>
+            {/* ===== END NEW ===== */}
             <button
               onClick={handleLogout}
               title="Đăng xuất"

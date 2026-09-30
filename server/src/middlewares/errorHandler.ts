@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { ApiError } from '../utils/ApiError.js';
 import { env } from '../config/env.js';
+// ===== NEW: Update Profile =====
+import multer from 'multer';
+// ===== END NEW =====
 
 export function notFound(req: Request, _res: Response, next: NextFunction) {
   next(ApiError.notFound(`Khong tim thay route: ${req.method} ${req.originalUrl}`));
@@ -33,6 +36,14 @@ export function errorHandler(
       message = 'ID khong hop le';
     }
   }
+
+  // ===== NEW: Update Profile =====
+  // Loi cua multer (anh qua 10MB, sai ten field...) la loi du lieu dau vao -> 400 thay vi 500.
+  if (err instanceof multer.MulterError) {
+    status = 400;
+    message = err.code === 'LIMIT_FILE_SIZE' ? 'Anh toi da 10MB' : `Upload khong hop le: ${err.message}`;
+  }
+  // ===== END NEW =====
 
   if (status >= 500) console.error('[error]', err);
 

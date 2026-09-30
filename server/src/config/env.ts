@@ -22,7 +22,24 @@ export const env = {
   },
   openWeatherKey: process.env.OPENWEATHER_API_KEY ?? '',
   geminiKey: process.env.GEMINI_API_KEY ?? '',
+
+  // ===== NEW: Forgot Password =====
+  /** URL trang web (dung de tao link dat lai mat khau trong email). */
+  frontendUrl: (process.env.FRONTEND_URL ?? process.env.CLIENT_ORIGIN ?? 'http://localhost:3000').replace(/\/+$/, ''),
+  smtp: {
+    host: process.env.SMTP_HOST ?? '',
+    port: Number(process.env.SMTP_PORT ?? 587),
+    user: process.env.SMTP_USER ?? '',
+    pass: process.env.SMTP_PASS ?? '',
+    /** Dia chi nguoi gui; mac dinh dung SMTP_USER. */
+    from: process.env.SMTP_FROM ?? '',
+  },
+  // ===== END NEW =====
 };
+
+// ===== NEW: Forgot Password =====
+export const isSmtpConfigured = () => Boolean(env.smtp.host && env.smtp.user && env.smtp.pass);
+// ===== END NEW =====
 
 export const isCloudinaryConfigured = () =>
   Boolean(env.cloudinary.cloudName && env.cloudinary.apiKey && env.cloudinary.apiSecret);

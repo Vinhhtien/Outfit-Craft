@@ -1,5 +1,22 @@
 import { Schema, model, Document, Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
+// ===== NEW: Forgot Password =====
+import crypto from 'crypto';
+
+/** Thoi han link dat lai mat khau. */
+export const RESET_PASSWORD_TTL_MS = 15 * 60 * 1000;
+
+/** Bam reset token truoc khi luu/tim trong DB - dung chung cho model va controller. */
+export const hashResetToken = (token: string) =>
+  crypto.createHash('sha256').update(token).digest('hex');
+// ===== END NEW =====
+
+// ===== NEW: Register OTP =====
+/** Thoi han ma OTP dang ky. */
+export const REGISTRATION_OTP_TTL_MS = 10 * 60 * 1000;
+/** Nhap sai qua so lan nay thi ma OTP bi huy, phai gui lai ma moi (chong brute-force 6 so). */
+export const REGISTRATION_OTP_MAX_ATTEMPTS = 5;
+// ===== END NEW =====
 
 export interface IUser extends Document {
   _id: Types.ObjectId;
@@ -7,11 +24,29 @@ export interface IUser extends Document {
   password: string;
   displayName: string;
   avatarUrl?: string;
+  // ===== NEW: Update Profile =====
+  /** publicId tren Cloudinary cua avatar hien tai - de xoa anh cu khi doi avatar. */
+  avatarPublicId?: string;
+  // ===== END NEW =====
   /** Thanh pho mac dinh de goi OpenWeatherMap khi vao trang Suggest. */
   defaultCity: string;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(plain: string): Promise<boolean>;
+  // ===== NEW: Forgot Password =====
+  resetPasswordToken?: string;
+  resetPasswordExpire?: Date;
+  /** Tao token moi, luu ban hash vao document (chua save), tra ve token goc de gui email. */
+  createPasswordResetToken(): string;
+  // ===== END NEW =====
+  // ===== NEW: Register OTP =====
+  isVerified: boolean;
+  registrationOtp?: string;
+  registrationOtpExpire?: Date;
+  registrationOtpAttempts?: number;
+  /** Sinh OTP 6 so moi, luu ban hash vao document (chua save), tra ve OTP goc de gui email. */
+  createRegistrationOtp(): string;
+  // ===== END NEW =====
 }
 
 const userSchema = new Schema<IUser>(
@@ -27,7 +62,23 @@ const userSchema = new Schema<IUser>(
     password: { type: String, required: true, minlength: 6, select: false },
     displayName: { type: String, required: true, trim: true, maxlength: 50 },
     avatarUrl: { type: String },
+    // ===== NEW: Update Profile =====
+    avatarPublicId: { type: String, select: false },
+    // ===== END NEW =====
     defaultCity: { type: String, default: 'Hanoi' },
+    // ===== NEW: Forgot Password =====
+    // select:false -> /auth/me tra ca document nen khong duoc lo hash token.
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpire: { type: Date, select: false },
+    // ===== END NEW =====
+    // ===== NEW: Register OTP =====
+    // Tai khoan cu (tao truoc khi co OTP) khong co field nay trong DB. Khi query dung
+    // { isVerified: false } de chi bat tai khoan dang cho xac thuc, khong dinh tai khoan cu.
+    isVerified: { type: Boolean, default: false },
+    registrationOtp: { type: String, select: false },
+    registrationOtpExpire: { type: Date, select: false },
+    registrationOtpAttempts: { type: Number, select: false },
+    // ===== END NEW =====
   },
   { timestamps: true }
 );
@@ -41,5 +92,25 @@ userSchema.pre('save', async function (next) {
 userSchema.methods.comparePassword = function (plain: string) {
   return bcrypt.compare(plain, this.password);
 };
+
+// ===== NEW: Forgot Password =====
+userSchema.methods.createPasswordResetToken = function (): string {
+  const token = crypto.randomBytes(32).toString('hex');
+  this.resetPasswordToken = hashResetToken(token);
+  this.resetPasswordExpire = new Date(Date.now() + RESET_PASSWORD_TTL_MS);
+  return token;
+};
+// ===== END NEW =====
+
+// ===== NEW: Register OTP =====
+userSchema.methods.createRegistrationOtp = function (): string {
+  // randomInt dung CSPRNG, khong dung Math.random() cho ma bao mat.
+  const otp = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+  this.registrationOtp = hashResetToken(otp);
+  this.registrationOtpExpire = new Date(Date.now() + REGISTRATION_OTP_TTL_MS);
+  this.registrationOtpAttempts = 0;
+  return otp;
+};
+// ===== END NEW =====
 
 export const User = model<IUser>('User', userSchema);
