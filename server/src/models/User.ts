@@ -1,5 +1,8 @@
 import { Schema, model, Document, Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
+// ===== NEW: Admin role =====
+import { ROLES, Role } from '../types/index.js';
+// ===== END NEW =====
 // ===== NEW: Forgot Password =====
 import crypto from 'crypto';
 
@@ -47,6 +50,11 @@ export interface IUser extends Document {
   /** Sinh OTP 6 so moi, luu ban hash vao document (chua save), tra ve OTP goc de gui email. */
   createRegistrationOtp(): string;
   // ===== END NEW =====
+  // ===== NEW: Admin role =====
+  role: Role;
+  /** false = bi admin khoa tai khoan. */
+  isActive: boolean;
+  // ===== END NEW =====
 }
 
 const userSchema = new Schema<IUser>(
@@ -78,6 +86,12 @@ const userSchema = new Schema<IUser>(
     registrationOtp: { type: String, select: false },
     registrationOtpExpire: { type: Date, select: false },
     registrationOtpAttempts: { type: Number, select: false },
+    // ===== END NEW =====
+    // ===== NEW: Admin role =====
+    // Co default -> tai khoan cu trong DB tu nhan role 'user', isActive true khi doc ra.
+    // Register/updateProfile validate bang Zod nen client khong tu gan role duoc.
+    role: { type: String, enum: ROLES, default: 'user' },
+    isActive: { type: Boolean, default: true },
     // ===== END NEW =====
   },
   { timestamps: true }

@@ -5,6 +5,10 @@ import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { uploadDataUrl, destroyImage } from '../services/upload.service.js';
 import { SEASONS, OCCASIONS } from '../types/index.js';
+// ===== NEW: OOTD Post =====
+import { OotdPost } from '../models/OotdPost.js';
+import { Like } from '../models/Like.js';
+// ===== END NEW =====
 
 const outfitItemSchema = z.object({
   item: z.string().length(24, 'itemId khong hop le'),
@@ -131,6 +135,17 @@ export const deleteOutfit = asyncHandler(async (req, res) => {
     owner: req.user!.sub,
   });
   if (!outfit) throw ApiError.notFound('Khong tim thay outfit');
+
+  // ===== NEW: OOTD Post =====
+  // Xoa luon bai dang chia se outfit nay cung like cua bai, tranh du lieu mo coi.
+  const postIds = await OotdPost.find({ outfit: outfit._id }).distinct('_id');
+  if (postIds.length > 0) {
+    await Promise.all([
+      Like.deleteMany({ post: { $in: postIds } }),
+      OotdPost.deleteMany({ _id: { $in: postIds } }),
+    ]);
+  }
+  // ===== END NEW =====
 
   await destroyImage(outfit.thumbnailPublicId);
   res.json({ success: true, message: 'Da xoa outfit' });
