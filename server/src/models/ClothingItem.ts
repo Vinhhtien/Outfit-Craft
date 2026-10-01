@@ -72,4 +72,14 @@ clothingItemSchema.index({ owner: 1, category: 1, isArchived: 1 });
 // Ho tro o tim kiem theo ten/brand.
 clothingItemSchema.index({ name: 'text', brand: 'text' });
 
+// ===== NEW: Category =====
+/** Quan he N-1 toi Category qua code. Chi co du lieu khi goi .populate('categoryInfo'). */
+clothingItemSchema.virtual('categoryInfo', {
+  ref: 'Category',
+  localField: 'category',
+  foreignField: 'code',
+  justOne: true,
+});
+// ===== END NEW =====
+
 export const ClothingItem = model<IClothingItem>('ClothingItem', clothingItemSchema);
