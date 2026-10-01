@@ -46,6 +46,11 @@ export const OCCASIONS = [
 ] as const;
 export type Occasion = (typeof OCCASIONS)[number];
 
+// ===== NEW: Admin role =====
+export const ROLES = ['user', 'admin'] as const;
+export type Role = (typeof ROLES)[number];
+// ===== END NEW =====
+
 export interface JwtPayload {
   sub: string;   // userId
   email: string;
