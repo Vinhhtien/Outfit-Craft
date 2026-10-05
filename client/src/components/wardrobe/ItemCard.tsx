@@ -8,13 +8,37 @@ export function ItemCard({
   item,
   onDelete,
   onAdd,
+  onClick,
 }: {
   item: ClothingItem;
   onDelete?: (item: ClothingItem) => void;
   onAdd?: (item: ClothingItem) => void;
+  // ===== NEW: Xem/Sua Item =====
+  /** Bam vao the -> mo ItemDetailModal. */
+  onClick?: (item: ClothingItem) => void;
+  // ===== END NEW =====
 }) {
   return (
-    <div className="group relative rounded-xl border border-[#CBD5E1] bg-white p-3 text-[#1F453E] shadow-sm transition-all hover:border-[#1F453E]">
+    <div
+      // ===== NEW: Xem/Sua Item =====
+      onClick={onClick ? () => onClick(item) : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                onClick(item);
+              }
+            }
+          : undefined
+      }
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      // ===== END NEW =====
+      className={`group relative rounded-xl border border-[#CBD5E1] bg-white p-3 text-[#1F453E] shadow-sm transition-all hover:border-[#1F453E] ${
+        onClick ? 'cursor-pointer focus:outline-none focus-visible:border-[#1F453E]' : ''
+      }`}
+    >
       <div className="grid aspect-square place-items-center rounded-lg bg-[#F8F9F5] p-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -54,7 +78,10 @@ export function ItemCard({
       <div className="absolute right-5 top-5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         {onAdd && (
           <button
-            onClick={() => onAdd(item)}
+            onClick={(e) => {
+              e.stopPropagation(); // ===== NEW: Xem/Sua Item ===== khong mo modal
+              onAdd(item);
+            }}
             title="Thêm vào canvas"
             className="grid h-7 w-7 place-items-center rounded-full bg-[#1F453E] text-white shadow hover:bg-[#16352F]"
           >
@@ -63,7 +90,10 @@ export function ItemCard({
         )}
         {onDelete && (
           <button
-            onClick={() => onDelete(item)}
+            onClick={(e) => {
+              e.stopPropagation(); // ===== NEW: Xem/Sua Item ===== khong mo modal
+              onDelete(item);
+            }}
             title="Xóa"
             className="grid h-7 w-7 place-items-center rounded-full border border-[#CBD5E1] bg-white text-red-500 shadow hover:bg-red-50"
           >

@@ -6,7 +6,13 @@ import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { AddItemModal } from '@/components/wardrobe/AddItemModal';
 import { ItemCard } from '@/components/wardrobe/ItemCard';
-import { VButton, VChip, VSpinner } from '@/components/ui/vintage';
+// ===== NEW: Xem/Sua Item =====
+import { ItemDetailModal } from '@/components/wardrobe/ItemDetailModal';
+// ===== END NEW =====
+// ===== NEW: Delete Confirmation Popup =====
+import { DeleteConfirmModal } from '@/components/wardrobe/DeleteConfirmModal';
+// ===== END NEW =====
+import { VButton, VChip, VSpinner, VToast } from '@/components/ui/vintage';
 import { itemApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import { CATEGORIES, CATEGORY_LABELS } from '@/types';
@@ -17,6 +23,18 @@ export default function WardrobePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  // ===== NEW: Xem/Sua Item =====
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // ===== END NEW =====
+  // ===== NEW: Delete Confirmation Popup =====
+  const [itemToDelete, setItemToDelete] = useState<ClothingItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  // ===== END NEW =====
+  // ===== NEW: Toast thay alert() =====
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(
+    null
+  );
+  // ===== END NEW =====
 
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [search, setSearch] = useState('');
@@ -44,16 +62,41 @@ export default function WardrobePage() {
     return () => clearTimeout(t);
   }, [load, search]);
 
+  // ===== NEW: Delete Confirmation Popup =====
+  /** Chi goi khi nguoi dung bam "Xac nhan xoa" tren popup (thay cho window.confirm). */
   const handleDelete = async (item: ClothingItem) => {
-    if (!confirm(`Xóa "${item.name}" khỏi tủ đồ?`)) return;
+    setDeleting(true);
     try {
       const res = await itemApi.remove(item._id);
-      if (res.message) alert(res.message);
+      setItemToDelete(null);
+      // ===== NEW: Toast thay alert() =====
+      if (res.message) setToast({ message: res.message, variant: 'success' });
       void load();
     } catch (err) {
-      alert(getErrorMessage(err));
+      setItemToDelete(null);
+      setToast({ message: getErrorMessage(err), variant: 'error' });
+    } finally {
+      setDeleting(false);
     }
   };
+
+  const closeDeleteConfirm = useCallback(() => setItemToDelete(null), []);
+  // ===== END NEW =====
+  // ===== NEW: Toast thay alert() =====
+  const closeToast = useCallback(() => setToast(null), []);
+  // ===== END NEW =====
+
+  // ===== NEW: Xem/Sua Item =====
+  /** Cap nhat local state thay vi re-fetch -> luoi khong nhay spinner sau modal. */
+  const handleItemUpdated = (updated: ClothingItem) => {
+    setItems((prev) =>
+      prev
+        .map((it) => (it._id === updated._id ? updated : it))
+        // Dang loc theo danh muc ma doi sang danh muc khac -> an khoi luoi.
+        .filter((it) => category === 'all' || it.category === category)
+    );
+  };
+  // ===== END NEW =====
 
   return (
     <ProtectedLayout fullBleed hideFooter>
@@ -128,7 +171,15 @@ export default function WardrobePage() {
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
               {items.map((item) => (
-                <ItemCard key={item._id} item={item} onDelete={handleDelete} />
+                <ItemCard
+                  key={item._id}
+                  item={item}
+                  // ===== NEW: Delete Confirmation Popup ===== mo popup thay vi xoa ngay
+                  onDelete={setItemToDelete}
+                  // ===== NEW: Xem/Sua Item =====
+                  onClick={(it) => setSelectedItemId(it._id)}
+                />
+
               ))}
             </div>
           )}
@@ -139,6 +190,40 @@ export default function WardrobePage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onCreated={load}
+      />
+
+      {/* ===== NEW: Xem/Sua Item ===== */}
+      {selectedItemId && (
+        <ItemDetailModal
+          key={selectedItemId}
+          itemId={selectedItemId}
+          onClose={() => setSelectedItemId(null)}
+          onUpdated={handleItemUpdated}
+        />
+      )}
+
+      {/* ===== NEW: Delete Confirmation Popup ===== */}
+      <DeleteConfirmModal
+        open={Boolean(itemToDelete)}
+        title="Xóa món đồ?"
+        description={
+          <>
+            Bạn có chắc chắn muốn xóa &ldquo;{itemToDelete?.name}&rdquo; khỏi tủ đồ không? Nếu
+            món đồ này đang được dùng trong Outfit nào đó, hệ thống sẽ tự động chuyển nó sang
+            kho lưu trữ (Archived) thay vì xóa vĩnh viễn để không làm hỏng bộ phối.
+          </>
+        }
+        deleting={deleting}
+        onCancel={closeDeleteConfirm}
+        onConfirm={() => itemToDelete && void handleDelete(itemToDelete)}
+      />
+
+      {/* ===== NEW: Toast thay alert() ===== */}
+      <VToast
+        message={toast?.message ?? null}
+        variant={toast?.variant}
+        duration={4000}
+        onClose={closeToast}
       />
     </ProtectedLayout>
   );
