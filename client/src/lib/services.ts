@@ -65,6 +65,16 @@ export interface ItemFilters {
   limit?: number;
 }
 
+// ===== NEW: Xem/Sua Item =====
+/** Cac field PATCH /items/:id chap nhan (server dung .strict(), gui field khac se 400). */
+export type UpdateItemPayload = Partial<
+  Pick<
+    ClothingItem,
+    'name' | 'category' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes'
+  >
+>;
+// ===== END NEW =====
+
 export const itemApi = {
   /** Day file len Cloudinary, tra ve { url, publicId }. */
   upload: (file: Blob, filename = 'item.png') => {
@@ -85,7 +95,8 @@ export const itemApi = {
   create: (body: Partial<ClothingItem>) =>
     api.post<ApiResponse<ClothingItem>>('/items', body).then((r) => r.data.data),
 
-  update: (id: string, body: Partial<ClothingItem>) =>
+  // ===== NEW: Xem/Sua Item ===== (thu hep kieu body theo whitelist cua server)
+  update: (id: string, body: UpdateItemPayload) =>
     api.patch<ApiResponse<ClothingItem>>(`/items/${id}`, body).then((r) => r.data.data),
 
   remove: (id: string) => api.delete<ApiResponse<null>>(`/items/${id}`).then((r) => r.data),
