@@ -151,6 +151,11 @@ Mọi route (trừ `/auth/register`, `/auth/login`, `/health`) đều cần head
 | GET/PATCH/DELETE | `/api/outfits/:id` | Xem / sửa / xóa |
 | POST | `/api/outfits/:id/wear` | Đánh dấu đã mặc (tăng `wearCount`) |
 
+### Dáng người
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| GET/PUT/DELETE | `/api/users/me/body-profile` | Hồ sơ dáng người: giới tính, dáng, số đo (kể cả `inseamCm`), `weightKg`, `unitPreference`, `modelColorHue`, `showBmi`. Chỉ chủ tài khoản đọc được |
+
 ### Gợi ý
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
@@ -177,6 +182,16 @@ Mọi route (trừ `/auth/register`, `/auth/login`, `/health`) đều cần head
 **Xóa món đồ có kiểm tra ràng buộc.** Nếu món đồ đang nằm trong outfit nào đó, hệ thống chuyển sang trạng thái lưu trữ (`isArchived`) thay vì xóa hẳn, tránh làm vỡ layout outfit đã lưu.
 
 **Gợi ý không phụ thuộc AI.** Thuật toán rule-based chấm điểm theo nhiệt độ, mùa, dịp, trời mưa và tần suất đã mặc — luôn chạy được. Gemini chỉ dùng để viết lời tư vấn bên trên kết quả đó; thiếu API key hoặc gọi lỗi thì tự động fallback sang text sinh từ rule.
+
+**Người mẫu 3D (Studio + Hồ sơ).** Dùng `three` + `@react-three/fiber` + `@react-three/drei`, nạp bằng `next/dynamic` (`ssr: false`). Trình duyệt không có WebGL → tự quay về bóng người SVG (`mannequin.ts`) và canvas 2D Fabric.
+
+- `client/src/lib/bodyModel.ts` — mô hình cơ thể tham số hóa (thuần, có test): số đo → tiết diện elip, `computeAnchors3D()` (nguồn duy nhất cho việc đặt đồ), `morphWeights()` cho file `.glb`.
+- `client/src/lib/placement3D.ts` — dùng lại nguyên quy tắc của `outfitPlacement.ts` trên mặt phẳng chính diện (đơn vị cm), ngưỡng hút 24 px / tách 72 px tính trên màn hình.
+- `client/src/lib/bodyMetrics.ts`, `units.ts` — mặc định, dáng mẫu, chế độ "Tự cân đối" (ước lượng heuristic, không phải y khoa), BMI, đổi đơn vị (lưu luôn bằng cm/kg).
+- Món đồ là ảnh PNG uốn cong theo thân (không mô phỏng vải); mặt sau chỉ mang tính minh họa.
+- Outfit phối ở 3D lưu thêm `scene3D` (không thay `canvasJSON`); outfit cũ vẫn mở ở 2D. `scene3D.bodySnapshot` (có cân nặng) bị bỏ khi người xem không phải chủ outfit.
+- Hằng số khoảng số đo nằm ở `server/src/types/bodyConstants.ts`, bản sao y hệt ở `client/src/types/bodyConstants.ts` — sửa một bên thì phải chép sang bên kia.
+- Mặc định dùng mô hình thủ tục. Muốn dùng mesh MakeHuman (xuất CC0 qua Blender + MPFB2) thì đặt `body-female.glb` / `body-male.glb` vào `client/public/models/`, có các shape key `chest`, `waist`, `hips`, `weight`, `legLength` (xem `morphWeights()` trong `bodyModel.ts`).
 
 ---
 

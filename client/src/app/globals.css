@@ -8,6 +8,9 @@
   --muted: #78716c;
   --primary: #6366f1;
   --primary-hover: #4f46e5;
+  /* Bong nguoi tren canvas / preview dang nguoi. Chua co dark theme that (canvas va the
+     ho so luon nen sang) nen chua ghi de trong prefers-color-scheme: dark. */
+  --mannequin-fill: #e2e0dc;
 }
 
 @theme inline {

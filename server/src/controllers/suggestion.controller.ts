@@ -4,7 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { getWeather } from '../services/weather.service.js';
 import { buildSuggestion, scoreItem } from '../services/suggestion.service.js';
-import { getStylistAdvice } from '../services/stylist.service.js';
+import { getStylistAdvice, toStylistBodyContext } from '../services/stylist.service.js';
 import { Occasion, OCCASIONS } from '../types/index.js';
 
 /** GET /api/suggestions/weather?city=Hanoi */
@@ -21,7 +21,8 @@ export const getWeatherInfo = asyncHandler(async (req, res) => {
  */
 export const getSuggestion = asyncHandler(async (req, res) => {
   const owner = req.user!.sub;
-  const user = await User.findById(owner);
+  // NEW: Body Profile - bodyProfile co select:false nen phai lay tuong minh.
+  const user = await User.findById(owner).select('+bodyProfile');
   const city = String(req.query.city || '') || user?.defaultCity || 'Hanoi';
 
   const occasionRaw = req.query.occasion as string | undefined;
@@ -37,7 +38,12 @@ export const getSuggestion = asyncHandler(async (req, res) => {
 
   const weather = await getWeather(city);
   const suggestion = buildSuggestion(items, weather, occasion);
-  const { advice, source } = await getStylistAdvice(suggestion, weather, occasion);
+  const { advice, source } = await getStylistAdvice(
+    suggestion,
+    weather,
+    occasion,
+    toStylistBodyContext(user?.bodyProfile) // NEW: Body Profile
+  );
 
   res.json({
     success: true,
