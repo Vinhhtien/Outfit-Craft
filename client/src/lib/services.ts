@@ -2,6 +2,8 @@ import { api } from './api';
 import type {
   ApiResponse, ClothingItem, Outfit, Weather, Suggestion,
   ScheduleEntry, User, Category, Occasion,
+  BodyProfile, MannequinProfile, // NEW: Body Profile
+  Scene3D, // NEW: Body 3D
 } from '@/types';
 
 /* ---------------- Auth ---------------- */
@@ -115,6 +117,10 @@ export interface SaveOutfitBody {
   items: {
     item: string; left: number; top: number;
     scaleX: number; scaleY: number; angle: number; zIndex: number; flipX?: boolean;
+    // ===== NEW: Body Profile =====
+    anchorRef?: string | null;
+    offset?: { x: number; y: number };
+    // ===== END NEW =====
   }[];
   canvasJSON: Record<string, unknown>;
   thumbnailDataUrl?: string;
@@ -122,6 +128,13 @@ export interface SaveOutfitBody {
   occasions?: string[];
   tags?: string[];
   isPublic?: boolean;
+  // ===== NEW: Body Profile =====
+  mannequin?: MannequinProfile | null;
+  // ===== END NEW =====
+  // ===== NEW: Body 3D =====
+  /** null = bỏ cảnh 3D (lưu lại ở chế độ 2D). */
+  scene3D?: Scene3D | null;
+  // ===== END NEW =====
 }
 
 export const outfitApi = {
@@ -143,6 +156,21 @@ export const outfitApi = {
   feed: (page = 1) =>
     api.get<ApiResponse<Outfit[]>>('/outfits/feed', { params: { page } }).then((r) => r.data),
 };
+
+// ===== NEW: Body Profile =====
+/* ---------------- Body Profile ---------------- */
+export const bodyProfileApi = {
+  /** null neu user chua thiet lap dang nguoi. */
+  get: () =>
+    api.get<ApiResponse<BodyProfile | null>>('/users/me/body-profile').then((r) => r.data.data),
+
+  // NEW: Body 3D - PUT thay toan bo ho so (ke ca can nang, don vi, mau, BMI).
+  save: (body: Omit<BodyProfile, 'updatedAt'>) =>
+    api.put<ApiResponse<BodyProfile>>('/users/me/body-profile', body).then((r) => r.data.data),
+
+  remove: () => api.delete<ApiResponse<null>>('/users/me/body-profile').then((r) => r.data),
+};
+// ===== END NEW =====
 
 /* ---------------- Suggestions ---------------- */
 export const suggestionApi = {
