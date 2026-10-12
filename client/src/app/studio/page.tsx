@@ -8,6 +8,7 @@ import {
   // ===== NEW: Body Profile =====
   PersonStanding, Magnet, FolderOpen, FilePlus, RotateCcw, SlidersHorizontal, X,
   // ===== END NEW =====
+  BookmarkCheck, // NEW: Ghi nho fit
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
@@ -26,7 +27,7 @@ import {
 } from '@/lib/bodyMetrics';
 // ===== END NEW =====
 import { CATEGORIES, CATEGORY_LABELS, OCCASIONS, OCCASION_LABELS } from '@/types';
-import type { Category, ClothingItem, MannequinProfile, Occasion, Outfit } from '@/types';
+import type { Category, ClothingItem, ItemFit, MannequinProfile, Occasion, Outfit } from '@/types';
 
 const EMPTY_FORM = {
   name: '',
@@ -73,6 +74,74 @@ export default function StudioPage() {
   const [deletingOutfit, setDeletingOutfit] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const closeDeleteError = useCallback(() => setDeleteError(null), []);
+  // ===== END NEW =====
+
+  // ===== NEW: Ghi nho fit =====
+  const [fitError, setFitError] = useState<string | null>(null);
+  const closeFitError = useCallback(() => setFitError(null), []);
+  /** Fit dang cho luu theo mon: user chinh lien tiep -> chi luu ban cuoi khi dung tay. */
+  const pendingFitsRef = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; fit: ItemFit }>());
+  /** Mon da bao "da ghi nho" trong phien nay - khong bao lai moi lan chinh. */
+  const announcedFitRef = useRef(new Set<string>());
+
+  const saveItemFit = useCallback(async (itemId: string, fit: ItemFit, announce: boolean) => {
+    try {
+      const saved = await itemApi.saveFit(itemId, fit);
+      // Cap nhat tu do -> lan sau them mon nay tu dat theo fit moi.
+      setItems((list) => list.map((i) => (i._id === itemId ? { ...i, fit: saved.fit ?? fit } : i)));
+      if (announce) setToast(`Đã ghi nhớ vị trí & cỡ của "${saved.name}" - lần sau tự đặt đúng.`);
+    } catch (err) {
+      setFitError(getErrorMessage(err));
+    }
+  }, []);
+
+  const cancelPendingFit = (itemId: string) => {
+    const pending = pendingFitsRef.current.get(itemId);
+    if (pending) clearTimeout(pending.timer);
+    pendingFitsRef.current.delete(itemId);
+  };
+
+  /** Lan dau thu 1 mon: user can xong (dung tay ~0,8 s) thi tu ghi nho vao mon do. */
+  const handleItemFit = useCallback((itemId: string, fit: ItemFit) => {
+    const pendings = pendingFitsRef.current;
+    const prev = pendings.get(itemId);
+    if (prev) clearTimeout(prev.timer);
+    const timer = setTimeout(() => {
+      pendings.delete(itemId);
+      const first = !announcedFitRef.current.has(itemId);
+      announcedFitRef.current.add(itemId);
+      void saveItemFit(itemId, fit, first);
+    }, 800);
+    pendings.set(itemId, { timer, fit });
+  }, [saveItemFit]);
+
+  // Roi trang khi con fit chua kip luu -> luu luon.
+  useEffect(() => {
+    const pendings = pendingFitsRef.current;
+    return () => {
+      pendings.forEach(({ timer, fit }, id) => {
+        clearTimeout(timer);
+        void itemApi.saveFit(id, fit).catch(() => undefined);
+      });
+      pendings.clear();
+    };
+  }, []);
+
+  /** Nut tren toolbar: ghi nho (de) vi tri + co hien tai cua mon dang chon. */
+  const rememberSelectedFit = (c: OutfitCanvasHandle) => {
+    const selected = c.getSelectedFit();
+    if (!selected) {
+      setFitError('Hãy chọn một món đồ để ghi nhớ vị trí & cỡ.');
+      return;
+    }
+    if (!selected.fit) {
+      setFitError('Món đồ đang đặt tự do. Kéo sát vào người mẫu (cổ áo khớp cổ, cạp quần khớp eo) rồi ghi nhớ lại.');
+      return;
+    }
+    cancelPendingFit(selected.itemId);
+    announcedFitRef.current.add(selected.itemId);
+    void saveItemFit(selected.itemId, selected.fit, true);
+  };
   // ===== END NEW =====
 
   /** Outfit cho canvas san sang de nap. */
@@ -422,6 +491,15 @@ export default function StudioPage() {
                     <Icon size={13} />
                   </button>
                 ))}
+                {/* NEW: Ghi nho fit - tach khoi mang toolbar vi doc ref (khong duoc nam trong du lieu render) */}
+                <button
+                  onClick={() => runTool(rememberSelectedFit)}
+                  disabled={!hasSelection}
+                  title="Ghi nhớ vị trí & cỡ món này cho lần sau"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-[#1F453E] transition-colors hover:bg-[#E2ECC8] active:bg-[#1F453E] active:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+                >
+                  <BookmarkCheck size={13} />
+                </button>
               </div>
 
               {/* ===== NEW: Body Profile ===== dieu khien mannequin */}
@@ -463,12 +541,13 @@ export default function StudioPage() {
                   showMannequin={showMannequin}
                   autoSnap={autoSnap}
                   onReady={handleCanvasReady}
+                  onItemFit={handleItemFit}
                 />
               </div>
             </div>
 
             <p className="mt-2 shrink-0 rounded-full border border-[#1F453E]/10 bg-[#E2ECC8]/50 px-3 py-1 text-center text-[11px] font-medium text-[#1F453E]">
-              Mẹo: món đồ tự hút vào cơ thể khi kéo gần, giữ Shift để đặt tự do, Ctrl + bấm để chọn nhiều. Delete để xóa nhanh.
+              Mẹo: lần đầu thử một món, kéo cho vừa (cổ áo khớp cổ, cạp quần khớp eo) - vị trí & cỡ được ghi nhớ cho lần sau. Giữ Shift để đặt tự do, Ctrl + bấm để chọn nhiều.
             </p>
           </section>
 
@@ -668,6 +747,7 @@ export default function StudioPage() {
       <VToast message={deleteError} variant="error" duration={4000} onClose={closeDeleteError} />
       {/* ===== END NEW ===== */}
 
+      <VToast message={fitError} variant="error" duration={4000} onClose={closeFitError} /> {/* NEW: Ghi nho fit */}
       <VToast message={toast} onClose={closeToast} />
     </ProtectedLayout>
   );

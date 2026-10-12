@@ -3,6 +3,7 @@ import type {
   ApiResponse, ClothingItem, Outfit, Weather, Suggestion,
   ScheduleEntry, User, Category, Occasion,
   BodyProfile, MannequinProfile, // NEW: Body Profile
+  ItemFit, // NEW: Ghi nho fit
 } from '@/types';
 
 /* ---------------- Auth ---------------- */
@@ -101,6 +102,10 @@ export const itemApi = {
     api.patch<ApiResponse<ClothingItem>>(`/items/${id}`, body).then((r) => r.data.data),
 
   remove: (id: string) => api.delete<ApiResponse<null>>(`/items/${id}`).then((r) => r.data),
+
+  // NEW: Ghi nho fit - vi tri + co da can tren nguoi mau (null = xoa).
+  saveFit: (id: string, fit: ItemFit | null) =>
+    api.put<ApiResponse<ClothingItem>>(`/items/${id}/fit`, { fit }).then((r) => r.data.data),
 
   stats: () => api.get<ApiResponse<{
     total: number;

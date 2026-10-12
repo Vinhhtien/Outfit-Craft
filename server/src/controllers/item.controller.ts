@@ -43,6 +43,28 @@ export const updateItemSchema = z
   .strict();
 // ===== END NEW =====
 
+// ===== NEW: Ghi nho fit =====
+/** Anchor ma mon do co the bam - trung GROUP_RULES o client/src/lib/outfitPlacement.ts. */
+const FIT_ANCHORS = ['neck', 'waist', 'hip', 'footBottom', 'hipRight'] as const;
+
+/** PUT /api/items/:id/fit - null = xoa fit da luu (lan sau tu dat theo mac dinh). */
+export const saveFitSchema = z
+  .object({
+    fit: z
+      .object({
+        category: z.enum(CATEGORIES),
+        anchorRef: z.enum(FIT_ANCHORS),
+        offsetX: z.number().finite().min(-5).max(5),
+        offsetY: z.number().finite().min(-5).max(5),
+        width: z.number().finite().positive().max(10),
+        height: z.number().finite().positive().max(10),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+// ===== END NEW =====
+
 /**
  * POST /api/items/upload
  * Nhan file anh (da tach nen o client hoac anh goc), day len Cloudinary.
@@ -126,6 +148,19 @@ export const updateItem = asyncHandler(async (req, res) => {
   if (!item) throw ApiError.notFound('Khong tim thay mon do');
   res.json({ success: true, data: item });
 });
+
+// ===== NEW: Ghi nho fit =====
+/** PUT /api/items/:id/fit - tach rieng khoi PATCH metadata (updateItemSchema van .strict()). */
+export const saveFit = asyncHandler(async (req, res) => {
+  const item = await ClothingItem.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user!.sub },
+    { $set: { fit: req.body.fit } },
+    { new: true, runValidators: true }
+  );
+  if (!item) throw ApiError.notFound('Khong tim thay mon do');
+  res.json({ success: true, data: item });
+});
+// ===== END NEW =====
 
 /**
  * DELETE /api/items/:id
