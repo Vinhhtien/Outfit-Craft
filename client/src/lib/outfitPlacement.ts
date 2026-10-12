@@ -212,3 +212,34 @@ export function reflowPlacement(
     offset: newOffset,
   };
 }
+
+/**
+ * Dua 1 mon do cua outfit luu theo hinh the he cu (legacyMannequin.ts) sang hinh hien tai:
+ * - mon dang bam anchor: reflowPlacement tu anchor cu sang anchor moi (bam dung vi tri tren co the);
+ * - mon tu do: phong to/thu nho quanh diem giua 2 ban chan theo `factor` (= chieu cao co the
+ *   moi / cu) de giu vi tri tuong doi so voi nguoi.
+ */
+export function upgradeLegacyPlacement(
+  category: string,
+  box: ItemBox,
+  anchorRef: string | null | undefined,
+  offset: Point | undefined,
+  from: MannequinAnchors,
+  to: MannequinAnchors,
+  factor: number
+): Placement {
+  const reflowed = reflowPlacement(category, box, anchorRef, offset, from, to);
+  if (reflowed.anchorRef) return reflowed;
+  const o = from.footBottom;
+  const n = to.footBottom;
+  return {
+    box: {
+      cx: n.x + (box.cx - o.x) * factor,
+      cy: n.y + (box.cy - o.y) * factor,
+      width: box.width * factor,
+      height: box.height * factor,
+    },
+    anchorRef: null,
+    offset: ZERO,
+  };
+}

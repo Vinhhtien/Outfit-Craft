@@ -1,8 +1,8 @@
-// ===== NEW: Body 3D =====
+// ===== NEW: Body Profile =====
 /**
  * Hang so dang nguoi dung chung client/server - NGUON DUY NHAT.
  * client/src/types/bodyConstants.ts la ban sao y het: sua 1 ben thi copy sang
- * ben kia (khong co test tu dong doi chieu).
+ * ben kia (2 file phai giong het nhau).
  * File nay khong duoc import gi de client import chung duoc.
  */
 
@@ -33,8 +33,9 @@ export type BodyMeasurements = Partial<Record<BodyMeasurementKey, number>>;
 export const BODY_WEIGHT_RANGE = { min: 35, max: 150 } as const;
 
 /**
- * Khoang THANH TRUOT o bang chinh thong so 3D. Luon nam trong khoang luu tru o tren,
- * nen moi gia tri keo ra tu slider deu qua duoc zod.
+ * Khoang THANH TRUOT o bang chinh so do. Luon nam trong khoang luu tru o tren,
+ * nen moi gia tri keo ra tu slider deu qua duoc zod. (Client con thu hep them theo
+ * chieu cao de slider khong co doan "chet" - xem client/src/lib/bodyMetrics.ts.)
  */
 export const BODY_SLIDER_RANGES = {
   heightCm: { min: 140, max: 210 },
@@ -43,17 +44,17 @@ export const BODY_SLIDER_RANGES = {
   waistCm: { min: 55, max: 140 },
   hipCm: { min: 75, max: 150 },
   inseamCm: { min: 60, max: 100 },
+  shoulderCm: { min: 25, max: 70 },
 } as const;
 export type BodySliderKey = keyof typeof BODY_SLIDER_RANGES;
 
+/** Tuy chon cua giao dien cu (server van nhan, client hien tai khong dung). */
 export const UNIT_PREFERENCES = ['metric', 'imperial'] as const;
 export type UnitPreference = (typeof UNIT_PREFERENCES)[number];
 
-/** Mau mo hinh luu bang hue (do). */
+/** Mau mo hinh luu bang hue (do) - tuy chon cua giao dien cu. */
 export const MODEL_HUE_RANGE = { min: 0, max: 360 } as const;
 
-/** Phien ban dinh dang Outfit.scene3D. */
-export const SCENE3D_VERSION = 1;
-/** Toi da so mon trong 1 canh 3D. */
+/** Toi da so mon trong scene3D cu (chi doc) - chi dung cho schema mongoose. */
 export const SCENE3D_MAX_ITEMS = 50;
 // ===== END NEW =====

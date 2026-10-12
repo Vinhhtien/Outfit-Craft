@@ -67,6 +67,8 @@ export default function SchedulePage() {
   }, [month]);
 
   useEffect(() => {
+    // Nap du lieu khi doi thang: bat loading ngay trong effect la co chu y.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

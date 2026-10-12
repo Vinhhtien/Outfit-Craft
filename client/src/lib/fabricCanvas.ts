@@ -5,16 +5,18 @@
  */
 
 import type { Canvas, FabricObject, FabricImage } from 'fabric';
-import type { ClothingItem, MannequinProfile, OutfitItem } from '@/types';
+import type { ClothingItem, MannequinProfile, Outfit, OutfitItem } from '@/types';
 import { CATEGORY_Z_INDEX } from '@/types';
 // ===== NEW: Body Profile =====
 import { buildMannequin, type MannequinAnchors, type Point } from './mannequin';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_SCALE, CANVAS_OFFSET_X,
   SNAP_DISTANCE_PX, DETACH_DISTANCE_PX,
-  autoPlace, findSnap, reflowPlacement, canvasToLogic, logicToCanvas,
+  autoPlace, findSnap, reflowPlacement, upgradeLegacyPlacement, canvasToLogic, logicToCanvas,
+  GROUP_RULES, boxFromRef, groupOf, refPoint,
   type ItemBox, type Placement,
 } from './outfitPlacement';
+import { LEGACY_BODY_H, legacyMannequinAnchors } from './legacyMannequin';
 // ===== END NEW =====
 
 /** Custom props gan them vao object de biet no ung voi item nao trong DB. */
@@ -172,6 +174,41 @@ export function updateAttachment(obj: ItemObject, anchors: MannequinAnchors, css
   obj.itemData = { ...obj.itemData, anchorRef: p.anchorRef, offset: p.offset };
 }
 
+/**
+ * Phien ban bo cuc luu trong canvasJSON. 2 = hinh phan ung theo chieu cao / dai chan trong.
+ * Khong co = luu theo hinh the he cu (legacyMannequin.ts).
+ */
+export const MANNEQUIN_LAYOUT_VERSION = 2;
+const LAYOUT_KEY = 'mannequinLayout';
+
+/**
+ * Outfit luu theo hinh the he cu -> can dat lai mon do khi mo. Outfit tu truoc khi co
+ * mannequin (khong co truong mannequin) thi khong co nguoi de bam -> giu nguyen.
+ */
+export function needsLayoutUpgrade(outfit: Pick<Outfit, 'mannequin' | 'canvasJSON'>): boolean {
+  return outfit.mannequin !== undefined && outfit.canvasJSON?.[LAYOUT_KEY] !== MANNEQUIN_LAYOUT_VERSION;
+}
+
+/**
+ * Dat lai moi mon do tu hinh the he cu sang hinh hien tai (xem upgradeLegacyPlacement).
+ * legacyProfile: dang da ve luc luu (snapshot nhu da luu, co the thieu so do); profile: dang ve bay gio.
+ */
+export function upgradeLegacyLayout(canvas: Canvas, legacyProfile: MannequinProfile, profile: MannequinProfile): void {
+  canvas.discardActiveObject();
+  const now = buildMannequin(profile);
+  const from = legacyMannequinAnchors(legacyProfile);
+  const factor = now.figureHeight / LEGACY_BODY_H;
+  for (const obj of getItemObjects(canvas)) {
+    const { category, anchorRef, offset } = obj.itemData!;
+    applyPlacement(
+      obj,
+      upgradeLegacyPlacement(category, getItemBox(obj), anchorRef, offset, from, now.anchors, factor),
+      true
+    );
+  }
+  canvas.requestRenderAll();
+}
+
 /** Doi dang: item dang bam anchor duoc dat lai, item tu do giu nguyen. */
 export function reflowItems(canvas: Canvas, from: MannequinAnchors, to: MannequinAnchors): number {
   // Object trong ActiveSelection dung toa do tuong doi voi nhom -> bo chon de tra ve toa do canvas.
@@ -226,6 +263,46 @@ export async function addItemToCanvas(
   canvas.setActiveObject(img);
   canvas.requestRenderAll();
 
+  return img;
+}
+
+/** Vi tri da tinh san cho 1 mon (vd dung lai outfit 3D cu - xem legacyScene3D.ts). */
+export interface PresetPlacement extends Placement {
+  /** Goc xoay Fabric (do). */
+  angle: number;
+  flipX: boolean;
+}
+
+/**
+ * Them 1 mon do vao dung vi tri da tinh, dat tren cung (goi theo thu tu lop).
+ * Chieu cao lay theo ti le anh that nhung giu nguyen diem bam cua nhom do.
+ */
+export async function addItemAtPlacement(
+  canvas: Canvas,
+  item: ClothingItem,
+  placed: PresetPlacement
+): Promise<ItemObject> {
+  const { FabricImage } = await import('fabric');
+
+  const img = (await FabricImage.fromURL(item.imageUrl, {
+    crossOrigin: 'anonymous',
+  })) as FabricImage & { itemData?: ItemObjectData };
+
+  img.set({ originX: 'center', originY: 'center', ...ITEM_CONTROLS });
+  img.itemData = { itemId: item._id, category: item.category, anchorRef: null, offset: ZERO };
+
+  const { box } = placed;
+  const height = box.width * ((img.height || 1) / (img.width || 1));
+  const group = groupOf(item.category);
+  const fitted = group
+    ? boxFromRef(refPoint(box, GROUP_RULES[group].ref), GROUP_RULES[group].ref, box.width, height)
+    : { ...box, height };
+  applyPlacement(img, { ...placed, box: fitted }, true);
+  img.set({ angle: placed.angle, flipX: placed.flipX });
+  img.setCoords();
+
+  canvas.add(img);
+  canvas.requestRenderAll();
   return img;
 }
 
@@ -304,7 +381,7 @@ export function serializeItems(canvas: Pick<Canvas, 'getObjects'>) {
  * Fabric v6: canvas.toJSON() khong nhan tham so -> dung toObject() de giu itemData.
  */
 export function serializeCanvasJSON(canvas: Canvas): Record<string, unknown> {
-  return canvas.toObject(CUSTOM_PROPS) as Record<string, unknown>;
+  return { ...(canvas.toObject(CUSTOM_PROPS) as Record<string, unknown>), [LAYOUT_KEY]: MANNEQUIN_LAYOUT_VERSION };
 }
 
 /** Xuat PNG thumbnail (thu nho 0.5x cho nhe khi luu len Cloudinary). */

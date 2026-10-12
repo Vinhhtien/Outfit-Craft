@@ -3,7 +3,6 @@ import type {
   ApiResponse, ClothingItem, Outfit, Weather, Suggestion,
   ScheduleEntry, User, Category, Occasion,
   BodyProfile, MannequinProfile, // NEW: Body Profile
-  Scene3D, // NEW: Body 3D
 } from '@/types';
 
 /* ---------------- Auth ---------------- */
@@ -131,10 +130,6 @@ export interface SaveOutfitBody {
   // ===== NEW: Body Profile =====
   mannequin?: MannequinProfile | null;
   // ===== END NEW =====
-  // ===== NEW: Body 3D =====
-  /** null = bỏ cảnh 3D (lưu lại ở chế độ 2D). */
-  scene3D?: Scene3D | null;
-  // ===== END NEW =====
 }
 
 export const outfitApi = {
@@ -164,8 +159,8 @@ export const bodyProfileApi = {
   get: () =>
     api.get<ApiResponse<BodyProfile | null>>('/users/me/body-profile').then((r) => r.data.data),
 
-  // NEW: Body 3D - PUT thay toan bo ho so (ke ca can nang, don vi, mau, BMI).
-  save: (body: Omit<BodyProfile, 'updatedAt'>) =>
+  /** PUT gop vao ho so: field khong gui thi server giu nguyen. */
+  save: (body: Partial<Omit<BodyProfile, 'updatedAt'>>) =>
     api.put<ApiResponse<BodyProfile>>('/users/me/body-profile', body).then((r) => r.data.data),
 
   remove: () => api.delete<ApiResponse<null>>('/users/me/body-profile').then((r) => r.data),

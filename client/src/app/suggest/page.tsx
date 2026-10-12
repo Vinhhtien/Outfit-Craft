@@ -17,7 +17,8 @@ import type { ClothingItem, Occasion, Suggestion, Weather } from '@/types';
 export default function SuggestPage() {
   const user = useAuthStore((s) => s.user);
 
-  const [city, setCity] = useState('');
+  /** null = chua go gi -> dung thanh pho mac dinh trong ho so. */
+  const [cityInput, setCity] = useState<string | null>(null);
   const [occasion, setOccasion] = useState<Occasion>('daily');
   const [data, setData] = useState<{
     weather: Weather;
@@ -28,10 +29,8 @@ export default function SuggestPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Dat thanh pho mac dinh tu ho so nguoi dung.
-  useEffect(() => {
-    if (user?.defaultCity && !city) setCity(user.defaultCity);
-  }, [user, city]);
+  // Thanh pho mac dinh tu ho so nguoi dung (xoa trang o nhap -> quay ve mac dinh nhu truoc).
+  const city = cityInput || user?.defaultCity || '';
 
   const fetchSuggestion = useCallback(async () => {
     setLoading(true);
@@ -48,6 +47,8 @@ export default function SuggestPage() {
 
   // Tu goi lan dau khi da biet thanh pho.
   useEffect(() => {
+    // Nap du lieu khi doi thanh pho/dip: bat loading ngay trong effect la co chu y.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (city) void fetchSuggestion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city, occasion]);
