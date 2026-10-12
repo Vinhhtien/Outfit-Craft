@@ -20,6 +20,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, needsLayoutUpgrade } from '@/lib/fabricCan
 import { DEFAULT_MANNEQUIN, buildMannequin, resolveMannequinProfile } from '@/lib/mannequin';
 import { scene3DToPlacements, shouldBuildFromScene3D } from '@/lib/legacyScene3D';
 import { BodyControlsPanel } from '@/components/body/BodyControlsPanel';
+import { DeleteConfirmModal } from '@/components/wardrobe/DeleteConfirmModal'; // NEW: Delete Outfit
 import {
   bodyStateFromProfile, bodyStateToMannequin, bodyStateToProfile, sameBodyState, type BodyState,
 } from '@/lib/bodyMetrics';
@@ -67,6 +68,12 @@ export default function StudioPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [savedOutfits, setSavedOutfits] = useState<Outfit[] | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  // ===== NEW: Delete Outfit =====
+  const [outfitToDelete, setOutfitToDelete] = useState<Outfit | null>(null);
+  const [deletingOutfit, setDeletingOutfit] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const closeDeleteError = useCallback(() => setDeleteError(null), []);
+  // ===== END NEW =====
 
   /** Outfit cho canvas san sang de nap. */
   const pendingRef = useRef<Outfit | null>(null);
@@ -212,6 +219,29 @@ export default function StudioPage() {
       setOpeningId(null);
     }
   };
+
+  // ===== NEW: Delete Outfit =====
+  const confirmDeleteOutfit = async () => {
+    const target = outfitToDelete;
+    if (!target) return;
+    setDeletingOutfit(true);
+    try {
+      await outfitApi.remove(target._id);
+      setSavedOutfits((list) => list?.filter((o) => o._id !== target._id) ?? null);
+      // Dang sua dung outfit vua xoa: giu nguyen canvas, chuyen sang phoi moi de lan luu sau tao outfit moi.
+      if (editing?.id === target._id) {
+        setEditing(null);
+        window.history.replaceState(null, '', '/studio');
+      }
+      setToast(`Đã xóa outfit "${target.name}".`);
+    } catch (err) {
+      setDeleteError(getErrorMessage(err));
+    } finally {
+      setDeletingOutfit(false);
+      setOutfitToDelete(null);
+    }
+  };
+  // ===== END NEW =====
 
   /** Đang xem thử số đo khác hồ sơ. */
   const isPreviewing = !sameBodyState(body, userBody);
@@ -577,31 +607,65 @@ export default function StudioPage() {
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {savedOutfits.map((o) => (
-              <button
-                key={o._id}
-                onClick={() => void openOutfit(o._id)}
-                disabled={openingId !== null}
-                className="group relative flex flex-col overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#FAF9F5] text-left transition-all hover:border-[#1F453E] disabled:opacity-60"
-              >
-                <div className="grid aspect-[6/7] place-items-center bg-white">
-                  {o.thumbnailUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={o.thumbnailUrl} alt={o.name} className="max-h-full max-w-full object-contain" />
-                  ) : (
-                    <Layers size={24} className="text-[#869BB2]" />
+              // NEW: Delete Outfit - boc trong div de dat nut xoa canh nut mo (khong long button).
+              <div key={o._id} className="group relative">
+                <button
+                  onClick={() => void openOutfit(o._id)}
+                  disabled={openingId !== null}
+                  className="relative flex w-full flex-col overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#FAF9F5] text-left transition-all hover:border-[#1F453E] disabled:opacity-60"
+                >
+                  <div className="grid aspect-[6/7] place-items-center bg-white">
+                    {o.thumbnailUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={o.thumbnailUrl} alt={o.name} className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <Layers size={24} className="text-[#869BB2]" />
+                    )}
+                  </div>
+                  <span className="truncate px-2.5 py-2 pr-9 text-xs font-semibold">{o.name}</span>
+                  {openingId === o._id && (
+                    <span className="absolute inset-0 grid place-items-center bg-white/60">
+                      <VSpinner />
+                    </span>
                   )}
-                </div>
-                <span className="truncate px-2.5 py-2 text-xs font-semibold">{o.name}</span>
-                {openingId === o._id && (
-                  <span className="absolute inset-0 grid place-items-center bg-white/60">
-                    <VSpinner />
-                  </span>
-                )}
-              </button>
+                </button>
+                {/* ===== NEW: Delete Outfit ===== */}
+                <button
+                  type="button"
+                  onClick={() => setOutfitToDelete(o)}
+                  disabled={openingId !== null || deletingOutfit}
+                  title={`Xóa outfit "${o.name}"`}
+                  aria-label={`Xóa outfit ${o.name}`}
+                  className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full text-[#8C2D19] transition-colors hover:bg-[#8C2D19] hover:text-white disabled:opacity-40"
+                >
+                  <Trash2 size={13} />
+                </button>
+                {/* ===== END NEW ===== */}
+              </div>
             ))}
           </div>
         )}
       </VModal>
+      {/* ===== END NEW ===== */}
+
+      {/* ===== NEW: Delete Outfit ===== lop z-[65] de popup nam tren modal danh sach (z-[60]) */}
+      <div className="relative z-[65]">
+        <DeleteConfirmModal
+          open={outfitToDelete !== null}
+          title="Xóa outfit?"
+          description={
+            <>
+              Outfit &ldquo;{outfitToDelete?.name}&rdquo; sẽ bị xóa vĩnh viễn, kèm bài đăng OOTD và lượt thích
+              của outfit này (nếu có). Các món đồ trong tủ đồ không bị ảnh hưởng. Không thể hoàn tác.
+            </>
+          }
+          confirmLabel="Xóa outfit"
+          deleting={deletingOutfit}
+          onCancel={() => setOutfitToDelete(null)}
+          onConfirm={() => void confirmDeleteOutfit()}
+        />
+      </div>
+      <VToast message={deleteError} variant="error" duration={4000} onClose={closeDeleteError} />
       {/* ===== END NEW ===== */}
 
       <VToast message={toast} onClose={closeToast} />
