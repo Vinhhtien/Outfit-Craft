@@ -7,7 +7,7 @@
  * Mannequin chiem tron chieu cao canvas: canvas = logic * CANVAS_SCALE + (CANVAS_OFFSET_X, 0).
  */
 
-import type { Category } from '@/types';
+import type { Category, ItemFit } from '@/types';
 import {
   MANNEQUIN_CENTER_X, MANNEQUIN_HEIGHT, MANNEQUIN_WIDTH,
   type AnchorPointName, type MannequinAnchors, type Point,
@@ -59,20 +59,54 @@ export function groupOf(category: string | undefined): PlacementGroup | null {
 /** Diem nao cua khung item (chua xoay) bam vao anchor. */
 export type RefEdge = 'top' | 'bottom' | 'left';
 
+/** Kich thuoc chuan (logic) cua vung co the ma mon do phu - de co gian ngang / doc rieng. */
+export interface BodySpan {
+  w: number;
+  h: number;
+}
+
 interface GroupRule {
   /** Anchor co the bam; phan tu dau la mac dinh khi tu dat. */
   anchors: AnchorPointName[];
   ref: RefEdge;
   width: (a: MannequinAnchors) => number;
+  // ===== NEW: Ghi nho fit =====
+  /**
+   * Vung co the mon do phu: w = tong be rong cac muc mon do om (vai/nguc/eo/hong) -> doi can nang
+   * (doi 3 vong, vai giu nguyen) thi do cung no / thon theo; h = doan doc mon do phu.
+   */
+  span: (a: MannequinAnchors) => BodySpan;
+  // ===== END NEW =====
 }
 
+// ===== NEW: Ghi nho fit =====
+const torsoSpan = (a: MannequinAnchors): BodySpan => ({
+  w: a.shoulderWidth + a.bustWidth + a.waistWidth,
+  h: a.hip.y - a.neck.y,
+});
+/** Tui / phu kien khong to ra khi tang can: chi theo chieu cao co the. */
+const figureSpan = (a: MannequinAnchors): BodySpan => {
+  const h = a.footBottom.y - a.headTop.y;
+  return { w: h, h };
+};
+// ===== END NEW =====
+
 export const GROUP_RULES: Record<PlacementGroup, GroupRule> = {
-  top: { anchors: ['neck'], ref: 'top', width: (a) => a.shoulderWidth * 1.15 },
-  outerwear: { anchors: ['neck'], ref: 'top', width: (a) => a.shoulderWidth * 1.3 },
-  dress: { anchors: ['neck'], ref: 'top', width: (a) => Math.max(a.shoulderWidth, a.hipWidth) * 1.15 },
-  bottom: { anchors: ['waist', 'hip'], ref: 'top', width: (a) => a.hipWidth * 1.1 },
-  shoes: { anchors: ['footBottom'], ref: 'bottom', width: (a) => a.feetWidth * 1.1 },
-  side: { anchors: ['hipRight'], ref: 'left', width: (a) => a.hipWidth * 0.55 },
+  top: { anchors: ['neck'], ref: 'top', width: (a) => a.shoulderWidth * 1.15, span: torsoSpan },
+  outerwear: { anchors: ['neck'], ref: 'top', width: (a) => a.shoulderWidth * 1.3, span: torsoSpan },
+  dress: {
+    anchors: ['neck'], ref: 'top', width: (a) => Math.max(a.shoulderWidth, a.hipWidth) * 1.15,
+    span: (a) => ({ w: a.shoulderWidth + a.bustWidth + a.waistWidth + a.hipWidth, h: a.knee.y - a.neck.y }),
+  },
+  bottom: {
+    anchors: ['waist', 'hip'], ref: 'top', width: (a) => a.hipWidth * 1.1,
+    span: (a) => ({ w: a.waistWidth + a.hipWidth, h: a.ankle.y - a.waist.y }),
+  },
+  shoes: {
+    anchors: ['footBottom'], ref: 'bottom', width: (a) => a.feetWidth * 1.1,
+    span: (a) => ({ w: a.feetWidth, h: a.footBottom.y - a.ankle.y }),
+  },
+  side: { anchors: ['hipRight'], ref: 'left', width: (a) => a.hipWidth * 0.55, span: figureSpan },
 };
 
 /* ---------------- Hinh hoc ---------------- */
@@ -212,6 +246,94 @@ export function reflowPlacement(
     offset: newOffset,
   };
 }
+
+// ===== NEW: Ghi nho fit =====
+/** Rule cua nhom do neu anchor hop le voi nhom (nguoc lai null). */
+function ruleFor(category: string, anchorRef: string | null | undefined): GroupRule | null {
+  const group = groupOf(category);
+  const rule = group ? GROUP_RULES[group] : null;
+  return rule && anchorRef && rule.anchors.includes(anchorRef as AnchorPointName) ? rule : null;
+}
+
+const ratio = (to: number, from: number) => (from > 0 ? to / from : 1);
+
+/**
+ * Doi so do (chieu cao, can nang, 3 vong...) trong khi thu do: item dang bam anchor dat lai theo
+ * anchor moi va co gian NGANG / DOC rieng theo vung co the no phu (GroupRule.span) -> tang can thi
+ * ao / quan no ra theo nguc-eo-hong ma khong dai ra; chieu cao doi thi dai / ngan theo.
+ * Item tu do (anchorRef null) giu nguyen.
+ */
+export function refitPlacement(
+  category: string,
+  box: ItemBox,
+  anchorRef: string | null | undefined,
+  offset: Point | undefined,
+  from: MannequinAnchors,
+  to: MannequinAnchors
+): Placement {
+  const rule = ruleFor(category, anchorRef);
+  if (!rule) return { box, anchorRef: null, offset: offset ?? ZERO };
+
+  const name = anchorRef as AnchorPointName;
+  const a = rule.span(from);
+  const b = rule.span(to);
+  const kx = ratio(b.w, a.w);
+  const ky = ratio(b.h, a.h);
+  const off = offset ?? ZERO;
+  const newOffset = { x: round2(off.x * kx), y: round2(off.y * ky) };
+  const target = { x: to[name].x + newOffset.x, y: to[name].y + newOffset.y };
+
+  return {
+    box: boxFromRef(target, rule.ref, box.width * kx, box.height * ky),
+    anchorRef: name,
+    offset: newOffset,
+  };
+}
+
+const round4 = (v: number) => Math.round(v * 10000) / 10000;
+
+/**
+ * Vi tri + co hien tai cua item -> fit luu vao mon do (ti le theo span cua co the dang ve,
+ * nen dung lai duoc cho moi so do). null = item khong bam anchor nao (dat tu do).
+ */
+export function fitFromBox(
+  category: Category,
+  box: ItemBox,
+  anchorRef: string | null | undefined,
+  anchors: MannequinAnchors
+): ItemFit | null {
+  const rule = ruleFor(category, anchorRef);
+  if (!rule) return null;
+  const s = rule.span(anchors);
+  if (s.w <= 0 || s.h <= 0) return null;
+  const a = anchors[anchorRef as AnchorPointName];
+  const p = refPoint(box, rule.ref);
+  return {
+    category,
+    anchorRef: anchorRef as AnchorPointName,
+    offsetX: round4((p.x - a.x) / s.w),
+    offsetY: round4((p.y - a.y) / s.h),
+    width: round4(box.width / s.w),
+    height: round4(box.height / s.h),
+  };
+}
+
+/** Fit da luu -> vi tri tren co the dang ve. null = fit khong con hop (vd da doi danh muc). */
+export function placeFromFit(fit: ItemFit, category: string, anchors: MannequinAnchors): Placement | null {
+  if (fit.category !== category) return null;
+  const rule = ruleFor(category, fit.anchorRef);
+  if (!rule) return null;
+  const s = rule.span(anchors);
+  const name = fit.anchorRef as AnchorPointName;
+  const offset = { x: round2(fit.offsetX * s.w), y: round2(fit.offsetY * s.h) };
+  const target = { x: anchors[name].x + offset.x, y: anchors[name].y + offset.y };
+  return {
+    box: boxFromRef(target, rule.ref, fit.width * s.w, fit.height * s.h),
+    anchorRef: name,
+    offset,
+  };
+}
+// ===== END NEW =====
 
 /**
  * Dua 1 mon do cua outfit luu theo hinh the he cu (legacyMannequin.ts) sang hinh hien tai:

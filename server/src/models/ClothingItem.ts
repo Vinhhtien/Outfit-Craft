@@ -4,6 +4,24 @@ import {
   Category, Style, Season, Occasion,
 } from '../types/index.js';
 
+// ===== NEW: Ghi nho fit =====
+/**
+ * Vi tri + co user da can tren nguoi mau (lan dau thu do). Luu dang ti le theo co the
+ * (xem client/src/lib/outfitPlacement.ts - fitFromBox) nen dung lai duoc cho moi so do.
+ */
+export interface IItemFit {
+  /** Danh muc luc can - doi danh muc thi bo qua fit cu. */
+  category: Category;
+  anchorRef: string;
+  /** Do lech diem tham chieu so voi anchor / be rong, chieu cao chuan cua nhom do. */
+  offsetX: number;
+  offsetY: number;
+  /** Be rong, chieu cao mon do / be rong, chieu cao chuan cua nhom do. */
+  width: number;
+  height: number;
+}
+// ===== END NEW =====
+
 export interface IClothingItem extends Document {
   _id: Types.ObjectId;
   owner: Types.ObjectId;
@@ -31,6 +49,7 @@ export interface IClothingItem extends Document {
   wearCount: number;
   lastWornAt?: Date;
   isArchived: boolean;
+  fit?: IItemFit | null; // NEW: Ghi nho fit
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +82,22 @@ const clothingItemSchema = new Schema<IClothingItem>(
     wearCount: { type: Number, default: 0 },
     lastWornAt: { type: Date },
     isArchived: { type: Boolean, default: false },
+    // ===== NEW: Ghi nho fit =====
+    fit: {
+      type: new Schema<IItemFit>(
+        {
+          category: { type: String, enum: CATEGORIES, required: true },
+          anchorRef: { type: String, required: true },
+          offsetX: { type: Number, required: true },
+          offsetY: { type: Number, required: true },
+          width: { type: Number, required: true },
+          height: { type: Number, required: true },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
+    // ===== END NEW =====
   },
   { timestamps: true }
 );

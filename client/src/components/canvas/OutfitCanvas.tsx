@@ -11,11 +11,13 @@ import {
   snapWhileMoving, updateAttachment, upgradeLegacyLayout, addItemAtPlacement,
   type ItemObject, type PresetPlacement,
   // ===== END NEW =====
+  itemFitOf, // NEW: Ghi nho fit
 } from '@/lib/fabricCanvas';
 // ===== NEW: Body Profile =====
 import { buildMannequin, type MannequinAnchors } from '@/lib/mannequin';
 // ===== END NEW =====
-import type { ClothingItem, MannequinProfile, OutfitItem } from '@/types';
+import { placeFromFit } from '@/lib/outfitPlacement'; // NEW: Ghi nho fit
+import type { ClothingItem, ItemFit, MannequinProfile, OutfitItem } from '@/types';
 
 /** API mà trang Studio dùng để điều khiển canvas. */
 export interface OutfitCanvasHandle {
@@ -49,6 +51,13 @@ export interface OutfitCanvasHandle {
   removeSelected: () => void;
   flipSelected: () => void;
   autoArrange: () => void;
+  // ===== NEW: Ghi nho fit =====
+  /**
+   * Vị trí + cỡ của món đang chọn (đúng 1 món) để ghi nhớ vào món đồ.
+   * null = không chọn đúng 1 món; fit null = món đang đặt tự do, không bám cơ thể.
+   */
+  getSelectedFit: () => { itemId: string; fit: ItemFit | null } | null;
+  // ===== END NEW =====
 }
 
 const sameProfile = (a: MannequinProfile, b: MannequinProfile) =>
@@ -70,9 +79,16 @@ export const OutfitCanvas = forwardRef<
     /** Gọi 1 lần khi Fabric đã sẵn sàng (có thể loadJSON). */
     onReady?: () => void;
     // ===== END NEW =====
+    // ===== NEW: Ghi nho fit =====
+    /**
+     * Món chưa có fit vừa được thêm và user kéo / chỉnh cỡ cho vừa người mẫu -> vị trí + cỡ
+     * mới (gọi sau mỗi lần chỉnh; Studio tự gom lại trước khi lưu).
+     */
+    onItemFit?: (itemId: string, fit: ItemFit) => void;
+    // ===== END NEW =====
   }
 >(function OutfitCanvas(
-  { onSelectionChange, onDirty, scale = 1, mannequin, showMannequin = true, autoSnap = true, onReady },
+  { onSelectionChange, onDirty, scale = 1, mannequin, showMannequin = true, autoSnap = true, onReady, onItemFit },
   ref
 ) {
   const elRef = useRef<HTMLCanvasElement>(null);
@@ -97,6 +113,13 @@ export const OutfitCanvas = forwardRef<
 
   useEffect(() => { autoSnapRef.current = autoSnap; }, [autoSnap]);
   useEffect(() => { scaleRef.current = scale; }, [scale]);
+  // ===== END NEW =====
+
+  // ===== NEW: Ghi nho fit =====
+  /** Object cua mon chua co fit (lan dau thu): moi lan user chinh -> bao fit moi de ghi nho. */
+  const calibratingRef = useRef(new WeakSet<ItemObject>());
+  const onItemFitRef = useRef(onItemFit);
+  useEffect(() => { onItemFitRef.current = onItemFit; }, [onItemFit]);
   // ===== END NEW =====
 
   useEffect(() => {
@@ -144,6 +167,12 @@ export const OutfitCanvas = forwardRef<
         if (action !== 'drag' || !(target as ItemObject).itemData) {
           const targets = (target as ItemObject).itemData ? [target] : (canvas?.getActiveObjects() ?? []);
           targets.forEach((o) => updateAttachment(o as ItemObject, anchorsRef.current, scaleRef.current));
+        }
+        // NEW: Ghi nho fit - chi 1 mon (trong nhom thi box la toa do tuong doi, khong dung duoc).
+        const obj = target as ItemObject;
+        if (obj.itemData && calibratingRef.current.has(obj)) {
+          const fit = itemFitOf(obj, anchorsRef.current);
+          if (fit) onItemFitRef.current?.(obj.itemData.itemId, fit);
         }
         onDirty?.();
       });
@@ -215,7 +244,11 @@ export const OutfitCanvas = forwardRef<
     (): OutfitCanvasHandle => ({
       addItem: async (item) => {
         if (!canvasRef.current) return;
-        await addItemToCanvas(canvasRef.current, item, anchorsRef.current);
+        const obj = await addItemToCanvas(canvasRef.current, item, anchorsRef.current);
+        // NEW: Ghi nho fit - chua co fit dung duoc -> lan dau thu, theo doi de ghi nho khi user can.
+        if (!item.fit || !placeFromFit(item.fit, item.category, anchorsRef.current)) {
+          calibratingRef.current.add(obj);
+        }
         onDirty?.();
       },
       addPlacedItems: async (list) => {
@@ -287,6 +320,13 @@ export const OutfitCanvas = forwardRef<
       autoArrange: () => {
         if (canvasRef.current) { applyCategoryOrder(canvasRef.current); onDirty?.(); }
       },
+      // ===== NEW: Ghi nho fit =====
+      getSelectedFit: () => {
+        const obj = canvasRef.current?.getActiveObject() as ItemObject | undefined;
+        if (!obj?.itemData?.itemId) return null;
+        return { itemId: obj.itemData.itemId, fit: itemFitOf(obj, anchorsRef.current) };
+      },
+      // ===== END NEW =====
     }),
     [onSelectionChange, onDirty]
   );

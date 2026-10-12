@@ -5,15 +5,16 @@
  */
 
 import type { Canvas, FabricObject, FabricImage } from 'fabric';
-import type { ClothingItem, MannequinProfile, Outfit, OutfitItem } from '@/types';
+import type { Category, ClothingItem, ItemFit, MannequinProfile, Outfit, OutfitItem } from '@/types';
 import { CATEGORY_Z_INDEX } from '@/types';
 // ===== NEW: Body Profile =====
 import { buildMannequin, type MannequinAnchors, type Point } from './mannequin';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, CANVAS_SCALE, CANVAS_OFFSET_X,
   SNAP_DISTANCE_PX, DETACH_DISTANCE_PX,
-  autoPlace, findSnap, reflowPlacement, upgradeLegacyPlacement, canvasToLogic, logicToCanvas,
+  autoPlace, findSnap, upgradeLegacyPlacement, canvasToLogic, logicToCanvas,
   GROUP_RULES, boxFromRef, groupOf, refPoint,
+  refitPlacement, fitFromBox, placeFromFit, // NEW: Ghi nho fit
   type ItemBox, type Placement,
 } from './outfitPlacement';
 import { LEGACY_BODY_H, legacyMannequinAnchors } from './legacyMannequin';
@@ -125,13 +126,17 @@ export function getItemBox(obj: FabricObject): ItemBox {
   };
 }
 
-/** Dat item theo placement; resize=true thi scale theo box.width (giu ti le scaleY/scaleX). */
+/**
+ * Dat item theo placement; resize=true thi scale theo box.width / box.height
+ * (NEW: Ghi nho fit - ngang / doc doc lap de do no ra theo can nang ma khong dai ra).
+ */
 function applyPlacement(obj: ItemObject, placement: Placement, resize: boolean): void {
   const { box, anchorRef, offset } = placement;
-  if (resize && obj.width) {
-    const ratio = (obj.scaleY ?? 1) / (obj.scaleX ?? 1);
-    const scaleX = (box.width * CANVAS_SCALE) / obj.width;
-    obj.set({ scaleX, scaleY: scaleX * ratio });
+  if (resize && obj.width && obj.height) {
+    obj.set({
+      scaleX: (box.width * CANVAS_SCALE) / obj.width,
+      scaleY: (box.height * CANVAS_SCALE) / obj.height,
+    });
   }
   const c = logicToCanvas({ x: box.cx, y: box.cy });
   obj.set({ originX: 'center', originY: 'center', left: c.x, top: c.y });
@@ -209,7 +214,10 @@ export function upgradeLegacyLayout(canvas: Canvas, legacyProfile: MannequinProf
   canvas.requestRenderAll();
 }
 
-/** Doi dang: item dang bam anchor duoc dat lai, item tu do giu nguyen. */
+/**
+ * Doi dang / so do: item dang bam anchor duoc dat lai, item tu do giu nguyen.
+ * NEW: Ghi nho fit - co gian ngang / doc rieng (refitPlacement) de doi can nang van vua nguoi.
+ */
 export function reflowItems(canvas: Canvas, from: MannequinAnchors, to: MannequinAnchors): number {
   // Object trong ActiveSelection dung toa do tuong doi voi nhom -> bo chon de tra ve toa do canvas.
   canvas.discardActiveObject();
@@ -217,12 +225,21 @@ export function reflowItems(canvas: Canvas, from: MannequinAnchors, to: Mannequi
   for (const obj of getItemObjects(canvas)) {
     const { category, anchorRef, offset } = obj.itemData!;
     if (!anchorRef) continue;
-    applyPlacement(obj, reflowPlacement(category, getItemBox(obj), anchorRef, offset, from, to), true);
+    applyPlacement(obj, refitPlacement(category, getItemBox(obj), anchorRef, offset, from, to), true);
     moved++;
   }
   canvas.requestRenderAll();
   return moved;
 }
+
+// ===== NEW: Ghi nho fit =====
+/** Vi tri + co hien tai cua item de luu vao mon do; null = dang dat tu do (khong bam co the). */
+export function itemFitOf(obj: ItemObject, anchors: MannequinAnchors): ItemFit | null {
+  if (!obj.itemData) return null;
+  const { category, anchorRef } = obj.itemData;
+  return fitFromBox(category as Category, getItemBox(obj), anchorRef, anchors);
+}
+// ===== END NEW =====
 
 const zOf = (o: FabricObject) =>
   isMannequinObject(o)
@@ -232,8 +249,9 @@ const zOf = (o: FabricObject) =>
 
 /**
  * Them 1 mon do len canvas.
- * Tu dat dung vi tri + be rong tren mannequin theo danh muc (giu ti le anh goc),
- * va chen vao dung lop theo danh muc ma khong xao tron lop user da sap tay.
+ * Mon da co fit (user tung can cho vua) -> dat dung vi tri + co do tren co the dang ve;
+ * chua co -> tu dat theo danh muc (giu ti le anh goc).
+ * Chen vao dung lop theo danh muc ma khong xao tron lop user da sap tay.
  */
 export async function addItemToCanvas(
   canvas: Canvas,
@@ -250,7 +268,9 @@ export async function addItemToCanvas(
   img.itemData = { itemId: item._id, category: item.category, anchorRef: null, offset: ZERO };
 
   const aspect = (img.height || 1) / (img.width || 1);
-  applyPlacement(img, autoPlace(item.category, aspect, anchors), true);
+  // NEW: Ghi nho fit
+  const fitted = item.fit ? placeFromFit(item.fit, item.category, anchors) : null;
+  applyPlacement(img, fitted ?? autoPlace(item.category, aspect, anchors), true);
 
   // Chen ngay tren object cao nhat co z <= z cua item moi.
   const z = zOf(img);

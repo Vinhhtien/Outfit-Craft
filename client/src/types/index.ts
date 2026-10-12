@@ -111,6 +111,24 @@ export interface User {
   defaultCity: string;
 }
 
+// ===== NEW: Ghi nho fit =====
+/**
+ * Vị trí + cỡ user đã căn trên người mẫu, lưu dạng tỉ lệ theo cơ thể (xem fitFromBox trong
+ * lib/outfitPlacement.ts) -> lần sau thêm món này tự đặt đúng, với mọi số đo.
+ */
+export interface ItemFit {
+  /** Danh mục lúc căn - đổi danh mục thì bỏ qua fit cũ. */
+  category: Category;
+  anchorRef: string;
+  /** Độ lệch điểm tham chiếu so với anchor / bề rộng, chiều cao chuẩn của nhóm đồ. */
+  offsetX: number;
+  offsetY: number;
+  /** Bề rộng, chiều cao món đồ / bề rộng, chiều cao chuẩn của nhóm đồ. */
+  width: number;
+  height: number;
+}
+// ===== END NEW =====
+
 export interface ClothingItem {
   _id: string;
   owner: string;
@@ -129,6 +147,7 @@ export interface ClothingItem {
   wearCount: number;
   lastWornAt?: string;
   isArchived: boolean;
+  fit?: ItemFit | null; // NEW: Ghi nho fit
   createdAt: string;
   updatedAt: string;
 }
