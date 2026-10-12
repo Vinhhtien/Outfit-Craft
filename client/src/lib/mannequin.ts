@@ -1,20 +1,28 @@
 /**
- * Sinh bong nguoi (mannequin) tu dang nguoi - pure function, khong phu thuoc Fabric/DOM,
+ * Sinh bong nguoi (mannequin) tu dang nguoi + so do - pure function, khong phu thuoc Fabric/DOM,
  * dung chung cho canvas Studio va preview SVG o trang Ho so.
  *
  * He toa do logic co dinh: viewBox 400 x 800, y tang tu tren xuong, truc doi xung x = 200.
- * Toan bo co the (dinh dau -> day ban chan) chiem dai y [MARGIN_Y, 800 - MARGIN_Y].
+ * Ban chan luon cham san y = FLOOR_Y; co the cao heightCm * UNITS_PER_CM (nguoi cao hon chiem
+ * nhieu chieu doc hon). Nguoi cao nhat hop le (REFERENCE_HEIGHT_CM) vua khit khung.
  * "Left/Right" la ben trai/phai theo goc nhin nguoi xem (x nho = trai).
  */
 
-import type { BodyGender, BodyMeasurements, BodyShape, MannequinProfile } from '@/types';
+import type { BodyMeasurementKey, BodyMeasurements, BodyShape, MannequinProfile } from '@/types';
+import { BODY_MEASUREMENT_RANGES } from '@/types';
+import { fillMeasurements, shapePresetMeasurements, type FullMeasurements } from './bodyPresets';
 
 export const MANNEQUIN_WIDTH = 400;
 export const MANNEQUIN_HEIGHT = 800;
 export const MANNEQUIN_CENTER_X = MANNEQUIN_WIDTH / 2;
 export const MANNEQUIN_MARGIN_Y = 20;
-/** Chieu cao co the trong he logic. */
-const BODY_H = MANNEQUIN_HEIGHT - MANNEQUIN_MARGIN_Y * 2;
+/** Mat san (day ban chan) trong he logic. */
+export const FLOOR_Y = MANNEQUIN_HEIGHT - MANNEQUIN_MARGIN_Y;
+
+/** Chieu cao (cm) vua khit khung = chieu cao lon nhat hop le, nen moi ho so deu vua khung. */
+export const REFERENCE_HEIGHT_CM = BODY_MEASUREMENT_RANGES.heightCm.max;
+/** Don vi logic tren 1 cm - co dinh, khong phu thuoc chieu cao. */
+export const UNITS_PER_CM = (MANNEQUIN_HEIGHT - MANNEQUIN_MARGIN_Y * 2) / REFERENCE_HEIGHT_CM;
 
 export const DEFAULT_MANNEQUIN: MannequinProfile = { gender: 'neutral', shape: 'rectangle' };
 
@@ -56,11 +64,17 @@ export interface Mannequin {
   pathD: string;
   viewBox: string;
   anchors: MannequinAnchors;
+  /** Chieu cao co the trong he logic (dinh dau -> day ban chan). */
+  figureHeight: number;
 }
 
 /* ---------------- Ti le ---------------- */
 
-/** Vi tri doc, tinh theo phan cua BODY_H tinh tu dinh dau. */
+/**
+ * Vi tri doc, tinh theo phan cua chieu cao co the tu dinh dau, o ti le chan mac dinh
+ * (dai chan trong = 0,45 chieu cao). Doan than (vai -> hang) va doan chan (hang -> mat ca)
+ * co gian theo dai chan trong - xem levels().
+ */
 const Y = {
   headBottom: 0.13,
   neckTop: 0.118,
@@ -68,6 +82,7 @@ const Y = {
   shoulder: 0.18,
   armpit: 0.235,
   bust: 0.275,
+  elbow: 0.375,
   waist: 0.385,
   hip: 0.49,
   wrist: 0.495,
@@ -77,36 +92,12 @@ const Y = {
   ankle: 0.955,
 } as const;
 
-interface TorsoWidths {
-  shoulder: number;
-  bust: number;
-  waist: number;
-  hip: number;
-}
-
-/**
- * Be rong (phan cua BODY_H) cho tung dang, gioi tinh neutral.
- * Duoc chon de nhin ra dang ro rang, va thoa thu tu tuong doi trong test:
- * rectangle vai ~ hong, eo hoi nho | pear hong >> vai | apple eo >= nguc, vai & hong < eo
- * hourglass vai ~ hong, eo <= 0.75 min | inverted_triangle vai >> hong.
- */
-export const SHAPE_PRESETS: Record<BodyShape, TorsoWidths> = {
-  rectangle: { shoulder: 0.215, bust: 0.2, waist: 0.18, hip: 0.215 },
-  pear: { shoulder: 0.2, bust: 0.19, waist: 0.165, hip: 0.25 },
-  apple: { shoulder: 0.205, bust: 0.215, waist: 0.225, hip: 0.205 },
-  hourglass: { shoulder: 0.22, bust: 0.215, waist: 0.15, hip: 0.22 },
-  inverted_triangle: { shoulder: 0.255, bust: 0.225, waist: 0.18, hip: 0.195 },
-};
-
-/** Gioi tinh chi chinh nhe; neutral nam giua. */
-const GENDER_FACTORS: Record<BodyGender, TorsoWidths> = {
-  female: { shoulder: 0.96, bust: 1.03, waist: 1, hip: 1.04 },
-  male: { shoulder: 1.05, bust: 0.98, waist: 1.03, hip: 0.96 },
-  neutral: { shoulder: 1, bust: 1, waist: 1, hip: 1 },
-};
-
-/** Chieu cao dung de quy doi cm khi co so do nhung thieu heightCm. */
-const DEFAULT_HEIGHT_CM: Record<BodyGender, number> = { female: 160, male: 172, neutral: 166 };
+/** Dai chan trong / chieu cao duoc ve (ngoai khoang nay hinh se qua di). */
+export const INSEAM_RATIO_RANGE = { min: 0.38, max: 0.52 } as const;
+/** Ti le dai chan trong ung voi bang Y o tren. */
+const BASE_INSEAM_RATIO = 0.45;
+/** Hang cach san = dai chan trong + phan nay (~2,5% chieu cao, giua diem do va day hang ve). */
+const LEG_CROTCH_EXTRA = 1 - Y.crotch - BASE_INSEAM_RATIO;
 
 /**
  * Vong (chu vi) -> be rong nhin chinh dien. Coi mat cat than la ellipse rong/sau ~1.4:
@@ -114,39 +105,95 @@ const DEFAULT_HEIGHT_CM: Record<BodyGender, number> = { female: 160, male: 172, 
  */
 export const CIRCUMFERENCE_TO_WIDTH = 0.37;
 
-const MIN_TORSO = 0.08 * BODY_H;
-const MAX_TORSO = 0.42 * BODY_H;
+/** Be rong than (vai/nguc/eo/hong) bi kep trong [8%, 42%] chieu cao co the. */
+export const TORSO_WIDTH_RATIO = { min: 0.08, max: 0.42 } as const;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 /** Lam tron 0.1 de pathD gon va doi xung tuyet doi. */
 const r = (v: number) => Math.round(v * 10) / 10;
 
-function torsoWidths(profile: MannequinProfile): TorsoWidths {
-  const preset = SHAPE_PRESETS[profile.shape] ?? SHAPE_PRESETS.rectangle;
-  const g = GENDER_FACTORS[profile.gender] ?? GENDER_FACTORS.neutral;
-  const widths: TorsoWidths = {
-    shoulder: preset.shoulder * g.shoulder * BODY_H,
-    bust: preset.bust * g.bust * BODY_H,
-    waist: preset.waist * g.waist * BODY_H,
-    hip: preset.hip * g.hip * BODY_H,
-  };
-
-  const m = profile.measurements;
-  if (m) {
-    const heightCm = m.heightCm ?? DEFAULT_HEIGHT_CM[profile.gender] ?? DEFAULT_HEIGHT_CM.neutral;
-    const unitsPerCm = BODY_H / heightCm;
-    // shoulderCm la be ngang vai (khoang 25-70) -> dung truc tiep; con lai la vong -> quy ra be rong.
-    if (m.shoulderCm) widths.shoulder = m.shoulderCm * unitsPerCm;
-    if (m.bustCm) widths.bust = m.bustCm * CIRCUMFERENCE_TO_WIDTH * unitsPerCm;
-    if (m.waistCm) widths.waist = m.waistCm * CIRCUMFERENCE_TO_WIDTH * unitsPerCm;
-    if (m.hipCm) widths.hip = m.hipCm * CIRCUMFERENCE_TO_WIDTH * unitsPerCm;
+/**
+ * Khoang so do (cm) THUC SU lam hinh thay doi o chieu cao heightCm: ngoai khoang nay
+ * hinh bi kep nen slider se co doan "chet". null = so do khong bi kep (chieu cao, can nang).
+ */
+export function visualRange(
+  key: BodyMeasurementKey | 'weightKg',
+  heightCm: number
+): { min: number; max: number } | null {
+  switch (key) {
+    case 'shoulderCm':
+      return { min: TORSO_WIDTH_RATIO.min * heightCm, max: TORSO_WIDTH_RATIO.max * heightCm };
+    case 'bustCm':
+    case 'waistCm':
+    case 'hipCm':
+      return {
+        min: (TORSO_WIDTH_RATIO.min * heightCm) / CIRCUMFERENCE_TO_WIDTH,
+        max: (TORSO_WIDTH_RATIO.max * heightCm) / CIRCUMFERENCE_TO_WIDTH,
+      };
+    case 'inseamCm':
+      return { min: INSEAM_RATIO_RANGE.min * heightCm, max: INSEAM_RATIO_RANGE.max * heightCm };
+    default:
+      return null;
   }
+}
 
+/** Day du so do (cm) se duoc ve: so do da co giu nguyen, thieu thi lay preset cua dang. */
+export function resolveMeasurements(profile: MannequinProfile): FullMeasurements {
+  const m = fillMeasurements(profile.gender, profile.shape, profile.measurements);
+  const { min, max } = BODY_MEASUREMENT_RANGES.heightCm;
+  return { ...m, heightCm: clamp(m.heightCm, min, max) };
+}
+
+/** Khoang kep cua he so do day tay / chan / co. */
+export const LIMB_FACTOR_RANGE = { min: 0.8, max: 1.35 } as const;
+const LIMB_FACTOR_EXPONENT = 0.75;
+
+/**
+ * Do day tay / chan / co so voi nguoi dang chu nhat cung gioi tinh, cung chieu cao:
+ * (trung binh 3 vong / trung binh 3 vong cua preset chu nhat) ^ 0.75, kep [0.8, 1.35].
+ * Suy tu so do vong (khong dung can nang) nen snapshot luu cung outfit van ve lai dung.
+ */
+export function limbFactor(m: FullMeasurements, gender: MannequinProfile['gender']): number {
+  const avg = (x: { bustCm: number; waistCm: number; hipCm: number }) => (x.bustCm + x.waistCm + x.hipCm) / 3;
+  const ref = avg(shapePresetMeasurements('rectangle', gender, m.heightCm));
+  return clamp((avg(m) / ref) ** LIMB_FACTOR_EXPONENT, LIMB_FACTOR_RANGE.min, LIMB_FACTOR_RANGE.max);
+}
+
+interface TorsoWidths {
+  shoulder: number;
+  bust: number;
+  waist: number;
+  hip: number;
+}
+
+function torsoWidths(m: FullMeasurements, figureH: number): TorsoWidths {
+  const lo = TORSO_WIDTH_RATIO.min * figureH;
+  const hi = TORSO_WIDTH_RATIO.max * figureH;
+  const w = (cm: number) => clamp(cm * UNITS_PER_CM, lo, hi);
   return {
-    shoulder: clamp(widths.shoulder, MIN_TORSO, MAX_TORSO),
-    bust: clamp(widths.bust, MIN_TORSO, MAX_TORSO),
-    waist: clamp(widths.waist, MIN_TORSO, MAX_TORSO),
-    hip: clamp(widths.hip, MIN_TORSO, MAX_TORSO),
+    // shoulderCm la be ngang vai -> dung truc tiep; con lai la vong -> quy ra be rong.
+    shoulder: w(m.shoulderCm),
+    bust: w(m.bustCm * CIRCUMFERENCE_TO_WIDTH),
+    waist: w(m.waistCm * CIRCUMFERENCE_TO_WIDTH),
+    hip: w(m.hipCm * CIRCUMFERENCE_TO_WIDTH),
+  };
+}
+
+/** Muc doc (phan chieu cao tu dinh dau) theo dai chan trong. */
+function levels(m: FullMeasurements) {
+  const legRatio = clamp(m.inseamCm / m.heightCm, INSEAM_RATIO_RANGE.min, INSEAM_RATIO_RANGE.max);
+  const crotch = 1 - legRatio - LEG_CROTCH_EXTRA;
+  // Diem trong doan than / doan chan giu nguyen vi tri tuong doi nhu o ti le mac dinh.
+  const torso = (f: number) => Y.shoulder + ((f - Y.shoulder) / (Y.crotch - Y.shoulder)) * (crotch - Y.shoulder);
+  const leg = (f: number) => crotch + ((f - Y.crotch) / (Y.ankle - Y.crotch)) * (Y.ankle - crotch);
+  return {
+    ...Y,
+    armpit: torso(Y.armpit),
+    bust: torso(Y.bust),
+    waist: torso(Y.waist),
+    hip: torso(Y.hip),
+    crotch,
+    knee: leg(Y.knee),
   };
 }
 
@@ -205,31 +252,36 @@ function ellipseD(cx: number, cy: number, rx: number, ry: number): string {
 }
 
 /**
- * Tao mannequin tu dang nguoi.
- * Thieu profile / thieu measurements -> dung preset theo shape + gender.
+ * Tao mannequin tu dang nguoi + so do.
+ * Thieu profile / thieu so do nao -> dien tu preset cua dang + gioi tinh (bodyPresets.ts).
  */
 export function buildMannequin(profile: MannequinProfile = DEFAULT_MANNEQUIN): Mannequin {
-  const top = MANNEQUIN_MARGIN_Y;
-  const bottom = MANNEQUIN_MARGIN_Y + BODY_H;
-  const yAt = (f: number) => top + f * BODY_H;
-  const H = BODY_H;
+  const m = resolveMeasurements(profile);
+  const H = m.heightCm * UNITS_PER_CM;
+  const bottom = FLOOR_Y;
+  const top = bottom - H;
+  const yAt = (f: number) => top + f * H;
+  const Y = levels(m);
 
-  const w = torsoWidths(profile);
+  const w = torsoWidths(m, H);
   const sh = w.shoulder / 2;
   const bu = w.bust / 2;
   const wa = w.waist / 2;
   const hi = w.hip / 2;
 
-  // Kich thuoc phu (khong phu thuoc dang).
+  // Kich thuoc phu: co / tay / chan day theo limbFactor (co tay, co chan it hon vi la xuong);
+  // dau, ban tay, ban chan khong doi.
+  const F = limbFactor(m, profile.gender);
+  const Fb = Math.sqrt(F);
   const headRx = r(0.046 * H);
   const headRy = r(((Y.headBottom - 0) * H) / 2);
-  const neckHalf = 0.03 * H;
-  const armTop = 0.052 * H;
-  const elbowW = 0.04 * H;
-  const wristW = 0.03 * H;
+  const neckHalf = 0.03 * H * F;
+  const armTop = 0.052 * H * F;
+  const elbowW = 0.04 * H * F;
+  const wristW = 0.03 * H * Fb;
   const handW = 0.04 * H;
-  const kneeW = 0.062 * H;
-  const ankleW = 0.034 * H;
+  const kneeW = 0.062 * H * F;
+  const ankleW = 0.034 * H * Fb;
   const footW = 0.05 * H;
   const footRise = 0.012 * H;
 
@@ -293,7 +345,7 @@ export function buildMannequin(profile: MannequinProfile = DEFAULT_MANNEQUIN): M
   const wristC = Math.max(sh, wa, hi) + wristW / 2 + 0.008 * H;
   const elbowC = Math.max(sh - armTop * 0.3, wa + elbowW / 2 + 0.004 * H);
   const yWrist = yAt(Y.wrist);
-  const yElbow = yWaist - 0.01 * H;
+  const yElbow = yAt(Y.elbow);
   const yHand = yAt(Y.handBottom);
 
   const P = hp(sh - armTop * 0.85, yAt(Y.armpit));
@@ -327,6 +379,7 @@ export function buildMannequin(profile: MannequinProfile = DEFAULT_MANNEQUIN): M
   return {
     pathD: [headD, bodyD, armD(1), armD(-1)].join(' '),
     viewBox: `0 0 ${MANNEQUIN_WIDTH} ${MANNEQUIN_HEIGHT}`,
+    figureHeight: H,
     anchors: {
       headTop: at(0, top),
       neck: at(0, yNeck),

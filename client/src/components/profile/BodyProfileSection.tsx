@@ -2,37 +2,18 @@
 
 // ===== NEW: Body Profile =====
 // Phan "Dang nguoi" trong trang Ho so.
-// NEW: Body 3D - thay bong nguoi SVG bang nguoi mau 3D + bang chinh thong so (BodyControlsPanel):
-// gioi tinh, don vi, mau, so do bang thanh truot, BMI, dang mau (preset) va goi y dang.
-// Khong co WebGL -> van dung bong nguoi SVG cu (MannequinPreview).
+// Bang chinh thong so (BodyControlsPanel) + bong nguoi SVG xem truoc (MannequinPreview).
 import { useEffect, useMemo, useState } from 'react';
-import dynamic from 'next/dynamic';
 import { Lock, Trash2 } from 'lucide-react';
 import { bodyProfileApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import { MannequinPreview } from '@/components/profile/MannequinPreview';
 import { VButton, VModal, VSpinner } from '@/components/ui/vintage';
-import { BodyControlsPanel } from '@/components/body3d/BodyControlsPanel';
+import { BodyControlsPanel } from '@/components/body/BodyControlsPanel';
 import {
   bodyStateFromProfile, bodyStateToMannequin, bodyStateToProfile, type BodyState,
 } from '@/lib/bodyMetrics';
-import { webglAvailable } from '@/lib/webgl';
 import type { BodyProfile } from '@/types';
-
-const BodyPreview3D = dynamic(
-  () => import('@/components/body3d/BodyPreview3D').then((m) => m.BodyPreview3D),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="grid h-full place-items-center rounded-2xl bg-[#22262c]">
-        <VSpinner />
-      </div>
-    ),
-  }
-);
-
-/** Trang Ho so: BMI mac dinh hien. */
-const PROFILE_DEFAULTS = { showBmi: true };
 
 export function BodyProfileSection({
   onSuccess,
@@ -43,20 +24,18 @@ export function BodyProfileSection({
 }) {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState<BodyProfile | null>(null);
-  const [body, setBody] = useState<BodyState>(() => bodyStateFromProfile(null, PROFILE_DEFAULTS));
+  const [body, setBody] = useState<BodyState>(() => bodyStateFromProfile(null));
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
-  // Chi render tren trinh duyet (ProtectedLayout) nen do WebGL ngay luc khoi tao duoc.
-  const [has3D] = useState(() => webglAvailable());
 
   useEffect(() => {
     void (async () => {
       try {
         const profile = await bodyProfileApi.get();
         setSaved(profile);
-        setBody(bodyStateFromProfile(profile, PROFILE_DEFAULTS));
+        setBody(bodyStateFromProfile(profile));
       } catch (err) {
         setError(getErrorMessage(err));
       } finally {
@@ -71,8 +50,10 @@ export function BodyProfileSection({
     setError('');
     setSaving(true);
     try {
+      // PUT gop: so do chua nhap khong gui -> du lieu khac trong ho so giu nguyen.
       const profile = await bodyProfileApi.save(bodyStateToProfile(body));
       setSaved(profile);
+      setBody(bodyStateFromProfile(profile));
       onSuccess('Đã lưu dáng người.');
     } catch (err) {
       setError(getErrorMessage(err));
@@ -86,7 +67,7 @@ export function BodyProfileSection({
     try {
       await bodyProfileApi.remove();
       setSaved(null);
-      setBody(bodyStateFromProfile(null, PROFILE_DEFAULTS));
+      setBody(bodyStateFromProfile(null));
       setConfirmOpen(false);
       onSuccess('Đã xóa dữ liệu dáng người.');
     } catch (err) {
@@ -119,7 +100,6 @@ export function BodyProfileSection({
               value={body}
               onChange={setBody}
               disabled={saving}
-              showShoulderField
               footer={
                 <>
                   {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
@@ -144,27 +124,19 @@ export function BodyProfileSection({
             />
           </div>
 
-          {/* Xem truoc song: 3D neu co WebGL, khong thi bong nguoi SVG */}
+          {/* Xem truoc song */}
           <div className="flex flex-col items-center gap-2 md:sticky md:top-24 md:self-start">
-            {has3D ? (
-              <div className="h-[460px] w-full max-w-sm sm:h-[540px]">
-                <BodyPreview3D body={body} />
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-[#E5E7EB] bg-white p-3">
-                <MannequinPreview profile={mannequin} className="h-72 w-36" title="Xem trước dáng người" />
-              </div>
-            )}
-            <span className="text-[11px] text-[#869BB2]">
-              {has3D ? 'Kéo để xoay, cuộn để phóng to' : 'Xem trước'}
-            </span>
+            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-3">
+              <MannequinPreview profile={mannequin} className="h-80 w-40" title="Xem trước dáng người" />
+            </div>
+            <span className="text-[11px] text-[#869BB2]">Xem trước - cập nhật ngay khi kéo thanh trượt</span>
           </div>
         </div>
       )}
 
       <VModal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Xóa dữ liệu dáng người?">
         <p className="mb-5 text-sm text-[#2C4C45]">
-          Giới tính, dáng, cân nặng, toàn bộ số đo và tùy chọn hiển thị sẽ bị xóa khỏi tài khoản. Người mẫu sẽ dùng lại dáng mặc định.
+          Giới tính, dáng, cân nặng và toàn bộ số đo sẽ bị xóa khỏi tài khoản. Người mẫu sẽ dùng lại dáng mặc định.
           Các outfit đã lưu không bị ảnh hưởng.
         </p>
         <div className="flex gap-2">

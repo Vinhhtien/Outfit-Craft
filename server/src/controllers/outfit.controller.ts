@@ -12,38 +12,12 @@ import { Like } from '../models/Like.js';
 // ===== NEW: Body Profile =====
 import { mannequinSchema } from './bodyProfile.controller.js';
 // ===== END NEW =====
-// ===== NEW: Body 3D =====
-import { bodySnapshotSchema } from './bodyProfile.controller.js';
-import { SCENE3D_MAX_ITEMS, SCENE3D_VERSION } from '../types/index.js';
-
-const vec3 = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
-
-const scene3DItemSchema = z
-  .object({
-    itemId: z.string().length(24, 'itemId khong hop le'),
-    anchor: z.string().max(32).nullable(),
-    offset: vec3,
-    scale: z.number().positive().max(100),
-    rotation: z.number().finite().default(0),
-    layer: z.number().int().default(0),
-    aspect: z.number().positive().max(20).optional(),
-    flipX: z.boolean().optional(),
-  })
-  .strict();
-
-export const scene3DSchema = z
-  .object({
-    version: z.literal(SCENE3D_VERSION),
-    bodySnapshot: bodySnapshotSchema,
-    showModel: z.boolean().default(true),
-    items: z.array(scene3DItemSchema).max(SCENE3D_MAX_ITEMS),
-    camera: z.object({ position: vec3, target: vec3 }).strict().optional(),
-  })
-  .strict();
+// ===== NEW: Legacy scene3D =====
+// Che do 3D da bo: outfit cu van con truong scene3D (chi doc) - xem models/Outfit.ts.
 
 /**
- * Ban xem cong khai cua outfit (nguoi xem khong phai chu): bo snapshot dang nguoi 2D
- * va bodySnapshot cua canh 3D (co can nang + so do). Vi tri mon do van giu.
+ * Ban xem cong khai cua outfit (nguoi xem khong phai chu): bo snapshot dang nguoi
+ * va bodySnapshot cua scene3D cu (co can nang + so do). Vi tri mon do van giu.
  */
 export function toPublicOutfitView(outfit: Record<string, unknown>): Record<string, unknown> {
   const { mannequin: _hidden, scene3D, ...rest } = outfit;
@@ -54,7 +28,7 @@ export function toPublicOutfitView(outfit: Record<string, unknown>): Record<stri
   return { ...rest, scene3D: scenePublic };
 }
 
-/** Moi itemId xuat hien trong items (2D) va scene3D.items. */
+/** Moi itemId xuat hien trong items va scene3D.items (request moi khong con scene3D - xem createOutfitSchema). */
 function outfitItemIds(body: {
   items?: { item: string }[];
   scene3D?: { items: { itemId: string }[] } | null;
@@ -95,9 +69,11 @@ export const createOutfitSchema = z.object({
   /** Snapshot dang nguoi luc phoi; null = tat mannequin. Khong gui = outfit kieu cu. */
   mannequin: mannequinSchema.nullable().optional(),
   // ===== END NEW =====
-  // ===== NEW: Body 3D =====
-  /** Canh 3D; null = bo canh 3D (luu lai o che do 2D). Khong gui = outfit 2D kieu cu. */
-  scene3D: scene3DSchema.nullable().optional(),
+  // ===== NEW: Legacy scene3D =====
+  /** Che do 3D da bo: tu choi moi gia tri (ke ca null) de khong ghi de/xoa scene3D cu. */
+  scene3D: z
+    .never({ errorMap: () => ({ message: 'Che do 3D da ngung ho tro: khong nhan truong scene3D' }) })
+    .optional(),
   // ===== END NEW =====
 });
 
@@ -118,7 +94,7 @@ export const createOutfit = asyncHandler(async (req, res) => {
   const owner = req.user!.sub;
   const { thumbnailDataUrl, ...rest } = req.body;
 
-  await assertOwnsItems(outfitItemIds(rest), owner); // NEW: Body 3D - tinh ca scene3D.items
+  await assertOwnsItems(outfitItemIds(rest), owner);
 
   let thumbnailUrl: string | undefined;
   let thumbnailPublicId: string | undefined;
@@ -173,7 +149,7 @@ export const getOutfit = asyncHandler(async (req, res) => {
   // ===== NEW: Body Profile =====
   // Snapshot mannequin la du lieu dang nguoi -> chi chu so huu duoc thay.
   if (!isOwner) {
-    // NEW: Body 3D - bo ca scene3D.bodySnapshot (can nang, so do vong).
+    // Bo ca scene3D.bodySnapshot cua outfit 3D cu (can nang, so do vong).
     return res.json({ success: true, data: toPublicOutfitView(outfit.toJSON()) });
   }
   // ===== END NEW =====
@@ -188,8 +164,7 @@ export const updateOutfit = asyncHandler(async (req, res) => {
   const outfit = await Outfit.findOne({ _id: req.params.id, owner });
   if (!outfit) throw ApiError.notFound('Khong tim thay outfit');
 
-  // NEW: Body 3D - kiem tra ca mon do trong scene3D.
-  if (rest.items || rest.scene3D) {
+  if (rest.items) {
     await assertOwnsItems(outfitItemIds(rest), owner);
   }
 

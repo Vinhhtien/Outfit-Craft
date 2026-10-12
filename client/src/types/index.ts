@@ -44,11 +44,9 @@ export const OCCASION_LABELS: Record<Occasion, string> = {
 };
 
 // ===== NEW: Body Profile =====
-// NEW: Body 3D - hang so dang nguoi nam o bodyConstants.ts (ban sao y het server).
+// Hang so dang nguoi nam o bodyConstants.ts (ban sao y het server).
 export * from './bodyConstants';
-import type {
-  BodyGender, BodyShape, BodyMeasurements, UnitPreference,
-} from './bodyConstants';
+import type { BodyGender, BodyShape, BodyMeasurements } from './bodyConstants';
 
 export const BODY_GENDER_LABELS: Record<BodyGender, string> = {
   female: 'Nữ', male: 'Nam', neutral: 'Trung tính',
@@ -70,47 +68,40 @@ export interface MannequinProfile {
 }
 
 export interface BodyProfile extends MannequinProfile {
-  // ===== NEW: Body 3D =====
-  /** Nhạy cảm: chỉ chủ sở hữu đọc được. */
+  /** Nhạy cảm: chỉ chủ sở hữu đọc được, không bao giờ gửi cho AI gợi ý. */
   weightKg?: number;
-  unitPreference?: UnitPreference;
-  modelColorHue?: number;
-  showBmi?: boolean;
-  // ===== END NEW =====
   updatedAt?: string;
 }
 // ===== END NEW =====
 
-// ===== NEW: Body 3D =====
-/** Snapshot người mẫu 3D lúc phối (chủ outfit mới thấy). */
-export interface Scene3DBodySnapshot extends MannequinProfile {
-  weightKg?: number;
-  modelColorHue?: number;
-}
-
-export type Vec3Tuple = [number, number, number];
-
-/** 1 món đồ trong cảnh 3D - xem server/src/models/Outfit.ts (IScene3DItem). */
-export interface Scene3DItem {
+/**
+ * Dữ liệu CŨ (chỉ đọc) của outfit từng phối ở chế độ 3D đã bỏ. Server không nhận dữ liệu này nữa;
+ * client chỉ dùng để dựng lại outfit trên canvas 2D. Xem server/src/models/Outfit.ts (IScene3D).
+ */
+export interface LegacyScene3DItem {
   itemId: string;
+  /** Tên anchor (trùng tên anchor 2D) hoặc null = đặt tự do. */
   anchor: string | null;
-  offset: Vec3Tuple;
+  /** Mét, trục y hướng lên. Có anchor: điểm bám - anchor; không: vị trí tuyệt đối (gốc ở giữa hai bàn chân). */
+  offset: [number, number, number];
+  /** Bề rộng món đồ / bề rộng chuẩn của nhóm đồ trên cơ thể lúc phối. */
   scale: number;
+  /** Radian, ngược chiều kim đồng hồ khi nhìn chính diện. */
   rotation: number;
+  /** Thứ tự lớp: số lớn = nằm ngoài. */
   layer: number;
+  /** Tỉ lệ cao/rộng của ảnh. */
   aspect?: number;
   flipX?: boolean;
 }
 
-export interface Scene3D {
-  version: 1;
+export interface LegacyScene3D {
+  version: number;
   /** Người khác xem outfit công khai: server bỏ trường này. */
-  bodySnapshot?: Scene3DBodySnapshot;
+  bodySnapshot?: MannequinProfile;
   showModel: boolean;
-  items: Scene3DItem[];
-  camera?: { position: Vec3Tuple; target: Vec3Tuple };
+  items: LegacyScene3DItem[];
 }
-// ===== END NEW =====
 
 export interface User {
   id: string;
@@ -173,10 +164,8 @@ export interface Outfit {
   /** Snapshot dáng lúc phối; không có = outfit cũ, null = tắt mannequin. */
   mannequin?: MannequinProfile | null;
   // ===== END NEW =====
-  // ===== NEW: Body 3D =====
-  /** Có = outfit phối ở chế độ 3D (mở lại ở 3D). */
-  scene3D?: Scene3D | null;
-  // ===== END NEW =====
+  /** Chỉ có ở outfit cũ phối ở chế độ 3D (đã bỏ) - chỉ đọc, xem LegacyScene3D. */
+  scene3D?: LegacyScene3D | null;
   createdAt: string;
   updatedAt: string;
 }

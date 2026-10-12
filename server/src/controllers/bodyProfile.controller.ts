@@ -4,8 +4,7 @@ import { User } from '../models/User.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
-  BODY_GENDERS, BODY_SHAPES, BODY_MEASUREMENT_RANGES, BodyMeasurementKey,
-  // NEW: Body 3D
+  BODY_GENDERS, BODY_SHAPES, BODY_MEASUREMENT_RANGES, BodyMeasurementKey, BodyProfile,
   BODY_WEIGHT_RANGE, MODEL_HUE_RANGE, UNIT_PREFERENCES,
 } from '../types/index.js';
 
@@ -15,7 +14,7 @@ const LABELS: Record<BodyMeasurementKey, string> = {
   bustCm: 'Vong nguc',
   waistCm: 'Vong eo',
   hipCm: 'Vong hong',
-  inseamCm: 'Dai chan trong', // NEW: Body 3D
+  inseamCm: 'Dai chan trong',
 };
 
 const measurement = (k: BodyMeasurementKey) => {
@@ -36,11 +35,10 @@ export const measurementsSchema = z
     bustCm: measurement('bustCm'),
     waistCm: measurement('waistCm'),
     hipCm: measurement('hipCm'),
-    inseamCm: measurement('inseamCm'), // NEW: Body 3D
+    inseamCm: measurement('inseamCm'),
   })
   .strict();
 
-// ===== NEW: Body 3D =====
 const weightMsg = `Can nang phai tu ${BODY_WEIGHT_RANGE.min} den ${BODY_WEIGHT_RANGE.max} kg`;
 export const weightField = z
   .number({ invalid_type_error: 'Can nang phai la so' })
@@ -57,14 +55,17 @@ const unitField = z.enum(UNIT_PREFERENCES, {
   errorMap: () => ({ message: `Don vi do phai la 1 trong: ${UNIT_PREFERENCES.join(', ')}` }),
 });
 
-/** Truong mo rong cua ho so - deu tuy chon nen ho so cu thieu cac truong nay van hop le. */
+/**
+ * Truong mo rong cua ho so - deu tuy chon nen ho so cu thieu cac truong nay van hop le.
+ * unitPreference / modelColorHue / showBmi: client hien tai khong gui nua (tuy chon cua giao dien cu),
+ * server van nhan de khong lam hong client cu va giu nguyen du lieu da luu.
+ */
 const extendedFields = {
   weightKg: weightField.optional(),
   unitPreference: unitField.optional(),
   modelColorHue: hueField.optional(),
   showBmi: z.boolean({ invalid_type_error: 'showBmi phai la true/false' }).optional(),
 };
-// ===== END NEW =====
 
 const genderField = z.enum(BODY_GENDERS, {
   errorMap: () => ({ message: `Gioi tinh phai la 1 trong: ${BODY_GENDERS.join(', ')}` }),
@@ -81,22 +82,46 @@ export const mannequinSchema = z
   })
   .strict();
 
-/** PUT thay the toan bo profile: field nao khong gui thi ve mac dinh / bi xoa. */
+/**
+ * PUT gop (merge) vao ho so: field nao khong gui thi giu nguyen trong DB, ke ca tung so do
+ * trong measurements. Khong co cach xoa 1 field qua PUT - muon xoa thi DELETE ca ho so.
+ */
 export const bodyProfileSchema = z
   .object({
-    gender: genderField.default('neutral'),
-    shape: shapeField.default('rectangle'),
+    gender: genderField.optional(),
+    shape: shapeField.optional(),
     measurements: measurementsSchema.optional(),
-    ...extendedFields, // NEW: Body 3D
+    ...extendedFields,
   })
   .strict();
 
-// ===== NEW: Body 3D =====
-/** Snapshot dang nguoi trong Outfit.scene3D: dang + so do + can nang + mau (khong co tuy chon hien thi). */
-export const bodySnapshotSchema = mannequinSchema
-  .extend({ weightKg: weightField.optional(), modelColorHue: hueField.optional() })
-  .strict();
-// ===== END NEW =====
+export type BodyProfilePatch = z.infer<typeof bodyProfileSchema>;
+
+const definedOnly = <T extends object>(o: T): Partial<T> =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+
+/**
+ * Gop ban va vao ho so hien tai (pure function). Khong bao gio lam mat field da luu:
+ * field khong co trong patch giu nguyen; gender/shape mac dinh neutral/rectangle khi chua co ho so.
+ */
+export function mergeBodyProfile(
+  current: Partial<BodyProfile> | null | undefined,
+  patch: BodyProfilePatch,
+  now: Date = new Date()
+): BodyProfile {
+  const { measurements: currentM, updatedAt: _old, ...currentRest } = current ?? {};
+  const { measurements: patchM, gender, shape, ...patchRest } = patch;
+  const measurements = { ...definedOnly(currentM ?? {}), ...definedOnly(patchM ?? {}) };
+
+  return {
+    ...definedOnly(currentRest),
+    ...definedOnly(patchRest),
+    gender: gender ?? current?.gender ?? 'neutral',
+    shape: shape ?? current?.shape ?? 'rectangle',
+    ...(Object.keys(measurements).length ? { measurements } : {}),
+    updatedAt: now,
+  };
+}
 
 /** GET /api/users/me/body-profile - null neu user chua thiet lap. */
 export const getBodyProfile = asyncHandler(async (req, res) => {
@@ -106,29 +131,18 @@ export const getBodyProfile = asyncHandler(async (req, res) => {
   res.json({ success: true, data: user.bodyProfile ?? null });
 });
 
-/** PUT /api/users/me/body-profile */
+/** PUT /api/users/me/body-profile - gop vao ho so hien tai (xem mergeBodyProfile). */
 export const updateBodyProfile = asyncHandler(async (req, res) => {
-  const { gender, shape, measurements, ...extended } = req.body as z.infer<typeof bodyProfileSchema>;
+  const existing = await User.findById(req.user!.sub).select('+bodyProfile');
+  if (!existing) throw ApiError.notFound('Khong tim thay nguoi dung');
 
-  // Bo cac so do rong de khong luu object {} vo nghia.
-  const cleaned = Object.fromEntries(
-    Object.entries(measurements ?? {}).filter(([, v]) => v !== undefined)
-  );
+  // toObject() khong qua transform cua toJSON (transform do xoa bodyProfile).
+  const current = existing.toObject().bodyProfile as Partial<BodyProfile> | undefined;
+  const merged = mergeBodyProfile(current, req.body as BodyProfilePatch);
 
   const user = await User.findByIdAndUpdate(
     req.user!.sub,
-    {
-      $set: {
-        bodyProfile: {
-          gender,
-          shape,
-          ...(Object.keys(cleaned).length ? { measurements: cleaned } : {}),
-          // NEW: Body 3D - PUT thay toan bo: truong khong gui thi khong luu (bi xoa).
-          ...Object.fromEntries(Object.entries(extended).filter(([, v]) => v !== undefined)),
-          updatedAt: new Date(),
-        },
-      },
-    },
+    { $set: { bodyProfile: merged } },
     { new: true, runValidators: true }
   ).select('+bodyProfile');
   if (!user) throw ApiError.notFound('Khong tim thay nguoi dung');

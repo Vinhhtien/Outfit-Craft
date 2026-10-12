@@ -6,7 +6,6 @@ import { ROLES, Role } from '../types/index.js';
 // ===== NEW: Body Profile =====
 import {
   BODY_GENDERS, BODY_SHAPES, BODY_MEASUREMENT_RANGES, BodyProfile,
-  // NEW: Body 3D
   BODY_WEIGHT_RANGE, MODEL_HUE_RANGE, UNIT_PREFERENCES,
 } from '../types/index.js';
 // ===== END NEW =====
@@ -85,15 +84,15 @@ const bodyProfileSchema = new Schema<BodyProfile>(
       bustCm: range('bustCm'),
       waistCm: range('waistCm'),
       hipCm: range('hipCm'),
-      inseamCm: range('inseamCm'), // NEW: Body 3D
+      inseamCm: range('inseamCm'),
     },
-    // ===== NEW: Body 3D =====
     // Khong dat default -> ho so cu doc ra khong tu "co" can nang hay tuy chon hien thi.
+    // unitPreference / modelColorHue / showBmi: tuy chon cua giao dien cu, client hien tai
+    // khong doc/ghi nua nhung van giu nguyen trong DB.
     weightKg: { type: Number, min: BODY_WEIGHT_RANGE.min, max: BODY_WEIGHT_RANGE.max },
     unitPreference: { type: String, enum: UNIT_PREFERENCES },
     modelColorHue: { type: Number, min: MODEL_HUE_RANGE.min, max: MODEL_HUE_RANGE.max },
     showBmi: { type: Boolean },
-    // ===== END NEW =====
     updatedAt: { type: Date, default: Date.now },
   },
   { _id: false }

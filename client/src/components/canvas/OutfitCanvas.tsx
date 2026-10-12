@@ -8,7 +8,8 @@ import {
   serializeItems, exportThumbnail, loadCanvasJSON,
   // ===== NEW: Body Profile =====
   clearItems, reflowItems, serializeCanvasJSON, setMannequin, setMannequinVisible,
-  snapWhileMoving, updateAttachment, type ItemObject,
+  snapWhileMoving, updateAttachment, upgradeLegacyLayout, addItemAtPlacement,
+  type ItemObject, type PresetPlacement,
   // ===== END NEW =====
 } from '@/lib/fabricCanvas';
 // ===== NEW: Body Profile =====
@@ -19,6 +20,8 @@ import type { ClothingItem, MannequinProfile, OutfitItem } from '@/types';
 /** API mà trang Studio dùng để điều khiển canvas. */
 export interface OutfitCanvasHandle {
   addItem: (item: ClothingItem) => Promise<void>;
+  /** Them nhieu mon vao vi tri da tinh san, theo dung thu tu (trong -> ngoai). */
+  addPlacedItems: (list: { item: ClothingItem; placement: PresetPlacement }[]) => Promise<void>;
   serialize: () => {
     items: ReturnType<typeof serializeItems>;
     canvasJSON: Record<string, unknown>;
@@ -29,12 +32,15 @@ export interface OutfitCanvasHandle {
   /**
    * Nạp outfit đã lưu. profile là dáng sẽ vẽ ngay (trước khi Studio cập nhật prop)
    * để các item đã bám anchor không bị reflow nhầm.
+   * legacyProfile: outfit lưu theo hình thế hệ cũ (xem needsLayoutUpgrade trong fabricCanvas.ts)
+   * -> dáng đã vẽ lúc lưu; món đồ được đặt lại từ hình cũ lên hình hiện tại.
    */
   loadJSON: (
     json: Record<string, unknown>,
     items: OutfitItem[],
     profile: MannequinProfile,
-    showMannequin: boolean
+    showMannequin: boolean,
+    legacyProfile?: MannequinProfile | null
   ) => Promise<void>;
   /** Xóa mọi món đồ, giữ lại mannequin. */
   clear: () => void;
@@ -83,6 +89,9 @@ export const OutfitCanvas = forwardRef<
 
   /** So lan loadJSON dang chay - trong luc nap, prop mannequin cua Studio chua kip cap nhat. */
   const loadingRef = useRef(0);
+  /** Dang moi nhat cho frame ke tiep - keo slider so do chi ve lai/reflow toi da 1 lan moi frame. */
+  const pendingProfileRef = useRef<MannequinProfile | null>(null);
+  const frameRef = useRef(0);
   /** Noi tiep cac lan nap de 2 loadFromJSON khong chen object vao nhau (StrictMode goi 2 lan). */
   const loadChainRef = useRef<Promise<void>>(Promise.resolve());
 
@@ -151,20 +160,30 @@ export const OutfitCanvas = forwardRef<
   }, []);
 
   // ===== NEW: Body Profile =====
-  // Doi dang -> ve lai mannequin va reflow item dang bam anchor.
+  // Doi dang / so do -> ve lai mannequin va reflow item dang bam anchor, gom theo frame.
   useEffect(() => {
-    const canvas = canvasRef.current;
-    // Dang nap outfit: prop van la dang cu, neu reflow luc nay se scale nham item vua nap.
-    if (!ready || !canvas || loadingRef.current > 0 || sameProfile(mannequin, profileRef.current)) return;
+    if (!ready) return;
+    pendingProfileRef.current = mannequin;
+    if (frameRef.current) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = 0;
+      const canvas = canvasRef.current;
+      const next = pendingProfileRef.current;
+      pendingProfileRef.current = null;
+      // Dang nap outfit: prop van la dang cu, neu reflow luc nay se scale nham item vua nap.
+      if (!canvas || !next || loadingRef.current > 0 || sameProfile(next, profileRef.current)) return;
 
-    const from = anchorsRef.current;
-    const to = buildMannequin(mannequin).anchors;
-    profileRef.current = mannequin;
-    anchorsRef.current = to;
-    void setMannequin(canvas, mannequin, showRef.current);
-    if (reflowItems(canvas, from, to) > 0) onDirty?.();
-    onSelectionChange?.(false);
+      const from = anchorsRef.current;
+      const to = buildMannequin(next).anchors;
+      profileRef.current = next;
+      anchorsRef.current = to;
+      void setMannequin(canvas, next, showRef.current);
+      if (reflowItems(canvas, from, to) > 0) onDirty?.();
+      onSelectionChange?.(false);
+    });
   }, [ready, mannequin, onDirty, onSelectionChange]);
+
+  useEffect(() => () => cancelAnimationFrame(frameRef.current), []);
 
   useEffect(() => {
     showRef.current = showMannequin;
@@ -199,6 +218,14 @@ export const OutfitCanvas = forwardRef<
         await addItemToCanvas(canvasRef.current, item, anchorsRef.current);
         onDirty?.();
       },
+      addPlacedItems: async (list) => {
+        for (const { item, placement } of list) {
+          if (!canvasRef.current) return;
+          await addItemAtPlacement(canvasRef.current, item, placement);
+        }
+        canvasRef.current?.discardActiveObject();
+        onSelectionChange?.(false);
+      },
       serialize: () => {
         const canvas = canvasRef.current;
         if (!canvas) return { items: [], canvasJSON: {}, mannequin: null };
@@ -213,7 +240,7 @@ export const OutfitCanvas = forwardRef<
       },
       exportThumbnail: (includeMannequin = true) =>
         canvasRef.current ? exportThumbnail(canvasRef.current, includeMannequin && showRef.current) : '',
-      loadJSON: (json, items, profile, visible) => {
+      loadJSON: (json, items, profile, visible, legacyProfile) => {
         loadingRef.current++;
         const run = async () => {
           const canvas = canvasRef.current;
@@ -222,6 +249,7 @@ export const OutfitCanvas = forwardRef<
           showRef.current = visible;
           anchorsRef.current = buildMannequin(profile).anchors;
           await loadCanvasJSON(canvas, json, items);
+          if (legacyProfile) upgradeLegacyLayout(canvas, legacyProfile, profile);
           // loadFromJSON xoa sach canvas (ke ca mannequin) -> ve lai o lop duoi cung.
           await setMannequin(canvas, profile, showRef.current);
           onSelectionChange?.(false);

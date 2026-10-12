@@ -52,7 +52,7 @@ export type Role = (typeof ROLES)[number];
 // ===== END NEW =====
 
 // ===== NEW: Body Profile =====
-// NEW: Body 3D - hang so dang nguoi chuyen sang bodyConstants.ts (ban sao y het o client).
+// Hang so dang nguoi nam o bodyConstants.ts (ban sao y het o client).
 export * from './bodyConstants.js';
 import type { BodyGender, BodyShape, BodyMeasurements, UnitPreference } from './bodyConstants.js';
 
@@ -60,13 +60,12 @@ export interface BodyProfile {
   gender: BodyGender;
   shape: BodyShape;
   measurements?: BodyMeasurements;
-  // ===== NEW: Body 3D =====
   /** Nhay cam: chi chu so huu doc duoc, khong bao gio gui cho Gemini. */
   weightKg?: number;
+  /** Tuy chon cua giao dien cu - server van nhan/giu, client hien tai khong dung. */
   unitPreference?: UnitPreference;
   modelColorHue?: number;
   showBmi?: boolean;
-  // ===== END NEW =====
   updatedAt?: Date;
 }
 // ===== END NEW =====

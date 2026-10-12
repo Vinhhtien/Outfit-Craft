@@ -3,7 +3,6 @@ import { SEASONS, OCCASIONS, Season, Occasion } from '../types/index.js';
 // ===== NEW: Body Profile =====
 import {
   BODY_GENDERS, BODY_SHAPES, BODY_MEASUREMENT_RANGES, BodyGender, BodyShape, BodyMeasurements,
-  // NEW: Body 3D
   BODY_WEIGHT_RANGE, MODEL_HUE_RANGE, SCENE3D_MAX_ITEMS,
 } from '../types/index.js';
 
@@ -18,8 +17,12 @@ export interface IOutfitMannequin {
 }
 // ===== END NEW =====
 
-// ===== NEW: Body 3D =====
-/** Snapshot nguoi mau 3D luc phoi - chi chu so huu duoc thay (strip khi tra cho nguoi khac). */
+// ===== NEW: Legacy scene3D =====
+// Che do 3D da bo. Outfit cu van con truong scene3D: CHI DOC (API tu choi ghi - xem
+// outfit.controller.ts), client dung lai de dung outfit tren canvas 2D. Giu schema de doc/
+// luu lai outfit cu khong lam mat du lieu.
+
+/** Snapshot nguoi mau luc phoi - chi chu so huu duoc thay (strip khi tra cho nguoi khac). */
 export interface IScene3DBody extends IOutfitMannequin {
   weightKg?: number;
   modelColorHue?: number;
@@ -97,8 +100,8 @@ export interface IOutfit extends Document {
   // ===== NEW: Body Profile =====
   mannequin?: IOutfitMannequin | null;
   // ===== END NEW =====
-  // ===== NEW: Body 3D =====
-  /** Canh 3D (them ben canh canvasJSON, khong thay the). Khong co / null = outfit 2D. */
+  // ===== NEW: Legacy scene3D =====
+  /** Chi outfit cu phoi o che do 3D moi co (chi doc). */
   scene3D?: IScene3D | null;
   // ===== END NEW =====
   createdAt: Date;
@@ -137,7 +140,7 @@ const mannequinMeasurements = {
   bustCm: mannequinMeasurement('bustCm'),
   waistCm: mannequinMeasurement('waistCm'),
   hipCm: mannequinMeasurement('hipCm'),
-  inseamCm: mannequinMeasurement('inseamCm'), // NEW: Body 3D
+  inseamCm: mannequinMeasurement('inseamCm'),
 };
 
 const outfitMannequinSchema = new Schema<IOutfitMannequin>(
@@ -150,7 +153,7 @@ const outfitMannequinSchema = new Schema<IOutfitMannequin>(
 );
 // ===== END NEW =====
 
-// ===== NEW: Body 3D =====
+// ===== NEW: Legacy scene3D =====
 const vec3 = {
   type: [Number],
   validate: { validator: (v: number[]) => v.length === 3, message: 'Can dung 3 toa do' },
@@ -225,7 +228,7 @@ const outfitSchema = new Schema<IOutfit>(
     // ===== NEW: Body Profile =====
     mannequin: { type: outfitMannequinSchema, default: undefined },
     // ===== END NEW =====
-    // ===== NEW: Body 3D =====
+    // ===== NEW: Legacy scene3D =====
     scene3D: { type: scene3DSchema, default: undefined },
     // ===== END NEW =====
   },
