@@ -1,12 +1,15 @@
 'use client';
 
 // ===== NEW: Forgot Password =====
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { authApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
-import { getErrorStatus, isValidEmail } from '@/lib/passwordPolicy';
+import { getErrorStatus } from '@/lib/passwordPolicy';
 import { AuthLayout, AuthField, AuthSubmitButton } from '@/components/layout/AuthLayout';
+// ===== ADDED: Validation =====
+import { validateEmail } from '@/lib/authValidation';
+// ===== END ADDED =====
 
 const SUCCESS_MESSAGE =
   'Nếu email tồn tại trong hệ thống, link đặt lại mật khẩu đã được gửi. Vui lòng kiểm tra email.';
@@ -16,15 +19,23 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  // ===== ADDED: Validation =====
+  const [emailError, setEmailError] = useState('');
+  const emailRef = useRef<HTMLInputElement>(null);
+  // ===== END ADDED =====
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!isValidEmail(email)) {
-      setError('Email không hợp lệ.');
+    // ===== ADDED: Validation ===== (thay cho check isValidEmail cu: loi hien ngay duoi o input)
+    const emailMsg = validateEmail(email);
+    setEmailError(emailMsg);
+    if (emailMsg) {
+      emailRef.current?.focus();
       return;
     }
+    // ===== END ADDED =====
 
     setLoading(true);
     try {
@@ -57,11 +68,16 @@ export default function ForgotPasswordPage() {
         <form onSubmit={handleSubmit} noValidate>
           <div className="space-y-4">
             <AuthField
+              ref={emailRef} // ADDED: Validation
+              error={emailError} // ADDED: Validation
               label="Email"
               type="email"
               autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailError(''); // ADDED: Validation
+              }}
               placeholder="ban@example.com"
               disabled={loading}
             />

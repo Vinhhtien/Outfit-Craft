@@ -3,6 +3,12 @@ import bcrypt from 'bcryptjs';
 // ===== NEW: Admin role =====
 import { ROLES, Role } from '../types/index.js';
 // ===== END NEW =====
+// ===== NEW: Body Profile =====
+import {
+  BODY_GENDERS, BODY_SHAPES, BODY_MEASUREMENT_RANGES, BodyProfile,
+  BODY_WEIGHT_RANGE, MODEL_HUE_RANGE, UNIT_PREFERENCES,
+} from '../types/index.js';
+// ===== END NEW =====
 // ===== NEW: Forgot Password =====
 import crypto from 'crypto';
 
@@ -55,7 +61,43 @@ export interface IUser extends Document {
   /** false = bi admin khoa tai khoan. */
   isActive: boolean;
   // ===== END NEW =====
+  // ===== NEW: Body Profile =====
+  /** Dang nguoi (tuy chon) - chi dung cho mannequin va goi y, KHONG bao gio tra ra API public. */
+  bodyProfile?: BodyProfile;
+  // ===== END NEW =====
 }
+
+// ===== NEW: Body Profile =====
+const range = (k: keyof typeof BODY_MEASUREMENT_RANGES) => ({
+  type: Number,
+  min: BODY_MEASUREMENT_RANGES[k].min,
+  max: BODY_MEASUREMENT_RANGES[k].max,
+});
+
+const bodyProfileSchema = new Schema<BodyProfile>(
+  {
+    gender: { type: String, enum: BODY_GENDERS, default: 'neutral' },
+    shape: { type: String, enum: BODY_SHAPES, default: 'rectangle' },
+    measurements: {
+      heightCm: range('heightCm'),
+      shoulderCm: range('shoulderCm'),
+      bustCm: range('bustCm'),
+      waistCm: range('waistCm'),
+      hipCm: range('hipCm'),
+      inseamCm: range('inseamCm'),
+    },
+    // Khong dat default -> ho so cu doc ra khong tu "co" can nang hay tuy chon hien thi.
+    // unitPreference / modelColorHue / showBmi: tuy chon cua giao dien cu, client hien tai
+    // khong doc/ghi nua nhung van giu nguyen trong DB.
+    weightKg: { type: Number, min: BODY_WEIGHT_RANGE.min, max: BODY_WEIGHT_RANGE.max },
+    unitPreference: { type: String, enum: UNIT_PREFERENCES },
+    modelColorHue: { type: Number, min: MODEL_HUE_RANGE.min, max: MODEL_HUE_RANGE.max },
+    showBmi: { type: Boolean },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+// ===== END NEW =====
 
 const userSchema = new Schema<IUser>(
   {
@@ -93,8 +135,24 @@ const userSchema = new Schema<IUser>(
     role: { type: String, enum: ROLES, default: 'user' },
     isActive: { type: Boolean, default: true },
     // ===== END NEW =====
+    // ===== NEW: Body Profile =====
+    // select:false -> /auth/me va moi populate('owner') deu khong keo theo; chi
+    // /users/me/body-profile select tuong minh '+bodyProfile'.
+    bodyProfile: { type: bodyProfileSchema, select: false },
+    // ===== END NEW =====
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    // ===== NEW: Body Profile =====
+    // Lop bao ve thu 2: du lo select('+bodyProfile') o dau do, res.json(user) van khong lo ra.
+    toJSON: {
+      transform: (_doc, ret: Record<string, unknown>) => {
+        delete ret.bodyProfile;
+        return ret;
+      },
+    },
+    // ===== END NEW =====
+  }
 );
 
 userSchema.pre('save', async function (next) {

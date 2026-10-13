@@ -6,6 +6,9 @@ import { X } from 'lucide-react';
 import { useEffect } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 // ===== END NEW =====
+// ===== NEW: Toast thay alert() =====
+import { AlertCircle } from 'lucide-react';
+// ===== END NEW =====
 
 /*
  * Bo UI "Vintage Boutique" (xanh co vit #1F453E, xanh com #E2ECC8, nen kem #FAF9F5).
@@ -167,12 +170,21 @@ export function VToast({
   message,
   onClose,
   duration = 3000,
+  // ===== NEW: Toast thay alert() =====
+  variant = 'success',
+  // ===== END NEW =====
 }: {
   /** null/'' -> an toast. */
   message: string | null;
   onClose: () => void;
   duration?: number;
+  // ===== NEW: Toast thay alert() =====
+  /** success: vien + icon xanh reu; error: chu + icon do tram. */
+  variant?: 'success' | 'error';
+  // ===== END NEW =====
 }) {
+  const isError = variant === 'error';
+
   useEffect(() => {
     if (!message) return;
     const t = setTimeout(onClose, duration);
@@ -187,9 +199,19 @@ export function VToast({
         message ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
       }`}
     >
+      {/* ===== NEW: Toast thay alert() ===== nen kem, mau theo variant */}
       {message && (
-        <div className="flex items-center gap-2 rounded-full border border-[#1F453E] bg-[#E2ECC8] px-5 py-2.5 font-jakarta text-sm font-semibold text-[#1F453E] shadow-lg">
-          <CheckCircle2 size={16} />
+        <div
+          role={isError ? 'alert' : undefined}
+          className={`flex w-max max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border bg-[#FAF9F5] px-5 py-2.5 font-jakarta text-sm font-semibold shadow-lg ${
+            isError ? 'border-[#8C2D19]/40 text-[#8C2D19]' : 'border-[#1F453E] text-[#1F453E]'
+          }`}
+        >
+          {isError ? (
+            <AlertCircle size={16} className="shrink-0" />
+          ) : (
+            <CheckCircle2 size={16} className="shrink-0" />
+          )}
           {message}
         </div>
       )}

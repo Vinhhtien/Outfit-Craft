@@ -24,7 +24,8 @@ function initials(name: string) {
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user, isLoading, logout } = useAuthStore();
+  const isAuthenticated = !!user;
 
   const handleLogout = () => {
     logout();
@@ -34,13 +35,14 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 h-16 border-b border-[#16352F] bg-[#1F453E] font-jakarta text-white">
       <div className="mx-auto flex h-full max-w-6xl items-center gap-4 px-4">
-        <Link href="/wardrobe" className="flex shrink-0 items-baseline leading-none">
+        <Link href="/" className="flex shrink-0 items-baseline leading-none">
           <span className="font-script text-2xl text-[#E2ECC8]">Outfit</span>
           <span className="ml-1 font-serif-display text-lg tracking-[0.2em] text-white">CRAFT</span>
         </Link>
 
+        {/* Guest: van giu <nav> rong (flex-1) de nut Dang nhap bi day sang phai. */}
         <nav className="flex flex-1 items-center justify-center gap-2">
-          {NAV.map(({ href, label, icon: Icon }) => {
+          {isAuthenticated && NAV.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <Link
@@ -60,7 +62,7 @@ export function Navbar() {
           })}
         </nav>
 
-        {user && (
+        {isAuthenticated ? (
           <div className="flex shrink-0 items-center gap-3">
             {/* ===== NEW: Update Profile ===== */}
             {/* Ten + avatar dan toi trang Ho so (gom ca Doi mat khau). */}
@@ -96,6 +98,16 @@ export function Navbar() {
               <LogOut size={16} />
             </button>
           </div>
+        ) : (
+          // Dang khoi phuc phien (hydrate) -> chua render gi, tranh nhay nut Dang nhap.
+          !isLoading && (
+            <Link
+              href="/login"
+              className="shrink-0 rounded-full border border-[#E2ECC8] px-6 py-2 text-xs font-bold uppercase tracking-wider text-[#E2ECC8] transition-colors hover:bg-[#E2ECC8] hover:text-[#1F453E]"
+            >
+              Đăng nhập
+            </Link>
+          )
         )}
       </div>
     </header>

@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef } from 'react';
+import { forwardRef, useId } from 'react';
 import Link from 'next/link';
 import { ScallopBanner } from './ScallopBanner';
 
@@ -74,23 +74,37 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
 }
 
 /* ---------------- Field (label + input) ---------------- */
-type AuthFieldProps = React.InputHTMLAttributes<HTMLInputElement> & { label: string };
+// ===== ADDED: Validation ===== (prop `error` tuy chon: hien loi duoi input + doi vien do tram)
+type AuthFieldProps = React.InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string };
 
 export const AuthField = forwardRef<HTMLInputElement, AuthFieldProps>(function AuthField(
-  { label, className = '', ...rest },
+  { label, error, className = '', ...rest },
   ref
 ) {
+  const errorId = useId();
+  const borderClass = error
+    ? 'border-[#8C2D19] focus:border-[#8C2D19]'
+    : 'border-[#E2E8F0] focus:border-[#1F453E]';
+
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs font-semibold text-[#1F453E]">{label}</span>
       <input
         ref={ref}
-        className={`w-full rounded-lg border border-[#E2E8F0] bg-white px-3.5 py-2.5 text-sm text-gray-800 transition-colors placeholder:text-gray-400 focus:border-[#1F453E] focus:outline-none ${className}`}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        className={`w-full rounded-lg border ${borderClass} bg-white px-3.5 py-2.5 text-sm text-gray-800 transition-colors placeholder:text-gray-400 focus:outline-none ${className}`}
         {...rest}
       />
+      {error && (
+        <span id={errorId} role="alert" className="mt-1 block font-sans text-[11px] text-[#8C2D19]">
+          {error}
+        </span>
+      )}
     </label>
   );
 });
+// ===== END ADDED =====
 
 /* ---------------- Nut submit dang vien thuoc ---------------- */
 export function AuthSubmitButton({

@@ -17,7 +17,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 
 /** Layer mặc định trên canvas: số lớn = nằm trên. */
 export const CATEGORY_Z_INDEX: Record<Category, number> = {
-  bottom: 10, shoes: 15, dress: 20, top: 30,
+  shoes: 5, bottom: 10, dress: 20, top: 30,
   outerwear: 40, bag: 50, accessory: 60,
 };
 
@@ -43,6 +43,66 @@ export const OCCASION_LABELS: Record<Occasion, string> = {
   party: 'Tiệc', sport: 'Thể thao', travel: 'Du lịch',
 };
 
+// ===== NEW: Body Profile =====
+// Hang so dang nguoi nam o bodyConstants.ts (ban sao y het server).
+export * from './bodyConstants';
+import type { BodyGender, BodyShape, BodyMeasurements } from './bodyConstants';
+
+export const BODY_GENDER_LABELS: Record<BodyGender, string> = {
+  female: 'Nữ', male: 'Nam', neutral: 'Trung tính',
+};
+
+export const BODY_SHAPE_LABELS: Record<BodyShape, string> = {
+  rectangle: 'Chữ nhật',
+  pear: 'Quả lê',
+  apple: 'Quả táo',
+  hourglass: 'Đồng hồ cát',
+  inverted_triangle: 'Tam giác ngược',
+};
+
+/** Dáng dùng để vẽ mannequin (cũng là snapshot lưu trong outfit). */
+export interface MannequinProfile {
+  gender: BodyGender;
+  shape: BodyShape;
+  measurements?: BodyMeasurements;
+}
+
+export interface BodyProfile extends MannequinProfile {
+  /** Nhạy cảm: chỉ chủ sở hữu đọc được, không bao giờ gửi cho AI gợi ý. */
+  weightKg?: number;
+  updatedAt?: string;
+}
+// ===== END NEW =====
+
+/**
+ * Dữ liệu CŨ (chỉ đọc) của outfit từng phối ở chế độ 3D đã bỏ. Server không nhận dữ liệu này nữa;
+ * client chỉ dùng để dựng lại outfit trên canvas 2D. Xem server/src/models/Outfit.ts (IScene3D).
+ */
+export interface LegacyScene3DItem {
+  itemId: string;
+  /** Tên anchor (trùng tên anchor 2D) hoặc null = đặt tự do. */
+  anchor: string | null;
+  /** Mét, trục y hướng lên. Có anchor: điểm bám - anchor; không: vị trí tuyệt đối (gốc ở giữa hai bàn chân). */
+  offset: [number, number, number];
+  /** Bề rộng món đồ / bề rộng chuẩn của nhóm đồ trên cơ thể lúc phối. */
+  scale: number;
+  /** Radian, ngược chiều kim đồng hồ khi nhìn chính diện. */
+  rotation: number;
+  /** Thứ tự lớp: số lớn = nằm ngoài. */
+  layer: number;
+  /** Tỉ lệ cao/rộng của ảnh. */
+  aspect?: number;
+  flipX?: boolean;
+}
+
+export interface LegacyScene3D {
+  version: number;
+  /** Người khác xem outfit công khai: server bỏ trường này. */
+  bodySnapshot?: MannequinProfile;
+  showModel: boolean;
+  items: LegacyScene3DItem[];
+}
+
 export interface User {
   id: string;
   email: string;
@@ -50,6 +110,24 @@ export interface User {
   avatarUrl?: string;
   defaultCity: string;
 }
+
+// ===== NEW: Ghi nho fit =====
+/**
+ * Vị trí + cỡ user đã căn trên người mẫu, lưu dạng tỉ lệ theo cơ thể (xem fitFromBox trong
+ * lib/outfitPlacement.ts) -> lần sau thêm món này tự đặt đúng, với mọi số đo.
+ */
+export interface ItemFit {
+  /** Danh mục lúc căn - đổi danh mục thì bỏ qua fit cũ. */
+  category: Category;
+  anchorRef: string;
+  /** Độ lệch điểm tham chiếu so với anchor / bề rộng, chiều cao chuẩn của nhóm đồ. */
+  offsetX: number;
+  offsetY: number;
+  /** Bề rộng, chiều cao món đồ / bề rộng, chiều cao chuẩn của nhóm đồ. */
+  width: number;
+  height: number;
+}
+// ===== END NEW =====
 
 export interface ClothingItem {
   _id: string;
@@ -69,6 +147,7 @@ export interface ClothingItem {
   wearCount: number;
   lastWornAt?: string;
   isArchived: boolean;
+  fit?: ItemFit | null; // NEW: Ghi nho fit
   createdAt: string;
   updatedAt: string;
 }
@@ -82,6 +161,10 @@ export interface OutfitItem {
   angle: number;
   zIndex: number;
   flipX?: boolean;
+  // ===== NEW: Body Profile =====
+  anchorRef?: string | null;
+  offset?: { x: number; y: number };
+  // ===== END NEW =====
 }
 
 export interface Outfit {
@@ -96,6 +179,12 @@ export interface Outfit {
   tags: string[];
   isPublic: boolean;
   likeCount: number;
+  // ===== NEW: Body Profile =====
+  /** Snapshot dáng lúc phối; không có = outfit cũ, null = tắt mannequin. */
+  mannequin?: MannequinProfile | null;
+  // ===== END NEW =====
+  /** Chỉ có ở outfit cũ phối ở chế độ 3D (đã bỏ) - chỉ đọc, xem LegacyScene3D. */
+  scene3D?: LegacyScene3D | null;
   createdAt: string;
   updatedAt: string;
 }

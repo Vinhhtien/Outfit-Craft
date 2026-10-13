@@ -2,6 +2,8 @@ import { api } from './api';
 import type {
   ApiResponse, ClothingItem, Outfit, Weather, Suggestion,
   ScheduleEntry, User, Category, Occasion,
+  BodyProfile, MannequinProfile, // NEW: Body Profile
+  ItemFit, // NEW: Ghi nho fit
 } from '@/types';
 
 /* ---------------- Auth ---------------- */
@@ -65,6 +67,16 @@ export interface ItemFilters {
   limit?: number;
 }
 
+// ===== NEW: Xem/Sua Item =====
+/** Cac field PATCH /items/:id chap nhan (server dung .strict(), gui field khac se 400). */
+export type UpdateItemPayload = Partial<
+  Pick<
+    ClothingItem,
+    'name' | 'category' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes'
+  >
+>;
+// ===== END NEW =====
+
 export const itemApi = {
   /** Day file len Cloudinary, tra ve { url, publicId }. */
   upload: (file: Blob, filename = 'item.png') => {
@@ -85,10 +97,15 @@ export const itemApi = {
   create: (body: Partial<ClothingItem>) =>
     api.post<ApiResponse<ClothingItem>>('/items', body).then((r) => r.data.data),
 
-  update: (id: string, body: Partial<ClothingItem>) =>
+  // ===== NEW: Xem/Sua Item ===== (thu hep kieu body theo whitelist cua server)
+  update: (id: string, body: UpdateItemPayload) =>
     api.patch<ApiResponse<ClothingItem>>(`/items/${id}`, body).then((r) => r.data.data),
 
   remove: (id: string) => api.delete<ApiResponse<null>>(`/items/${id}`).then((r) => r.data),
+
+  // NEW: Ghi nho fit - vi tri + co da can tren nguoi mau (null = xoa).
+  saveFit: (id: string, fit: ItemFit | null) =>
+    api.put<ApiResponse<ClothingItem>>(`/items/${id}/fit`, { fit }).then((r) => r.data.data),
 
   stats: () => api.get<ApiResponse<{
     total: number;
@@ -104,6 +121,10 @@ export interface SaveOutfitBody {
   items: {
     item: string; left: number; top: number;
     scaleX: number; scaleY: number; angle: number; zIndex: number; flipX?: boolean;
+    // ===== NEW: Body Profile =====
+    anchorRef?: string | null;
+    offset?: { x: number; y: number };
+    // ===== END NEW =====
   }[];
   canvasJSON: Record<string, unknown>;
   thumbnailDataUrl?: string;
@@ -111,6 +132,9 @@ export interface SaveOutfitBody {
   occasions?: string[];
   tags?: string[];
   isPublic?: boolean;
+  // ===== NEW: Body Profile =====
+  mannequin?: MannequinProfile | null;
+  // ===== END NEW =====
 }
 
 export const outfitApi = {
@@ -132,6 +156,21 @@ export const outfitApi = {
   feed: (page = 1) =>
     api.get<ApiResponse<Outfit[]>>('/outfits/feed', { params: { page } }).then((r) => r.data),
 };
+
+// ===== NEW: Body Profile =====
+/* ---------------- Body Profile ---------------- */
+export const bodyProfileApi = {
+  /** null neu user chua thiet lap dang nguoi. */
+  get: () =>
+    api.get<ApiResponse<BodyProfile | null>>('/users/me/body-profile').then((r) => r.data.data),
+
+  /** PUT gop vao ho so: field khong gui thi server giu nguyen. */
+  save: (body: Partial<Omit<BodyProfile, 'updatedAt'>>) =>
+    api.put<ApiResponse<BodyProfile>>('/users/me/body-profile', body).then((r) => r.data.data),
+
+  remove: () => api.delete<ApiResponse<null>>('/users/me/body-profile').then((r) => r.data),
+};
+// ===== END NEW =====
 
 /* ---------------- Suggestions ---------------- */
 export const suggestionApi = {

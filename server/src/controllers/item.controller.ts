@@ -22,10 +22,48 @@ export const createItemSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
-export const updateItemSchema = createItemSchema.partial().omit({
-  originalImageUrl: true,
-  imageUrl: true,
-});
+// ===== NEW: Xem/Sua Item =====
+/**
+ * PATCH chi cho sua metadata. .strict() -> gui kem field la (imageUrl, wearCount,
+ * isArchived, canvasJSON...) se bi 400 thay vi am tham ghi de.
+ */
+export const updateItemSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    category: z.enum(CATEGORIES),
+    colors: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(10),
+    styles: z.array(z.enum(STYLES)),
+    seasons: z.array(z.enum(SEASONS)),
+    occasions: z.array(z.enum(OCCASIONS)),
+    // Chuoi rong = xoa thuong hieu / ghi chu.
+    brand: z.string().trim().max(100),
+    notes: z.string().trim().max(500),
+  })
+  .partial()
+  .strict();
+// ===== END NEW =====
+
+// ===== NEW: Ghi nho fit =====
+/** Anchor ma mon do co the bam - trung GROUP_RULES o client/src/lib/outfitPlacement.ts. */
+const FIT_ANCHORS = ['neck', 'waist', 'hip', 'footBottom', 'hipRight'] as const;
+
+/** PUT /api/items/:id/fit - null = xoa fit da luu (lan sau tu dat theo mac dinh). */
+export const saveFitSchema = z
+  .object({
+    fit: z
+      .object({
+        category: z.enum(CATEGORIES),
+        anchorRef: z.enum(FIT_ANCHORS),
+        offsetX: z.number().finite().min(-5).max(5),
+        offsetY: z.number().finite().min(-5).max(5),
+        width: z.number().finite().positive().max(10),
+        height: z.number().finite().positive().max(10),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+// ===== END NEW =====
 
 /**
  * POST /api/items/upload
@@ -94,15 +132,35 @@ export const createItem = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: item });
 });
 
+// ===== NEW: Xem/Sua Item =====
+/** PATCH /api/items/:id - body da qua updateItemSchema nen chi con field metadata. */
 export const updateItem = asyncHandler(async (req, res) => {
+  if (Object.keys(req.body).length === 0) {
+    throw ApiError.badRequest('Khong co thong tin nao de cap nhat');
+  }
+
   const item = await ClothingItem.findOneAndUpdate(
     { _id: req.params.id, owner: req.user!.sub },
-    req.body,
+    { $set: req.body },
+    { new: true, runValidators: true }
+  );
+  // ===== END NEW =====
+  if (!item) throw ApiError.notFound('Khong tim thay mon do');
+  res.json({ success: true, data: item });
+});
+
+// ===== NEW: Ghi nho fit =====
+/** PUT /api/items/:id/fit - tach rieng khoi PATCH metadata (updateItemSchema van .strict()). */
+export const saveFit = asyncHandler(async (req, res) => {
+  const item = await ClothingItem.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user!.sub },
+    { $set: { fit: req.body.fit } },
     { new: true, runValidators: true }
   );
   if (!item) throw ApiError.notFound('Khong tim thay mon do');
   res.json({ success: true, data: item });
 });
+// ===== END NEW =====
 
 /**
  * DELETE /api/items/:id

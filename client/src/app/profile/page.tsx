@@ -13,6 +13,9 @@ import { useAuthStore } from '@/store/authStore';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { VButton, VLabel, VToast } from '@/components/ui/vintage';
+// ===== NEW: Body Profile =====
+import { BodyProfileSection } from '@/components/profile/BodyProfileSection';
+// ===== END NEW =====
 
 /** Giu dong bo voi server/src/middlewares/upload.ts */
 const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -363,6 +366,8 @@ export default function ProfilePage() {
 
         <div className="mx-auto max-w-3xl space-y-8 px-4 py-10">
           <ProfileForm onSuccess={setToast} />
+          {/* NEW: Body Profile */}
+          <BodyProfileSection onSuccess={setToast} cardClassName={CARD} />
           <PasswordForm onSuccess={setToast} />
         </div>
       </div>

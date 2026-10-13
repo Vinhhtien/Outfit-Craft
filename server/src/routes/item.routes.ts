@@ -13,6 +13,7 @@ router.get('/', c.getItems);
 router.post('/', validate(c.createItemSchema), c.createItem);
 router.get('/:id', c.getItem);
 router.patch('/:id', validate(c.updateItemSchema), c.updateItem);
+router.put('/:id/fit', validate(c.saveFitSchema), c.saveFit); // NEW: Ghi nho fit
 router.delete('/:id', c.deleteItem);
 
 export default router;

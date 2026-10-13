@@ -151,6 +151,11 @@ Mọi route (trừ `/auth/register`, `/auth/login`, `/health`) đều cần head
 | GET/PATCH/DELETE | `/api/outfits/:id` | Xem / sửa / xóa |
 | POST | `/api/outfits/:id/wear` | Đánh dấu đã mặc (tăng `wearCount`) |
 
+### Dáng người
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| GET/PUT/DELETE | `/api/users/me/body-profile` | Hồ sơ dáng người: giới tính, dáng, số đo (`heightCm`, `shoulderCm`, `bustCm`, `waistCm`, `hipCm`, `inseamCm`), `weightKg`. PUT **gộp** vào hồ sơ (field không gửi thì giữ nguyên); DELETE xóa toàn bộ. `unitPreference`, `modelColorHue`, `showBmi` của giao diện cũ vẫn được nhận và giữ nguyên. Chỉ chủ tài khoản đọc được |
+
 ### Gợi ý
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
@@ -178,6 +183,16 @@ Mọi route (trừ `/auth/register`, `/auth/login`, `/health`) đều cần head
 
 **Gợi ý không phụ thuộc AI.** Thuật toán rule-based chấm điểm theo nhiệt độ, mùa, dịp, trời mưa và tần suất đã mặc — luôn chạy được. Gemini chỉ dùng để viết lời tư vấn bên trên kết quả đó; thiếu API key hoặc gọi lỗi thì tự động fallback sang text sinh từ rule.
 
+**Người mẫu 2D (Studio + Hồ sơ).** Bóng người SVG sinh từ số đo (`client/src/lib/mannequin.ts`), vẽ thành lớp dưới cùng của canvas Fabric. Món đồ bám vào điểm neo (cổ, eo, hông, bàn chân...) nên tự di chuyển/co giãn khi đổi số đo (`outfitPlacement.ts`).
+
+- Chiều cao thật: hình cao `heightCm × UNITS_PER_CM`, người cao nhất hợp lệ (220 cm) vừa khít khung, chân luôn chạm sàn. Dài chân trong đổi tỉ lệ chân/thân. Vai và các vòng quy ra bề rộng theo cm thật, kẹp trong 8%–42% chiều cao. Kéo cân nặng W₀ → W₁ tự co giãn vòng ngực/eo/hông theo (W₁/W₀)^p với p = 0,45 / 0,6 / 0,5 (ước lượng, không phải công thức y khoa); tay, chân, cổ dày theo tỉ lệ 3 vòng so với dáng chữ nhật cùng chiều cao (`limbFactor`, không dùng cân nặng nên snapshot outfit vẽ lại đúng).
+- Số đo còn thiếu lấy từ preset cm theo dáng/giới tính/chiều cao (`bodyPresets.ts`) — nguồn duy nhất cho cả hình vẽ lẫn nút "Đặt lại mặc định"; mọi preset đều được `classifyShape` phân loại đúng.
+- Bảng số đo (`components/body/BodyControlsPanel.tsx`, logic ở `lib/bodyMetrics.ts`) dùng chung cho Hồ sơ và Studio. Khoảng slider thu hẹp theo chiều cao để không có đoạn kéo mà hình không đổi. Dữ liệu cũ ngoài khoảng slider được giữ nguyên nếu người dùng không chỉnh field đó.
+- Outfit lưu trước khi hình phản ứng theo chiều cao được đặt lại món đồ lúc mở (`legacyMannequin.ts`, `upgradeLegacyLayout`); khi lưu lại, `canvasJSON.mannequinLayout = 2`.
+
+- Hằng số khoảng số đo nằm ở `server/src/types/bodyConstants.ts`, bản sao y hệt ở `client/src/types/bodyConstants.ts` — sửa một bên thì phải chép sang bên kia (hai file phải giống hệt nhau).
+- Outfit cũ từng phối ở chế độ 3D (đã bỏ) vẫn còn trường `scene3D` chỉ đọc; Studio dựng lại chúng trên canvas 2D. `scene3D.bodySnapshot` bị bỏ khi người xem không phải chủ outfit.
+
 ---
 
 ## Lệnh thường dùng
@@ -193,4 +208,5 @@ npm run lint     # kiểm tra type, không xuất file
 npm run dev      # chạy dev
 npm run build    # build production
 npm run lint     # ESLint
+npm run typecheck # tsc --noEmit
 ```
