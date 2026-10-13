@@ -11,7 +11,10 @@ import {
 import { vi } from 'date-fns/locale';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
-import { VModal, VSpinner } from '@/components/ui/vintage';
+import { VModal, VSpinner, VToast } from '@/components/ui/vintage';
+// ===== NEW: Delete Confirmation Popup =====
+import { DeleteConfirmModal } from '@/components/wardrobe/DeleteConfirmModal';
+// ===== END NEW =====
 import { outfitApi, scheduleApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import type { Outfit, ScheduleEntry } from '@/types';
@@ -27,6 +30,15 @@ export default function SchedulePage() {
 
   const [pickerDate, setPickerDate] = useState<Date | null>(null);
   const [assigning, setAssigning] = useState(false);
+  // ===== NEW: Delete Confirmation Popup =====
+  const [entryToRemove, setEntryToRemove] = useState<ScheduleEntry | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const closeRemoveConfirm = useCallback(() => setEntryToRemove(null), []);
+  // ===== END NEW =====
+  // ===== NEW: Toast thay alert() =====
+  const [toastError, setToastError] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToastError(null), []);
+  // ===== END NEW =====
 
   // Luoi lich luon bat dau tu thu 2 va phu day 6 tuan.
   const gridStart = startOfWeek(month, { weekStartsOn: 1 });
@@ -55,6 +67,8 @@ export default function SchedulePage() {
   }, [month]);
 
   useEffect(() => {
+    // Nap du lieu khi doi thang: bat loading ngay trong effect la co chu y.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -72,7 +86,7 @@ export default function SchedulePage() {
       setPickerDate(null);
       await load();
     } catch (err) {
-      alert(getErrorMessage(err));
+      setToastError(getErrorMessage(err)); // ===== NEW: Toast thay alert() =====
     } finally {
       setAssigning(false);
     }
@@ -83,19 +97,26 @@ export default function SchedulePage() {
       await scheduleApi.markWorn(entry._id);
       await load();
     } catch (err) {
-      alert(getErrorMessage(err));
+      setToastError(getErrorMessage(err)); // ===== NEW: Toast thay alert() =====
     }
   };
 
+  // ===== NEW: Delete Confirmation Popup =====
+  /** Chi goi khi nguoi dung bam xac nhan tren popup (thay cho window.confirm). */
   const handleRemove = async (entry: ScheduleEntry) => {
-    if (!confirm('Bỏ outfit khỏi ngày này?')) return;
+    setRemoving(true);
     try {
       await scheduleApi.remove(entry._id);
+      setEntryToRemove(null);
       await load();
     } catch (err) {
-      alert(getErrorMessage(err));
+      setEntryToRemove(null);
+      setToastError(getErrorMessage(err));
+    } finally {
+      setRemoving(false);
     }
   };
+  // ===== END NEW =====
 
   return (
     <ProtectedLayout fullBleed hideFooter>
@@ -224,7 +245,8 @@ export default function SchedulePage() {
                               </button>
                             )}
                             <button
-                              onClick={() => void handleRemove(entry)}
+                              // ===== NEW: Delete Confirmation Popup ===== mo popup thay vi xoa ngay
+                              onClick={() => setEntryToRemove(entry)}
                               title="Bỏ khỏi ngày này"
                               className="grid h-5 flex-1 place-items-center rounded-full border border-[#E5A99E] bg-[#FDF2F0] text-[#8C2D19] hover:bg-[#F9E1DC]"
                             >
@@ -298,6 +320,28 @@ export default function SchedulePage() {
           </div>
         )}
       </VModal>
+
+      {/* ===== NEW: Delete Confirmation Popup ===== */}
+      <DeleteConfirmModal
+        open={Boolean(entryToRemove)}
+        title="Bỏ outfit khỏi lịch?"
+        description={
+          <>
+            Bạn có chắc chắn muốn gỡ bộ trang phục
+            {entryToRemove?.outfit?.name ? <> &ldquo;{entryToRemove.outfit.name}&rdquo;</> : null}{' '}
+            khỏi ngày
+            {entryToRemove ? ` ${format(new Date(entryToRemove.date), 'dd/MM/yyyy')}` : ' đã chọn'}{' '}
+            không?
+          </>
+        }
+        confirmLabel="Gỡ khỏi lịch"
+        deleting={removing}
+        onCancel={closeRemoveConfirm}
+        onConfirm={() => entryToRemove && void handleRemove(entryToRemove)}
+      />
+
+      {/* ===== NEW: Toast thay alert() ===== */}
+      <VToast message={toastError} variant="error" duration={4000} onClose={closeToast} />
     </ProtectedLayout>
   );
 }

@@ -1,11 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorMessage } from '@/lib/api';
 import { AuthLayout, AuthField, AuthSubmitButton, AuthTabs } from '@/components/layout/AuthLayout';
+// ===== ADDED: Validation =====
+import { pickErrors, validateEmail, validatePassword } from '@/lib/authValidation';
+
+type LoginField = 'email' | 'password';
+// ===== END ADDED =====
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,10 +20,30 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // ===== ADDED: Validation =====
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<LoginField, string>>>({});
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const clearFieldError = (k: LoginField) => setFieldErrors((fe) => ({ ...fe, [k]: undefined }));
+  // ===== END ADDED =====
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // ===== ADDED: Validation =====
+    const errors = pickErrors<LoginField>({
+      email: validateEmail(email),
+      password: validatePassword(password),
+    });
+    setFieldErrors(errors);
+    const firstInvalid = Object.keys(errors)[0] as LoginField | undefined;
+    if (firstInvalid) {
+      ({ email: emailRef, password: passwordRef })[firstInvalid].current?.focus();
+      return;
+    }
+    // ===== END ADDED =====
+
     setLoading(true);
     try {
       await login(email, password);
@@ -41,22 +66,33 @@ export default function LoginPage() {
 
       <AuthTabs active="login" />
 
-      <form onSubmit={handleSubmit}>
+      {/* ADDED: Validation - noValidate de hien thong bao loi tuy bien thay cho tooltip mac dinh cua trinh duyet */}
+      <form onSubmit={handleSubmit} noValidate>
         <div className="space-y-4">
           <AuthField
+            ref={emailRef}
+            error={fieldErrors.email}
             label="Email"
             type="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              clearFieldError('email'); // ADDED: Validation
+            }}
             placeholder="ban@example.com"
           />
           <AuthField
+            ref={passwordRef}
+            error={fieldErrors.password}
             label="Mật khẩu"
             type="password"
             required
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              clearFieldError('password'); // ADDED: Validation
+            }}
             placeholder="••••••"
           />
           {/* ===== NEW: Forgot Password ===== */}

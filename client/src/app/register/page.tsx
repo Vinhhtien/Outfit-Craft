@@ -1,11 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorMessage } from '@/lib/api';
 import { AuthLayout, AuthField, AuthSubmitButton, AuthTabs } from '@/components/layout/AuthLayout';
+// ===== ADDED: Validation =====
+import {
+  pickErrors,
+  validateCity,
+  validateDisplayName,
+  validateEmail,
+  validateOtp,
+  validatePassword,
+} from '@/lib/authValidation';
+
+type RegisterField = 'displayName' | 'email' | 'password' | 'defaultCity';
+// ===== END ADDED =====
 
 /** Thoi gian cho giua 2 lan "Gui lai ma OTP". */
 const RESEND_COOLDOWN_S = 60;
@@ -30,6 +42,15 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  // ===== ADDED: Validation =====
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<RegisterField, string>>>({});
+  const [otpError, setOtpError] = useState('');
+  const displayNameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const defaultCityRef = useRef<HTMLInputElement>(null);
+  const otpRef = useRef<HTMLInputElement>(null);
+  // ===== END ADDED =====
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -37,14 +58,33 @@ export default function RegisterPage() {
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
+    setFieldErrors((fe) => ({ ...fe, [k]: undefined })); // ADDED: Validation
+  };
 
   /* ---------- Step 1: gui form dang ky -> server gui OTP ---------- */
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setInfo('');
+
+    // ===== ADDED: Validation =====
+    const errors = pickErrors<RegisterField>({
+      displayName: validateDisplayName(form.displayName),
+      email: validateEmail(form.email),
+      password: validatePassword(form.password),
+      defaultCity: validateCity(form.defaultCity),
+    });
+    setFieldErrors(errors);
+    const firstInvalid = Object.keys(errors)[0] as RegisterField | undefined;
+    if (firstInvalid) {
+      const refs = { displayName: displayNameRef, email: emailRef, password: passwordRef, defaultCity: defaultCityRef };
+      refs[firstInvalid].current?.focus();
+      return;
+    }
+    // ===== END ADDED =====
+
     setLoading(true);
     try {
       const email = await register(form);
@@ -62,10 +102,14 @@ export default function RegisterPage() {
   /* ---------- Step 2: xac thuc OTP -> tu dong dang nhap ---------- */
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.length !== 6) {
-      setError('Vui lòng nhập đủ 6 chữ số');
+    // ===== ADDED: Validation ===== (thay cho check `otp.length !== 6` cu: bat buoc dung 6 chu so)
+    const otpMsg = validateOtp(otp);
+    setOtpError(otpMsg);
+    if (otpMsg) {
+      otpRef.current?.focus();
       return;
     }
+    // ===== END ADDED =====
     setError('');
     setInfo('');
     setLoading(true);
@@ -86,6 +130,7 @@ export default function RegisterPage() {
     try {
       await register(form);
       setOtp('');
+      setOtpError(''); // ADDED: Validation
       setCooldown(RESEND_COOLDOWN_S);
       setInfo('Đã gửi mã OTP mới, vui lòng kiểm tra email.');
     } catch (err) {
@@ -98,6 +143,7 @@ export default function RegisterPage() {
   const backToForm = () => {
     setStep('form');
     setOtp('');
+    setOtpError(''); // ADDED: Validation
     setError('');
     setInfo('');
   };
@@ -113,11 +159,14 @@ export default function RegisterPage() {
           <span className="font-semibold break-all text-[#1F453E]">{pendingEmail}</span>
         </p>
 
-        <form onSubmit={handleVerify}>
+        {/* ADDED: Validation - noValidate de hien thong bao loi tuy bien */}
+        <form onSubmit={handleVerify} noValidate>
           <div className="space-y-4">
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-[#1F453E]">Mã OTP</span>
               <input
+                ref={otpRef} // ADDED: Validation
+                aria-invalid={otpError ? true : undefined} // ADDED: Validation
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
@@ -125,10 +174,22 @@ export default function RegisterPage() {
                 required
                 maxLength={6}
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => {
+                  setOtp(e.target.value.replace(/\D/g, '').slice(0, 6));
+                  setOtpError(''); // ADDED: Validation
+                }}
                 placeholder="••••••"
-                className="w-full rounded-lg border border-[#E2E8F0] bg-[#FAF9F5] px-3.5 py-3 text-center font-serif-display text-3xl tracking-[0.5em] text-[#1F453E] transition-colors placeholder:text-gray-300 focus:border-[#1F453E] focus:outline-none"
+                className={`w-full rounded-lg border ${
+                  otpError ? 'border-[#8C2D19] focus:border-[#8C2D19]' : 'border-[#E2E8F0] focus:border-[#1F453E]'
+                } bg-[#FAF9F5] px-3.5 py-3 text-center font-serif-display text-3xl tracking-[0.5em] text-[#1F453E] transition-colors placeholder:text-gray-300 focus:outline-none`}
               />
+              {/* ===== ADDED: Validation ===== */}
+              {otpError && (
+                <span role="alert" className="mt-1 block font-sans text-[11px] text-[#8C2D19]">
+                  {otpError}
+                </span>
+              )}
+              {/* ===== END ADDED ===== */}
             </label>
 
             {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
@@ -172,11 +233,29 @@ export default function RegisterPage() {
 
       <AuthTabs active="register" />
 
-      <form onSubmit={handleRegister}>
+      {/* ADDED: Validation - noValidate de hien thong bao loi tuy bien */}
+      <form onSubmit={handleRegister} noValidate>
         <div className="space-y-4">
-          <AuthField label="Tên hiển thị" required value={form.displayName} onChange={set('displayName')} />
-          <AuthField label="Email" type="email" required value={form.email} onChange={set('email')} />
           <AuthField
+            ref={displayNameRef}
+            error={fieldErrors.displayName}
+            label="Tên hiển thị"
+            required
+            value={form.displayName}
+            onChange={set('displayName')}
+          />
+          <AuthField
+            ref={emailRef}
+            error={fieldErrors.email}
+            label="Email"
+            type="email"
+            required
+            value={form.email}
+            onChange={set('email')}
+          />
+          <AuthField
+            ref={passwordRef}
+            error={fieldErrors.password}
             label="Mật khẩu"
             type="password"
             required
@@ -186,6 +265,9 @@ export default function RegisterPage() {
             placeholder="Tối thiểu 6 ký tự"
           />
           <AuthField
+            ref={defaultCityRef}
+            error={fieldErrors.defaultCity}
+            required
             label="Thành phố (cho gợi ý thời tiết)"
             value={form.defaultCity}
             onChange={set('defaultCity')}

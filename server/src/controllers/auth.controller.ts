@@ -16,16 +16,48 @@ import { REGISTRATION_OTP_MAX_ATTEMPTS } from '../models/User.js';
 import { uploadBuffer, destroyImage } from '../services/upload.service.js';
 // ===== END NEW =====
 
+// ===== ADDED: Validation =====
+// Cac schema nay chay trong middleware validate() (xem auth.routes.ts) TRUOC controller:
+// du lieu sai -> 400 Bad Request, khong query xuong DB. Giu dong bo voi client/src/lib/authValidation.ts.
+
+/** Ky tu co the dung de chen HTML/script hoac toan tu query: < > { } [ ] \ ` " $ ; */
+const DANGEROUS_CHARS = /[<>{}[\]\\`"$;]/;
+
+// .pipe(): chi kiem tra dinh dang khi da qua check "khong de trong" -> moi field chi bao 1 loi.
+const emailField = z
+  .string({ required_error: 'Email khong duoc de trong' })
+  .trim()
+  .min(1, 'Email khong duoc de trong')
+  .pipe(z.string().email('Vui long nhap email hop le'));
+
+const passwordField = z
+  .string({ required_error: 'Vui long nhap mat khau' })
+  .min(1, 'Vui long nhap mat khau')
+  .pipe(z.string().min(6, 'Mat khau phai co it nhat 6 ky tu'));
+// ===== END ADDED =====
+
 export const registerSchema = z.object({
-  email: z.string().email('Email khong hop le'),
-  password: z.string().min(6, 'Mat khau toi thieu 6 ky tu'),
-  displayName: z.string().min(2, 'Ten hien thi toi thieu 2 ky tu').max(50),
-  defaultCity: z.string().optional(),
+  // ===== ADDED: Validation =====
+  email: emailField,
+  password: passwordField,
+  displayName: z
+    .string({ required_error: 'Ten hien thi phai tu 2 den 50 ky tu' })
+    .trim()
+    .min(2, 'Ten hien thi phai tu 2 den 50 ky tu')
+    .max(50, 'Ten hien thi phai tu 2 den 50 ky tu')
+    .refine((v) => !DANGEROUS_CHARS.test(v), 'Ten hien thi khong duoc chua ky tu dac biet'),
+  defaultCity: z
+    .string({ required_error: 'Vui long nhap ten thanh pho' })
+    .trim()
+    .min(1, 'Vui long nhap ten thanh pho'),
+  // ===== END ADDED =====
 });
 
 export const loginSchema = z.object({
-  email: z.string().email('Email khong hop le'),
-  password: z.string().min(1, 'Vui long nhap mat khau'),
+  // ===== ADDED: Validation =====
+  email: emailField,
+  password: passwordField,
+  // ===== END ADDED =====
 });
 
 function signToken(payload: JwtPayload): string {
@@ -81,8 +113,11 @@ export const register = asyncHandler(async (req, res) => {
 });
 
 export const verifyRegistrationSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Email khong hop le'),
-  otp: z.string().trim().regex(/^\d{6}$/, 'Ma OTP gom 6 chu so'),
+  email: emailField.transform((v) => v.toLowerCase()), // ADDED: Validation
+  otp: z
+    .string({ required_error: 'Ma OTP phai gom 6 chu so' }) // ADDED: Validation
+    .trim()
+    .regex(/^\d{6}$/, 'Ma OTP phai gom 6 chu so'),
 });
 
 export const verifyRegistration = asyncHandler(async (req, res) => {
@@ -201,7 +236,7 @@ export const getMe = asyncHandler(async (req, res) => {
 const newPasswordField = registerSchema.shape.password;
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Email khong hop le'),
+  email: emailField.transform((v) => v.toLowerCase()), // ADDED: Validation
 });
 
 export const resetPasswordSchema = z.object({
