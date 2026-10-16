@@ -126,7 +126,7 @@ export function mergeBodyProfile(
 /** GET /api/users/me/body-profile - null neu user chua thiet lap. */
 export const getBodyProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user!.sub).select('+bodyProfile');
-  if (!user) throw ApiError.notFound('Khong tim thay nguoi dung');
+  if (!user) throw ApiError.notFound('Không tìm thấy người dùng.');
 
   res.json({ success: true, data: user.bodyProfile ?? null });
 });
@@ -134,7 +134,7 @@ export const getBodyProfile = asyncHandler(async (req, res) => {
 /** PUT /api/users/me/body-profile - gop vao ho so hien tai (xem mergeBodyProfile). */
 export const updateBodyProfile = asyncHandler(async (req, res) => {
   const existing = await User.findById(req.user!.sub).select('+bodyProfile');
-  if (!existing) throw ApiError.notFound('Khong tim thay nguoi dung');
+  if (!existing) throw ApiError.notFound('Không tìm thấy người dùng.');
 
   // toObject() khong qua transform cua toJSON (transform do xoa bodyProfile).
   const current = existing.toObject().bodyProfile as Partial<BodyProfile> | undefined;
@@ -145,16 +145,16 @@ export const updateBodyProfile = asyncHandler(async (req, res) => {
     { $set: { bodyProfile: merged } },
     { new: true, runValidators: true }
   ).select('+bodyProfile');
-  if (!user) throw ApiError.notFound('Khong tim thay nguoi dung');
+  if (!user) throw ApiError.notFound('Không tìm thấy người dùng.');
 
-  res.json({ success: true, message: 'Da luu dang nguoi', data: user.bodyProfile ?? null });
+  res.json({ success: true, message: 'Đã lưu dáng người.', data: user.bodyProfile ?? null });
 });
 
 /** DELETE /api/users/me/body-profile - xoa toan bo du lieu dang nguoi. */
 export const deleteBodyProfile = asyncHandler(async (req, res) => {
   const user = await User.findByIdAndUpdate(req.user!.sub, { $unset: { bodyProfile: 1 } });
-  if (!user) throw ApiError.notFound('Khong tim thay nguoi dung');
+  if (!user) throw ApiError.notFound('Không tìm thấy người dùng.');
 
-  res.json({ success: true, message: 'Da xoa du lieu dang nguoi' });
+  res.json({ success: true, message: 'Đã xóa dữ liệu dáng người.' });
 });
 // ===== END NEW =====

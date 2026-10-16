@@ -4,15 +4,21 @@ import { ClothingItem } from '../models/ClothingItem.js';
 import { Outfit } from '../models/Outfit.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { uploadBuffer, destroyImage } from '../services/upload.service.js';
+import { uploadBuffer, destroyImage, saveWithImages, queueImageCleanup } from '../services/upload.service.js';
+import { ownsImage, ownedImageIdFromUrl, validateImageBuffer } from '../utils/imageValidation.js';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
 import { CATEGORIES, STYLES, SEASONS, OCCASIONS } from '../types/index.js';
 
 export const createItemSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string().trim().min(1).max(100),
   category: z.enum(CATEGORIES),
   originalImageUrl: z.string().url(),
   imageUrl: z.string().url(),
   imagePublicId: z.string().optional(),
+  originalImagePublicId: z.string().optional(),
+  imageReceipt: z.string().optional(),
+  originalImageReceipt: z.string().optional(),
   colors: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).default([]),
   styles: z.array(z.enum(STYLES)).default([]),
   seasons: z.array(z.enum(SEASONS)).default([]),
@@ -71,7 +77,7 @@ export const saveFitSchema = z
  * Tra ve URL de buoc sau goi POST /api/items luu metadata.
  */
 export const uploadImage = asyncHandler(async (req, res) => {
-  if (!req.file) throw ApiError.badRequest('Chua chon file anh');
+  if (!req.file) throw ApiError.badRequest('Vui lòng chọn ảnh.');
 
   // removeBackground=true -> nho Cloudinary tach nen (can add-on).
   // Mac dinh false vi luong chinh la tach nen o client.
@@ -83,7 +89,8 @@ export const uploadImage = asyncHandler(async (req, res) => {
     { removeBackground }
   );
 
-  res.status(201).json({ success: true, data: result });
+  const receipt = jwt.sign({ ...result, owner: req.user!.sub, purpose: 'item-upload' }, env.jwtSecret, { expiresIn: '1h' });
+  res.status(201).json({ success: true, data: { ...result, receipt } });
 });
 
 /** GET /api/items?category=top&style=casual&season=summer&q=... */
@@ -123,20 +130,60 @@ export const getItem = asyncHandler(async (req, res) => {
     _id: req.params.id,
     owner: req.user!.sub,
   });
-  if (!item) throw ApiError.notFound('Khong tim thay mon do');
+  if (!item) throw ApiError.notFound('Không tìm thấy món đồ.');
   res.json({ success: true, data: item });
 });
 
 export const createItem = asyncHandler(async (req, res) => {
-  const item = await ClothingItem.create({ ...req.body, owner: req.user!.sub });
+  const { imageReceipt, originalImageReceipt, ...body } = req.body;
+  // Legacy two-step API accepts only server-issued uploads belonging to this user.
+  for (const [receipt, url, publicId] of [[imageReceipt, body.imageUrl, body.imagePublicId], [originalImageReceipt, body.originalImageUrl, body.originalImagePublicId]]) {
+    try {
+      const data = jwt.verify(receipt, env.jwtSecret) as jwt.JwtPayload;
+      if (data.owner !== req.user!.sub || data.purpose !== 'item-upload' || data.url !== url || data.publicId !== publicId) throw new Error();
+    } catch { throw ApiError.badRequest('Ảnh tải lên không hợp lệ hoặc đã hết hạn. Vui lòng tải lại ảnh.'); }
+  }
+  const item = await ClothingItem.create({ ...body, owner: req.user!.sub });
   res.status(201).json({ success: true, data: item });
+});
+
+const itemMetadataSchema = createItemSchema.omit({ imageUrl: true, originalImageUrl: true, imagePublicId: true, originalImagePublicId: true, imageReceipt: true, originalImageReceipt: true }).strict();
+export const createItemWithImages = asyncHandler(async (req, res) => {
+  const owner = req.user!.sub;
+  const creationKey = z.string().uuid().parse(req.body.creationKey);
+  const existing = await ClothingItem.findOne({ owner, creationKey });
+  if (existing) { res.json({ success: true, data: existing }); return; }
+  let metadata: unknown;
+  try { metadata = JSON.parse(req.body.metadata); }
+  catch { throw ApiError.badRequest('Thông tin món đồ không đúng định dạng.'); }
+  const body = itemMetadataSchema.parse(metadata);
+  const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+  const image = files?.image?.[0];
+  const original = files?.original?.[0];
+  if (!image || !original) throw ApiError.badRequest('Vui lòng chọn đủ ảnh gốc và ảnh đã tách nền.');
+  validateImageBuffer(image.buffer);
+  validateImageBuffer(original.buffer);
+  try {
+    const item = await saveWithImages([
+      () => uploadBuffer(image.buffer, `outfitcraft/${owner}/items`),
+      () => uploadBuffer(original.buffer, `outfitcraft/${owner}/items`),
+    ], ([cutout, source]) => ClothingItem.create({ ...body, owner, creationKey, imageUrl: cutout.url, imagePublicId: cutout.publicId, originalImageUrl: source.url, originalImagePublicId: source.publicId }));
+    res.status(201).json({ success: true, data: item });
+  } catch (error) {
+    // Concurrent retries race on a unique key; only the winning record is returned.
+    if ((error as { code?: number }).code === 11000) {
+      const saved = await ClothingItem.findOne({ owner, creationKey });
+      if (saved) { res.json({ success: true, data: saved }); return; }
+    }
+    throw error;
+  }
 });
 
 // ===== NEW: Xem/Sua Item =====
 /** PATCH /api/items/:id - body da qua updateItemSchema nen chi con field metadata. */
 export const updateItem = asyncHandler(async (req, res) => {
   if (Object.keys(req.body).length === 0) {
-    throw ApiError.badRequest('Khong co thong tin nao de cap nhat');
+    throw ApiError.badRequest('Không có thông tin nào để cập nhật.');
   }
 
   const item = await ClothingItem.findOneAndUpdate(
@@ -145,7 +192,7 @@ export const updateItem = asyncHandler(async (req, res) => {
     { new: true, runValidators: true }
   );
   // ===== END NEW =====
-  if (!item) throw ApiError.notFound('Khong tim thay mon do');
+  if (!item) throw ApiError.notFound('Không tìm thấy món đồ.');
   res.json({ success: true, data: item });
 });
 
@@ -157,7 +204,7 @@ export const saveFit = asyncHandler(async (req, res) => {
     { $set: { fit: req.body.fit } },
     { new: true, runValidators: true }
   );
-  if (!item) throw ApiError.notFound('Khong tim thay mon do');
+  if (!item) throw ApiError.notFound('Không tìm thấy món đồ.');
   res.json({ success: true, data: item });
 });
 // ===== END NEW =====
@@ -172,7 +219,7 @@ export const deleteItem = asyncHandler(async (req, res) => {
     _id: req.params.id,
     owner: req.user!.sub,
   });
-  if (!item) throw ApiError.notFound('Khong tim thay mon do');
+  if (!item) throw ApiError.notFound('Không tìm thấy món đồ.');
 
   const usedCount = await Outfit.countDocuments({ 'items.item': item._id });
   if (usedCount > 0) {
@@ -180,14 +227,17 @@ export const deleteItem = asyncHandler(async (req, res) => {
     await item.save();
     return res.json({
       success: true,
-      message: `Mon do dang duoc dung trong ${usedCount} outfit nen da chuyen vao kho luu tru thay vi xoa han`,
+      message: `Món đồ đang được dùng trong ${usedCount} outfit nên đã chuyển vào kho lưu trữ thay vì xóa hẳn.`,
       data: item,
     });
   }
 
-  await destroyImage(item.imagePublicId);
+  const imageIds = [item.imagePublicId, item.originalImagePublicId ?? ownedImageIdFromUrl(item.originalImageUrl, req.user!.sub, env.cloudinary.cloudName)]
+    .filter((id) => ownsImage(id, req.user!.sub));
+  await queueImageCleanup(imageIds);
   await item.deleteOne();
-  res.json({ success: true, message: 'Da xoa mon do' });
+  await Promise.all(imageIds.map((id) => destroyImage(id)));
+  res.json({ success: true, message: 'Đã xóa món đồ.' });
 });
 
 /** GET /api/items/stats - so lieu cho dashboard. */

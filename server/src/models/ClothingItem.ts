@@ -33,6 +33,8 @@ export interface IClothingItem extends Document {
   imageUrl: string;
   /** public_id cua Cloudinary, can de xoa file khi delete item. */
   imagePublicId?: string;
+  originalImagePublicId?: string;
+  creationKey?: string;
   /**
    * Mau chu dao, hex. Phan tu [0] la mau chinh.
    * Dung cho filter theo mau va thuat toan phoi mau o buoc Suggest.
@@ -62,6 +64,8 @@ const clothingItemSchema = new Schema<IClothingItem>(
     originalImageUrl: { type: String, required: true },
     imageUrl: { type: String, required: true },
     imagePublicId: { type: String },
+    originalImagePublicId: { type: String },
+    creationKey: { type: String, select: false },
     colors: {
       type: [String],
       default: [],
@@ -104,6 +108,7 @@ const clothingItemSchema = new Schema<IClothingItem>(
 
 // Truy van chinh cua man Wardrobe: loc theo chu so huu + danh muc.
 clothingItemSchema.index({ owner: 1, category: 1, isArchived: 1 });
+clothingItemSchema.index({ owner: 1, creationKey: 1 }, { unique: true, partialFilterExpression: { creationKey: { $type: 'string' } } });
 // Ho tro o tim kiem theo ten/brand.
 clothingItemSchema.index({ name: 'text', brand: 'text' });
 

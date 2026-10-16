@@ -1,6 +1,7 @@
 'use client';
 
 import { Trash2, Plus } from 'lucide-react';
+import { CloudImage } from '@/components/ui/CloudImage';
 import { CATEGORY_LABELS } from '@/types';
 import type { ClothingItem } from '@/types';
 
@@ -40,8 +41,7 @@ export function ItemCard({
       }`}
     >
       <div className="grid aspect-square place-items-center rounded-lg bg-[#F8F9F5] p-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <CloudImage
           src={item.imageUrl}
           alt={item.name}
           loading="lazy"
@@ -75,7 +75,7 @@ export function ItemCard({
       </div>
 
       {/* Nut hanh dong chi hien khi hover */}
-      <div className="absolute right-5 top-5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="absolute right-5 top-5 flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
         {onAdd && (
           <button
             onClick={(e) => {

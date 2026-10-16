@@ -3,8 +3,9 @@
 // ===== NEW: Body Profile =====
 // Phan "Dang nguoi" trong trang Ho so.
 // Bang chinh thong so (BodyControlsPanel) + bong nguoi SVG xem truoc (MannequinPreview).
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Lock, Trash2 } from 'lucide-react';
+import { ErrorState } from '@/components/ui/AsyncState';
 import { bodyProfileApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import { MannequinPreview } from '@/components/profile/MannequinPreview';
@@ -29,24 +30,31 @@ export function BodyProfileSection({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const mutation = useRef(false);
+  const request = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const profile = await bodyProfileApi.get();
-        setSaved(profile);
-        setBody(bodyStateFromProfile(profile));
-      } catch (err) {
-        setError(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const load = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController(); request.current = controller;
+    setLoading(true); setLoadError('');
+    try {
+      const profile = await bodyProfileApi.get(controller.signal);
+      if (!controller.signal.aborted) { setSaved(profile); setBody(bodyStateFromProfile(profile)); }
+    } catch (err) { if (!controller.signal.aborted) setLoadError(getErrorMessage(err)); }
+    finally { if (!controller.signal.aborted) setLoading(false); }
   }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    return () => request.current?.abort();
+  }, [load]);
 
   const mannequin = useMemo(() => bodyStateToMannequin(body), [body]);
 
   const handleSave = async () => {
+    if (mutation.current || loading || loadError) return;
+    mutation.current = true;
     setError('');
     setSaving(true);
     try {
@@ -58,11 +66,15 @@ export function BodyProfileSection({
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
+      mutation.current = false;
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
+    if (mutation.current) return;
+    mutation.current = true;
+    setError('');
     setDeleting(true);
     try {
       await bodyProfileApi.remove();
@@ -73,6 +85,7 @@ export function BodyProfileSection({
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
+      mutation.current = false;
       setDeleting(false);
     }
   };
@@ -93,13 +106,13 @@ export function BodyProfileSection({
         <div className="grid h-40 place-items-center">
           <VSpinner />
         </div>
-      ) : (
+      ) : loadError ? <ErrorState message={loadError} onRetry={() => void load()} /> : (
         <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="min-w-0">
             <BodyControlsPanel
               value={body}
               onChange={setBody}
-              disabled={saving}
+              disabled={saving || deleting}
               footer={
                 <>
                   {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
@@ -134,13 +147,14 @@ export function BodyProfileSection({
         </div>
       )}
 
-      <VModal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Xóa dữ liệu dáng người?">
+      <VModal open={confirmOpen} onClose={() => setConfirmOpen(false)} busy={deleting} title="Xóa dữ liệu dáng người?">
+        {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <p className="mb-5 text-sm text-[#2C4C45]">
           Giới tính, dáng, cân nặng và toàn bộ số đo sẽ bị xóa khỏi tài khoản. Người mẫu sẽ dùng lại dáng mặc định.
           Các outfit đã lưu không bị ảnh hưởng.
         </p>
         <div className="flex gap-2">
-          <VButton variant="outline" onClick={() => setConfirmOpen(false)} className="flex-1">
+          <VButton variant="outline" disabled={deleting} onClick={() => setConfirmOpen(false)} className="flex-1">
             Hủy
           </VButton>
           <VButton onClick={handleDelete} loading={deleting} className="flex-1 !border-[#8C2D19] !bg-[#8C2D19]">

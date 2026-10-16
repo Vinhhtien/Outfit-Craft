@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
+import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import { Navbar } from './Navbar';
 
 /**
@@ -19,21 +20,22 @@ export function ProtectedLayout({
   fullBleed?: boolean;
   hideFooter?: boolean;
 }) {
-  const { user, isLoading } = useAuthStore();
+  const { user, isLoading, hydrateError, hydrate } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && !user) router.replace('/login');
-  }, [isLoading, user, router]);
+    if (!isLoading && !hydrateError && !user) router.replace('/login');
+  }, [isLoading, hydrateError, user, router]);
 
   if (isLoading) {
     return (
       <div className="grid min-h-screen place-items-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
+        <LoadingState label="Đang khôi phục phiên đăng nhập…" />
       </div>
     );
   }
 
+  if (hydrateError) return <main className="mx-auto max-w-xl p-8"><ErrorState message={hydrateError} onRetry={() => void hydrate()} /></main>;
   if (!user) return null;
 
   return (

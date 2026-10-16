@@ -143,6 +143,7 @@ const userSchema = new Schema<IUser>(
   },
   {
     timestamps: true,
+    optimisticConcurrency: true,
     // ===== NEW: Body Profile =====
     // Lop bao ve thu 2: du lo select('+bodyProfile') o dau do, res.json(user) van khong lo ra.
     toJSON: {

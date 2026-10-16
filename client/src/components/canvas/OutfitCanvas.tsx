@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
+import { ErrorState } from '@/components/ui/AsyncState';
 import type { Canvas } from 'fabric';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, addItemToCanvas, applyCategoryOrder,
@@ -94,6 +95,7 @@ export const OutfitCanvas = forwardRef<
   const elRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<Canvas | null>(null);
   const [ready, setReady] = useState(false);
+  const [initializationError, setInitializationError] = useState('');
 
   // ===== NEW: Body Profile =====
   // Trang thai hien tai cua lop mannequin tren canvas (doc trong event handler cua Fabric).
@@ -177,7 +179,7 @@ export const OutfitCanvas = forwardRef<
         onDirty?.();
       });
       // ===== END NEW =====
-    })();
+    })().catch(() => { if (!disposed) setInitializationError('Không thể khởi tạo khung phối đồ. Vui lòng tải lại trang.'); });
 
     return () => {
       disposed = true;
@@ -347,7 +349,8 @@ export const OutfitCanvas = forwardRef<
       >
         <canvas ref={elRef} />
       </div>
-      {!ready && (
+      {initializationError && <div className="absolute inset-0 grid place-items-center bg-white p-4"><ErrorState message={initializationError} onRetry={() => window.location.reload()} /></div>}
+      {!ready && !initializationError && (
         <div className="absolute inset-0 grid place-items-center bg-white/60">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#1F453E] border-t-transparent" />
         </div>

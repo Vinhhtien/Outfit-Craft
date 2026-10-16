@@ -1,3 +1,4 @@
+import type { AxiosProgressEvent } from 'axios';
 import { api } from './api';
 import type {
   ApiResponse, ClothingItem, Outfit, Weather, Suggestion,
@@ -51,6 +52,7 @@ export const authApi = {
     api
       .put<ApiResponse<User>>('/auth/profile', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 150000,
       })
       .then((r) => r.data.data),
   // ===== END NEW =====
@@ -78,6 +80,16 @@ export type UpdateItemPayload = Partial<
 // ===== END NEW =====
 
 export const itemApi = {
+  createWithImages: (metadata: Partial<ClothingItem>, image: Blob, original: Blob, creationKey: string, onUploadProgress?: (event: AxiosProgressEvent) => void) => {
+    const body = new FormData();
+    body.append('metadata', JSON.stringify(metadata));
+    body.append('creationKey', creationKey);
+    body.append('image', image, 'cutout.png');
+    body.append('original', original, original.type === 'image/png' ? 'original.png' : 'original.jpg');
+    return api.post<ApiResponse<ClothingItem>>('/items/with-images', body, {
+      headers: { 'Content-Type': 'multipart/form-data' }, timeout: 150000, onUploadProgress,
+    }).then((response) => response.data.data);
+  },
   /** Day file len Cloudinary, tra ve { url, publicId }. */
   upload: (file: Blob, filename = 'item.png') => {
     const form = new FormData();
@@ -85,14 +97,15 @@ export const itemApi = {
     return api
       .post<ApiResponse<{ url: string; publicId: string }>>('/items/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 150000,
       })
       .then((r) => r.data.data);
   },
 
-  list: (filters: ItemFilters = {}) =>
-    api.get<ApiResponse<ClothingItem[]>>('/items', { params: filters }).then((r) => r.data),
+  list: (filters: ItemFilters = {}, signal?: AbortSignal) =>
+    api.get<ApiResponse<ClothingItem[]>>('/items', { params: filters, signal }).then((r) => r.data),
 
-  get: (id: string) => api.get<ApiResponse<ClothingItem>>(`/items/${id}`).then((r) => r.data.data),
+  get: (id: string, signal?: AbortSignal) => api.get<ApiResponse<ClothingItem>>(`/items/${id}`, { signal }).then((r) => r.data.data),
 
   create: (body: Partial<ClothingItem>) =>
     api.post<ApiResponse<ClothingItem>>('/items', body).then((r) => r.data.data),
@@ -117,6 +130,7 @@ export const itemApi = {
 
 /* ---------------- Outfits ---------------- */
 export interface SaveOutfitBody {
+  creationKey?: string;
   name: string;
   items: {
     item: string; left: number; top: number;
@@ -138,16 +152,16 @@ export interface SaveOutfitBody {
 }
 
 export const outfitApi = {
-  list: (params: { page?: number; season?: string; occasion?: string } = {}) =>
-    api.get<ApiResponse<Outfit[]>>('/outfits', { params }).then((r) => r.data),
+  list: (params: { page?: number; season?: string; occasion?: string } = {}, signal?: AbortSignal) =>
+    api.get<ApiResponse<Outfit[]>>('/outfits', { params, signal }).then((r) => r.data),
 
-  get: (id: string) => api.get<ApiResponse<Outfit>>(`/outfits/${id}`).then((r) => r.data.data),
+  get: (id: string, signal?: AbortSignal) => api.get<ApiResponse<Outfit>>(`/outfits/${id}`, { signal }).then((r) => r.data.data),
 
   create: (body: SaveOutfitBody) =>
-    api.post<ApiResponse<Outfit>>('/outfits', body).then((r) => r.data.data),
+    api.post<ApiResponse<Outfit>>('/outfits', body, { timeout: 150000 }).then((r) => r.data.data),
 
   update: (id: string, body: Partial<SaveOutfitBody>) =>
-    api.patch<ApiResponse<Outfit>>(`/outfits/${id}`, body).then((r) => r.data.data),
+    api.patch<ApiResponse<Outfit>>(`/outfits/${id}`, body, { timeout: 150000 }).then((r) => r.data.data),
 
   remove: (id: string) => api.delete<ApiResponse<null>>(`/outfits/${id}`).then((r) => r.data),
 
@@ -161,8 +175,8 @@ export const outfitApi = {
 /* ---------------- Body Profile ---------------- */
 export const bodyProfileApi = {
   /** null neu user chua thiet lap dang nguoi. */
-  get: () =>
-    api.get<ApiResponse<BodyProfile | null>>('/users/me/body-profile').then((r) => r.data.data),
+  get: (signal?: AbortSignal) =>
+    api.get<ApiResponse<BodyProfile | null>>('/users/me/body-profile', { signal }).then((r) => r.data.data),
 
   /** PUT gop vao ho so: field khong gui thi server giu nguyen. */
   save: (body: Partial<Omit<BodyProfile, 'updatedAt'>>) =>
@@ -177,10 +191,10 @@ export const suggestionApi = {
   weather: (city?: string) =>
     api.get<ApiResponse<Weather>>('/suggestions/weather', { params: { city } }).then((r) => r.data.data),
 
-  get: (params: { city?: string; occasion?: Occasion } = {}) =>
+  get: (params: { city?: string; occasion?: Occasion } = {}, signal?: AbortSignal) =>
     api.get<ApiResponse<{
       weather: Weather; suggestion: Suggestion; advice: string; adviceSource: 'ai' | 'rule';
-    }>>('/suggestions', { params }).then((r) => r.data.data),
+    }>>('/suggestions', { params, signal, timeout: 45000 }).then((r) => r.data.data),
 
   ranked: (params: { city?: string; occasion?: Occasion; category?: Category } = {}) =>
     api.get<ApiResponse<{
@@ -191,8 +205,8 @@ export const suggestionApi = {
 
 /* ---------------- Schedule ---------------- */
 export const scheduleApi = {
-  list: (from?: string, to?: string) =>
-    api.get<ApiResponse<ScheduleEntry[]>>('/schedule', { params: { from, to } }).then((r) => r.data.data),
+  list: (from?: string, to?: string, signal?: AbortSignal) =>
+    api.get<ApiResponse<ScheduleEntry[]>>('/schedule', { params: { from, to }, signal }).then((r) => r.data.data),
 
   set: (body: { outfit: string; date: string; note?: string }) =>
     api.post<ApiResponse<ScheduleEntry>>('/schedule', body).then((r) => r.data.data),

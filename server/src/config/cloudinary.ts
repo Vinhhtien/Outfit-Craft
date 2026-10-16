@@ -7,6 +7,7 @@ if (isCloudinaryConfigured()) {
     api_key: env.cloudinary.apiKey,
     api_secret: env.cloudinary.apiSecret,
     secure: true,
+    timeout: 60000,
   });
 }
 

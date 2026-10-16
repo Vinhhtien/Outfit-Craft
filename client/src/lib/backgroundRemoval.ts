@@ -40,6 +40,7 @@ export function resizeImage(
       URL.revokeObjectURL(url);
 
       let { width, height } = img;
+      if (!width || !height || width * height > 40000000) return reject(new Error('Ảnh có độ phân giải quá lớn. Vui lòng chọn ảnh dưới 40 megapixel.'));
       if (width > maxSize || height > maxSize) {
         const ratio = Math.min(maxSize / width, maxSize / height);
         width = Math.round(width * ratio);
@@ -55,7 +56,7 @@ export function resizeImage(
       ctx.drawImage(img, 0, 0, width, height);
       canvas.toBlob(
         (blob) => (blob ? resolve(blob) : reject(new Error('Không xử lý được ảnh'))),
-        'image/jpeg',
+        file.type === 'image/png' ? 'image/png' : 'image/jpeg',
         0.92
       );
     };

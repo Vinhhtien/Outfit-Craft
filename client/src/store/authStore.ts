@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { tokenStore } from '@/lib/api';
+import { tokenStore, getErrorMessage } from '@/lib/api';
 import { authApi } from '@/lib/services';
 import type { User } from '@/types';
 
@@ -9,6 +9,9 @@ interface AuthState {
   user: User | null;
   /** true khi dang kiem tra token luc tai trang - tranh nhay man hinh login. */
   isLoading: boolean;
+  hydrateError: string;
+  sessionExpired: boolean;
+  expireSession: () => void;
   login: (email: string, password: string) => Promise<void>;
   // ===== NEW: Register OTP =====
   /** Gui form dang ky -> server gui OTP ve email. Tra ve email da chuan hoa de dung o buoc xac thuc. */
@@ -30,11 +33,14 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoading: true,
+  hydrateError: '',
+  sessionExpired: false,
+  expireSession: () => set({ sessionExpired: true }),
 
   login: async (email, password) => {
     const { token, user } = await authApi.login({ email, password });
     tokenStore.set(token);
-    set({ user });
+    set({ user, sessionExpired: false, hydrateError: '', isLoading: false });
   },
 
   // ===== NEW: Register OTP =====
@@ -46,28 +52,34 @@ export const useAuthStore = create<AuthState>((set) => ({
   verifyRegistration: async (email, otp) => {
     const { token, user } = await authApi.verifyRegistration(email, otp);
     tokenStore.set(token);
-    set({ user });
+    set({ user, sessionExpired: false, hydrateError: '', isLoading: false });
   },
   // ===== END NEW =====
 
   logout: () => {
     tokenStore.clear();
-    set({ user: null });
+    set({ user: null, sessionExpired: false, hydrateError: '', isLoading: false });
   },
 
   hydrate: async () => {
+    set({ isLoading: true, hydrateError: '' });
+    const token = tokenStore.get();
     if (!tokenStore.get()) {
       set({ isLoading: false });
       return;
     }
     try {
       const raw = await authApi.me();
+      if (tokenStore.get() !== token) return;
       // Server tra ve document Mongo (_id), chuan hoa ve shape User cua client.
       const u = raw as unknown as User & { _id?: string };
       set({ user: { ...u, id: u.id ?? u._id ?? '' }, isLoading: false });
-    } catch {
-      tokenStore.clear();
-      set({ user: null, isLoading: false });
+    } catch (error) {
+      if (tokenStore.get() !== token) {
+        set({ isLoading: false });
+        return;
+      }
+      set({ hydrateError: getErrorMessage(error), isLoading: false });
     }
   },
 

@@ -39,3 +39,7 @@ coverage/
 # Misc
 *.tsbuildinfo
 next-env.d.ts
+
+# Browser QA output
+playwright-report/
+test-results/
