@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, Wand2, X } from 'lucide-react';
 import { VButton, VInput, VSelect, VChip, VModal, VLabel } from '@/components/ui/vintage';
 import { removeBackground, resizeImage } from '@/lib/backgroundRemoval';
 import { extractColors } from '@/lib/colorExtract';
 import { itemApi } from '@/lib/services';
-import { getErrorMessage } from '@/lib/api';
+import { getErrorMessage, getFieldErrors } from '@/lib/api';
 import {
   CATEGORIES, CATEGORY_LABELS, STYLES, SEASONS, SEASON_LABELS,
   OCCASIONS, OCCASION_LABELS,
@@ -40,6 +40,11 @@ export function AddItemModal({
   onCreated: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const operation = useRef(0);
+  const savingRef = useRef(false);
+  const creationKey = useRef('');
+  const [saveStage, setSaveStage] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [step, setStep] = useState<Step>('pick');
   const [progress, setProgress] = useState({ value: 0, stage: '' });
@@ -61,7 +66,15 @@ export function AddItemModal({
     brand: '',
   });
 
+  useEffect(() => () => { operation.current++; }, []);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
   const reset = () => {
+    if (savingRef.current) return;
+    operation.current++;
+    creationKey.current = '';
+    setFieldErrors({});
+    setSaveStage('');
     setStep('pick');
     setProgress({ value: 0, stage: '' });
     setError('');
@@ -75,22 +88,31 @@ export function AddItemModal({
   };
 
   const handleClose = () => {
+    if (savingRef.current) return;
     reset();
     onClose();
   };
 
   /** Chon file -> thu nho -> tach nen -> lay mau chu dao. */
   const handleFile = async (file: File) => {
+    if (savingRef.current) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setError('Chỉ chấp nhận ảnh JPEG, PNG hoặc WebP.'); return; }
+    if (!file.size || file.size > 10 * 1024 * 1024) { setError('Ảnh phải có dung lượng từ 1 byte đến 10 MB.'); return; }
+    const current = ++operation.current;
+    creationKey.current = crypto.randomUUID();
     setError('');
+    setProgress({ value: 0, stage: 'Đang chuẩn bị ảnh' });
     setStep('processing');
 
     try {
       const resized = await resizeImage(file, 1024);
+      if (current !== operation.current) return;
       setOriginalFile(resized);
 
       const cutout = await removeBackground(resized, {
-        onProgress: (value, stage) => setProgress({ value, stage }),
+        onProgress: (value, stage) => { if (current === operation.current) setProgress({ value, stage }); },
       });
+      if (current !== operation.current) return;
       setCutoutBlob(cutout);
 
       const url = URL.createObjectURL(cutout);
@@ -98,6 +120,7 @@ export function AddItemModal({
 
       // Tu dong dien mau chu dao va ten goi y.
       const colors = await extractColors(cutout, 3);
+      if (current !== operation.current) return;
       setForm((f) => ({
         ...f,
         colors,
@@ -106,6 +129,7 @@ export function AddItemModal({
 
       setStep('form');
     } catch (err) {
+      if (current !== operation.current) return;
       setError(getErrorMessage(err));
       setStep('pick');
     }
@@ -113,41 +137,37 @@ export function AddItemModal({
 
   /** Upload ca 2 anh len Cloudinary roi luu metadata. */
   const handleSave = async () => {
-    if (!cutoutBlob || !originalFile) return;
+    if (!cutoutBlob || !originalFile || savingRef.current) return;
+    if (!form.name.trim() || form.name.trim().length > 100) { setFieldErrors({ name: 'Tên món đồ cần từ 1 đến 100 ký tự.' }); return; }
+    savingRef.current = true;
     setSaving(true);
     setError('');
-
+    setFieldErrors({});
+    setSaveStage('Đang tải ảnh…');
     try {
-      const [cutoutUp, originalUp] = await Promise.all([
-        itemApi.upload(cutoutBlob, 'cutout.png'),
-        itemApi.upload(originalFile, 'original.jpg'),
-      ]);
-
-      await itemApi.create({
-        name: form.name.trim(),
-        category: form.category,
-        imageUrl: cutoutUp.url,
-        imagePublicId: cutoutUp.publicId,
-        originalImageUrl: originalUp.url,
-        colors: form.colors,
-        styles: form.styles,
-        seasons: form.seasons,
-        occasions: form.occasions,
-        tempRange: DEFAULT_TEMP[form.category],
-        brand: form.brand.trim() || undefined,
+      await itemApi.createWithImages({
+        name: form.name.trim(), category: form.category, colors: form.colors,
+        styles: form.styles, seasons: form.seasons, occasions: form.occasions,
+        tempRange: DEFAULT_TEMP[form.category], brand: form.brand.trim() || undefined,
+      }, cutoutBlob, originalFile, creationKey.current, (event) => {
+        const percent = event.total ? Math.min(100, Math.round(event.loaded / event.total * 100)) : null;
+        setSaveStage(percent === 100 ? 'Đang lưu ảnh và món đồ…' : `Đang tải ảnh${percent === null ? '…' : ` ${percent}%…`}`);
       });
-
+      savingRef.current = false;
       onCreated();
       handleClose();
     } catch (err) {
+      setFieldErrors(getFieldErrors(err));
       setError(getErrorMessage(err));
     } finally {
+      savingRef.current = false;
       setSaving(false);
+      setSaveStage('');
     }
   };
 
   return (
-    <VModal open={open} onClose={handleClose} title="Thêm món đồ mới" wide>
+    <VModal open={open} onClose={handleClose} title="Thêm món đồ mới" wide busy={saving}>
       {step === 'pick' && (
         <div>
           <button
@@ -208,21 +228,26 @@ export function AddItemModal({
             </div>
             <button
               onClick={reset}
+              disabled={saving}
               className="mt-2 flex w-full items-center justify-center gap-1 text-xs text-[#6B7B76] hover:text-red-500"
             >
               <X size={12} /> Chọn ảnh khác
             </button>
           </div>
 
-          <div className="space-y-3">
+          <fieldset disabled={saving} className="space-y-3">
             <VInput
               label="Tên món đồ"
               required
+              maxLength={100}
+              aria-invalid={Boolean(fieldErrors.name)}
+              aria-describedby={fieldErrors.name ? 'item-name-error' : undefined}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="Áo sơ mi trắng"
             />
 
+            {fieldErrors.name && <p id="item-name-error" role="alert" className="text-sm text-red-700">{fieldErrors.name}</p>}
             <VSelect
               label="Danh mục"
               value={form.category}
@@ -304,6 +329,7 @@ export function AddItemModal({
               <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
             )}
 
+            {saving && <p role="status" aria-live="polite" className="text-sm text-[#52665F]">{saveStage}</p>}
             <div className="flex gap-2 pt-1">
               <VButton variant="outline" onClick={handleClose} className="flex-1">
                 Hủy
@@ -314,10 +340,10 @@ export function AddItemModal({
                 disabled={!form.name.trim()}
                 className="flex-1"
               >
-                Lưu vào tủ
+                {saving ? saveStage : 'Lưu vào tủ'}
               </VButton>
             </div>
-          </div>
+          </fieldset>
         </div>
       )}
     </VModal>

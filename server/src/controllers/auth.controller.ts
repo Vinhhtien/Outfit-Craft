@@ -13,7 +13,7 @@ import { sendEmail } from '../utils/sendEmail.js';
 import { REGISTRATION_OTP_MAX_ATTEMPTS } from '../models/User.js';
 // ===== END NEW =====
 // ===== NEW: Update Profile =====
-import { uploadBuffer, destroyImage } from '../services/upload.service.js';
+import { uploadBuffer, destroyImage, queueImageCleanup } from '../services/upload.service.js';
 // ===== END NEW =====
 
 // ===== ADDED: Validation =====
@@ -76,7 +76,7 @@ export const register = asyncHandler(async (req, res) => {
   let user = await User.findOne({ email, isVerified: false });
   if (!user) {
     if (await User.exists({ email })) {
-      throw ApiError.conflict('Email nay da duoc dang ky');
+      throw ApiError.conflict('Email này đã được đăng ký.');
     }
     user = new User({ email, isVerified: false });
   }
@@ -102,12 +102,12 @@ export const register = asyncHandler(async (req, res) => {
   } catch (err) {
     // Tai khoan van o trang thai cho xac thuc -> user bam dang ky lai la duoc gui ma moi.
     console.error('[register] Gui email OTP that bai:', err);
-    throw new ApiError(500, 'Khong the gui email xac nhan luc nay, vui long thu lai sau');
+    throw new ApiError(500, 'Không thể gửi email xác nhận lúc này. Vui lòng thử lại sau.');
   }
 
   res.status(201).json({
     success: true,
-    message: 'Ma OTP da duoc gui den email cua ban',
+    message: 'Mã OTP đã được gửi đến email của bạn.',
     data: { email: user.email },
   });
 });
@@ -141,18 +141,18 @@ export const verifyRegistration = asyncHandler(async (req, res) => {
       '+registrationOtp +registrationOtpExpire +registrationOtpAttempts'
     );
     if (current?.registrationOtp && current.registrationOtpExpire && current.registrationOtpExpire <= new Date()) {
-      throw new ApiError(410, 'Ma OTP da het han, vui long gui lai ma moi');
+      throw new ApiError(410, 'Mã OTP đã hết hạn. Vui lòng gửi lại mã mới.');
     }
     if (current?.registrationOtp) {
-      throw new ApiError(429, 'Ban da nhap sai qua nhieu lan, vui long gui lai ma moi');
+      throw new ApiError(429, 'Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã mới.');
     }
     // Khong ton tai / da xac thuc roi: khong tiet lo chi tiet.
-    throw ApiError.badRequest('Ma OTP khong hop le, vui long dang ky lai');
+    throw ApiError.badRequest('Mã OTP không hợp lệ. Vui lòng đăng ký lại.');
   }
 
   const hashedOtp = hashResetToken(otp);
   if (pending.registrationOtp !== hashedOtp) {
-    throw ApiError.badRequest('Ma OTP khong dung');
+    throw ApiError.badRequest('Mã OTP không đúng.');
   }
 
   // "Claim" OTP: kich hoat + xoa OTP trong cung 1 lenh -> ma chi dung duoc 1 lan.
@@ -165,7 +165,7 @@ export const verifyRegistration = asyncHandler(async (req, res) => {
     { new: true }
   );
   if (!user) {
-    throw ApiError.badRequest('Ma OTP khong hop le, vui long gui lai ma moi');
+    throw ApiError.badRequest('Mã OTP không hợp lệ. Vui lòng gửi lại mã mới.');
   }
 
   // Tra ve giong het login de client tu dong dang nhap.
@@ -193,7 +193,7 @@ export const login = asyncHandler(async (req, res) => {
   // password co select:false nen phai select tuong minh.
   const user = await User.findOne({ email }).select('+password');
   if (!user || !(await user.comparePassword(password))) {
-    throw ApiError.unauthorized('Email hoac mat khau khong dung');
+    throw ApiError.unauthorized('Email hoặc mật khẩu không đúng.');
   }
 
   // ===== NEW: Register OTP =====
@@ -201,7 +201,7 @@ export const login = asyncHandler(async (req, res) => {
   // tai khoan cu (khong co field nay) van dang nhap binh thuong. Tra 403, khong tra 401
   // (401 lam client tu dang xuat - xem client/src/lib/api.ts).
   if (await User.exists({ _id: user._id, isVerified: false })) {
-    throw ApiError.forbidden('Tai khoan chua xac thuc email, vui long dang ky lai de nhan ma OTP');
+    throw ApiError.forbidden('Tài khoản chưa xác thực email. Vui lòng đăng ký lại để nhận mã OTP.');
   }
   // ===== END NEW =====
 
@@ -224,7 +224,7 @@ export const login = asyncHandler(async (req, res) => {
 
 export const getMe = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user!.sub);
-  if (!user) throw ApiError.notFound('Khong tim thay nguoi dung');
+  if (!user) throw ApiError.notFound('Không tìm thấy người dùng.');
   res.json({ success: true, data: user });
 });
 
@@ -282,7 +282,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
       user.resetPasswordExpire = undefined;
       await user.save({ validateBeforeSave: false });
       console.error('[forgotPassword] Gui email that bai:', err);
-      throw new ApiError(500, 'Khong the gui email luc nay, vui long thu lai sau');
+      throw new ApiError(500, 'Không thể gửi email lúc này. Vui lòng thử lại sau.');
     }
   }
 
@@ -307,35 +307,35 @@ export const resetPassword = asyncHandler(async (req, res) => {
       { $unset: { resetPasswordToken: 1, resetPasswordExpire: 1 } }
     );
     if (expired) {
-      throw new ApiError(410, 'Link dat lai mat khau da het han, vui long yeu cau link moi');
+      throw new ApiError(410, 'Liên kết đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu liên kết mới.');
     }
-    throw ApiError.badRequest('Link dat lai mat khau khong hop le hoac da duoc su dung');
+    throw ApiError.badRequest('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã được sử dụng.');
   }
 
   // pre('save') cua User se hash bang bcrypt nhu Register.
   user.password = newPassword;
   await user.save();
 
-  res.json({ success: true, message: 'Dat lai mat khau thanh cong, vui long dang nhap lai' });
+  res.json({ success: true, message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.' });
 });
 
 export const changePassword = asyncHandler(async (req, res) => {
   const { oldPassword, newPassword } = req.body as z.infer<typeof changePasswordSchema>;
 
   const user = await User.findById(req.user!.sub).select('+password');
-  if (!user) throw ApiError.notFound('Khong tim thay nguoi dung');
+  if (!user) throw ApiError.notFound('Không tìm thấy người dùng.');
 
   if (!(await user.comparePassword(oldPassword))) {
-    throw ApiError.badRequest('Mat khau cu khong dung');
+    throw ApiError.badRequest('Mật khẩu cũ không đúng.');
   }
   if (newPassword === oldPassword) {
-    throw ApiError.badRequest('Mat khau moi phai khac mat khau cu');
+    throw ApiError.badRequest('Mật khẩu mới phải khác mật khẩu cũ.');
   }
 
   user.password = newPassword;
   await user.save();
 
-  res.json({ success: true, message: 'Doi mat khau thanh cong' });
+  res.json({ success: true, message: 'Đổi mật khẩu thành công.' });
 });
 // ===== END NEW =====
 
@@ -363,7 +363,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
   const { displayName, defaultCity } = req.body as z.infer<typeof updateProfileSchema>;
 
   const user = await User.findById(req.user!.sub).select('+avatarPublicId');
-  if (!user) throw ApiError.notFound('Khong tim thay nguoi dung');
+  if (!user) throw ApiError.notFound('Không tìm thấy người dùng.');
 
   if (displayName !== undefined) user.displayName = displayName;
   if (defaultCity !== undefined) user.defaultCity = defaultCity;
@@ -379,6 +379,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
   }
 
   try {
+    if (uploadedPublicId) await queueImageCleanup([oldPublicId]);
     await user.save();
   } catch (err) {
     // Luu DB that bai -> xoa anh vua upload de khong de rac tren Cloudinary.
@@ -393,7 +394,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Cap nhat ho so thanh cong',
+    message: 'Cập nhật hồ sơ thành công.',
     data: {
       id: user._id,
       email: user.email,

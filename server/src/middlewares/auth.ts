@@ -17,13 +17,13 @@ declare global {
 export function protect(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
-    return next(ApiError.unauthorized('Thieu token xac thuc'));
+    return next(ApiError.sessionExpired());
   }
 
   try {
     req.user = jwt.verify(header.slice(7), env.jwtSecret) as JwtPayload;
     next();
   } catch {
-    next(ApiError.unauthorized('Token khong hop le hoac da het han'));
+    next(ApiError.sessionExpired());
   }
 }

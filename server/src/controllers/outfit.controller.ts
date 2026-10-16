@@ -3,7 +3,7 @@ import { Outfit } from '../models/Outfit.js';
 import { ClothingItem } from '../models/ClothingItem.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { uploadDataUrl, destroyImage } from '../services/upload.service.js';
+import { uploadDataUrl, destroyImage, saveWithImages, queueImageCleanup } from '../services/upload.service.js';
 import { SEASONS, OCCASIONS } from '../types/index.js';
 // ===== NEW: OOTD Post =====
 import { OotdPost } from '../models/OotdPost.js';
@@ -56,6 +56,7 @@ const outfitItemSchema = z.object({
 });
 
 export const createOutfitSchema = z.object({
+  creationKey: z.string().uuid().optional(),
   name: z.string().min(1).max(100),
   items: z.array(outfitItemSchema).min(1, 'Outfit phai co it nhat 1 mon do'),
   canvasJSON: z.record(z.unknown()).default({}),
@@ -77,7 +78,7 @@ export const createOutfitSchema = z.object({
   // ===== END NEW =====
 });
 
-export const updateOutfitSchema = createOutfitSchema.partial();
+export const updateOutfitSchema = createOutfitSchema.omit({ creationKey: true }).partial();
 
 /** Chan viec ghep item cua nguoi khac vao outfit cua minh. */
 async function assertOwnsItems(itemIds: string[], owner: string) {
@@ -86,7 +87,7 @@ async function assertOwnsItems(itemIds: string[], owner: string) {
     owner,
   });
   if (count !== new Set(itemIds).size) {
-    throw ApiError.badRequest('Co mon do khong ton tai hoac khong thuoc ve ban');
+    throw ApiError.badRequest('Có món đồ không tồn tại hoặc không thuộc về bạn.');
   }
 }
 
@@ -94,22 +95,25 @@ export const createOutfit = asyncHandler(async (req, res) => {
   const owner = req.user!.sub;
   const { thumbnailDataUrl, ...rest } = req.body;
 
+  if (rest.creationKey) {
+    const existing = await Outfit.findOne({ owner, creationKey: rest.creationKey });
+    if (existing) { res.json({ success: true, data: existing }); return; }
+  }
   await assertOwnsItems(outfitItemIds(rest), owner);
 
-  let thumbnailUrl: string | undefined;
-  let thumbnailPublicId: string | undefined;
-  if (thumbnailDataUrl) {
-    const up = await uploadDataUrl(thumbnailDataUrl, `outfitcraft/${owner}/outfits`);
-    thumbnailUrl = up.url;
-    thumbnailPublicId = up.publicId;
-  }
-
-  const outfit = await Outfit.create({
-    ...rest,
-    owner,
-    thumbnailUrl,
-    thumbnailPublicId,
-  });
+  const outfit = await saveWithImages(
+    thumbnailDataUrl ? [() => uploadDataUrl(thumbnailDataUrl, `outfitcraft/${owner}/outfits`)] : [],
+    async ([image]) => {
+      try { return await Outfit.create({ ...rest, owner, thumbnailUrl: image?.url, thumbnailPublicId: image?.publicId }); }
+      catch (error) {
+        if ((error as { code?: number }).code === 11000 && rest.creationKey) {
+          const existing = await Outfit.findOne({ owner, creationKey: rest.creationKey });
+          if (existing) { await destroyImage(image?.publicId); return existing; }
+        }
+        throw error;
+      }
+    }
+  );
 
   res.status(201).json({ success: true, data: outfit });
 });
@@ -140,7 +144,7 @@ export const getOutfits = asyncHandler(async (req, res) => {
 
 export const getOutfit = asyncHandler(async (req, res) => {
   const outfit = await Outfit.findById(req.params.id).populate('items.item');
-  if (!outfit) throw ApiError.notFound('Khong tim thay outfit');
+  if (!outfit) throw ApiError.notFound('Không tìm thấy outfit.');
 
   // Cho xem neu la chu so huu hoac outfit da cong khai.
   const isOwner = outfit.owner.toString() === req.user?.sub;
@@ -162,31 +166,36 @@ export const updateOutfit = asyncHandler(async (req, res) => {
   const { thumbnailDataUrl, ...rest } = req.body;
 
   const outfit = await Outfit.findOne({ _id: req.params.id, owner });
-  if (!outfit) throw ApiError.notFound('Khong tim thay outfit');
+  if (!outfit) throw ApiError.notFound('Không tìm thấy outfit.');
 
   if (rest.items) {
     await assertOwnsItems(outfitItemIds(rest), owner);
   }
 
-  if (thumbnailDataUrl) {
-    await destroyImage(outfit.thumbnailPublicId);
-    const up = await uploadDataUrl(thumbnailDataUrl, `outfitcraft/${owner}/outfits`);
-    outfit.thumbnailUrl = up.url;
-    outfit.thumbnailPublicId = up.publicId;
-  }
-
-  Object.assign(outfit, rest);
-  await outfit.save();
+  const oldPublicId = outfit.thumbnailPublicId;
+  await saveWithImages(
+    thumbnailDataUrl ? [() => uploadDataUrl(thumbnailDataUrl, `outfitcraft/${owner}/outfits`)] : [],
+    async ([image]) => {
+      if (image) await queueImageCleanup([oldPublicId]);
+      if (image) { outfit.thumbnailUrl = image.url; outfit.thumbnailPublicId = image.publicId; }
+      Object.assign(outfit, rest);
+      return outfit.save();
+    }
+  );
+  if (thumbnailDataUrl && oldPublicId !== outfit.thumbnailPublicId) await destroyImage(oldPublicId);
 
   res.json({ success: true, data: outfit });
 });
 
 export const deleteOutfit = asyncHandler(async (req, res) => {
-  const outfit = await Outfit.findOneAndDelete({
+  const outfit = await Outfit.findOne({
     _id: req.params.id,
     owner: req.user!.sub,
   });
-  if (!outfit) throw ApiError.notFound('Khong tim thay outfit');
+  if (!outfit) throw ApiError.notFound('Không tìm thấy outfit.');
+
+  await queueImageCleanup([outfit.thumbnailPublicId]);
+  await outfit.deleteOne();
 
   // ===== NEW: OOTD Post =====
   // Xoa luon bai dang chia se outfit nay cung like cua bai, tranh du lieu mo coi.
@@ -200,7 +209,7 @@ export const deleteOutfit = asyncHandler(async (req, res) => {
   // ===== END NEW =====
 
   await destroyImage(outfit.thumbnailPublicId);
-  res.json({ success: true, message: 'Da xoa outfit' });
+  res.json({ success: true, message: 'Đã xóa outfit.' });
 });
 
 /**
@@ -209,14 +218,14 @@ export const deleteOutfit = asyncHandler(async (req, res) => {
  */
 export const markAsWorn = asyncHandler(async (req, res) => {
   const outfit = await Outfit.findOne({ _id: req.params.id, owner: req.user!.sub });
-  if (!outfit) throw ApiError.notFound('Khong tim thay outfit');
+  if (!outfit) throw ApiError.notFound('Không tìm thấy outfit.');
 
   await ClothingItem.updateMany(
     { _id: { $in: outfit.items.map((i) => i.item) } },
     { $inc: { wearCount: 1 }, $set: { lastWornAt: new Date() } }
   );
 
-  res.json({ success: true, message: 'Da ghi nhan lan mac nay' });
+  res.json({ success: true, message: 'Đã ghi nhận lần mặc này.' });
 });
 
 /** GET /api/outfits/feed - OOTD cong khai cua moi nguoi. */

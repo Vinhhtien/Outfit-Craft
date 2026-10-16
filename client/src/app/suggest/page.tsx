@@ -1,18 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useCallback, useState } from 'react';
 import {
-  Sparkles, CloudRain, Thermometer, Droplets, RefreshCw, Bot, TriangleAlert,
+  Sparkles, CloudRain, Thermometer, Droplets, RefreshCw, Bot,
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
-import { VSpinner } from '@/components/ui/vintage';
+import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
+import { useResource } from '@/hooks/useResource';
 import { suggestionApi } from '@/lib/services';
-import { getErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { OCCASIONS, OCCASION_LABELS, CATEGORY_LABELS } from '@/types';
-import type { ClothingItem, Occasion, Suggestion, Weather } from '@/types';
+import type { ClothingItem, Occasion } from '@/types';
 
 export default function SuggestPage() {
   const user = useAuthStore((s) => s.user);
@@ -20,38 +19,9 @@ export default function SuggestPage() {
   /** null = chua go gi -> dung thanh pho mac dinh trong ho so. */
   const [cityInput, setCity] = useState<string | null>(null);
   const [occasion, setOccasion] = useState<Occasion>('daily');
-  const [data, setData] = useState<{
-    weather: Weather;
-    suggestion: Suggestion;
-    advice: string;
-    adviceSource: 'ai' | 'rule';
-  } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  // Thanh pho mac dinh tu ho so nguoi dung (xoa trang o nhap -> quay ve mac dinh nhu truoc).
-  const city = cityInput || user?.defaultCity || '';
-
-  const fetchSuggestion = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      setData(await suggestionApi.get({ city: city || undefined, occasion }));
-    } catch (err) {
-      setError(getErrorMessage(err));
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [city, occasion]);
-
-  // Tu goi lan dau khi da biet thanh pho.
-  useEffect(() => {
-    // Nap du lieu khi doi thanh pho/dip: bat loading ngay trong effect la co chu y.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (city) void fetchSuggestion();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, occasion]);
+  const city = cityInput ?? user?.defaultCity ?? '';
+  const loader = useCallback((signal: AbortSignal) => suggestionApi.get({ city: city.trim() || undefined, occasion }, signal), [city, occasion]);
+  const { data, loading, error, reload: fetchSuggestion } = useResource(loader, 500);
 
   const picks: { label: string; item?: ClothingItem }[] = data
     ? [
@@ -114,26 +84,10 @@ export default function SuggestPage() {
             </div>
           </div>
 
-          {error && (
-            <div className="mb-4 flex items-center justify-between rounded-xl border border-[#E5A99E] bg-[#FDF2F0] px-4 py-2.5 text-xs text-[#8C2D19] shadow-2xs sm:text-sm">
-              <p className="flex items-center gap-2">
-                <TriangleAlert size={16} className="shrink-0" />
-                {error}
-              </p>
-              <Link
-                href="/wardrobe"
-                className="ml-4 shrink-0 font-bold underline underline-offset-4 hover:text-[#5E1B0E]"
-              >
-                Đến Tủ đồ
-              </Link>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="grid place-items-center py-20">
-              <VSpinner />
-            </div>
-          ) : !data ? (
+          {error && <ErrorState message={error} onRetry={() => void fetchSuggestion()} busy={loading} />}
+          {error && data && <p className="mb-3 text-xs text-[#52665F]">Đang hiển thị dữ liệu của lần tải thành công gần nhất.</p>}
+          {loading && data && <LoadingState compact label="Đang cập nhật gợi ý…" />}
+          {loading && !data ? <LoadingState label="Đang xem thời tiết và tìm trang phục phù hợp…" /> : error && !data ? null : !data ? (
             <div className="flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-[#1F453E]/15 bg-white p-10 text-center shadow-[0_4px_24px_rgba(31,69,62,0.04)] sm:p-14">
               <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-[#1F453E]/15 bg-[#E2ECC8] text-[#1F453E] shadow-2xs">
                 <Sparkles size={22} />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Plus, Shirt, Search } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
@@ -12,16 +12,16 @@ import { ItemDetailModal } from '@/components/wardrobe/ItemDetailModal';
 // ===== NEW: Delete Confirmation Popup =====
 import { DeleteConfirmModal } from '@/components/wardrobe/DeleteConfirmModal';
 // ===== END NEW =====
-import { VButton, VChip, VSpinner, VToast } from '@/components/ui/vintage';
+import { VButton, VChip, VToast } from '@/components/ui/vintage';
+import { useResource } from '@/hooks/useResource';
+import { CardSkeletons, LoadingState, ErrorState } from '@/components/ui/AsyncState';
 import { itemApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import { CATEGORIES, CATEGORY_LABELS } from '@/types';
 import type { Category, ClothingItem } from '@/types';
 
 export default function WardrobePage() {
-  const [items, setItems] = useState<ClothingItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const deletingRef = useRef(false);
   const [modalOpen, setModalOpen] = useState(false);
   // ===== NEW: Xem/Sua Item =====
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -39,48 +39,35 @@ export default function WardrobePage() {
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [search, setSearch] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await itemApi.list({
-        category: category === 'all' ? undefined : category,
-        q: search.trim() || undefined,
-        limit: 100,
-      });
-      setItems(res.data);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [category, search]);
-
-  // Debounce o tim kiem de khong goi API moi ky tu.
-  useEffect(() => {
-    const t = setTimeout(() => void load(), search ? 400 : 0);
-    return () => clearTimeout(t);
-  }, [load, search]);
+  const loader = useCallback((signal: AbortSignal) => itemApi.list({
+    category: category === 'all' ? undefined : category, q: search.trim() || undefined, limit: 100,
+  }, signal).then((response) => response.data), [category, search]);
+  const { data, setData: setItems, loading, error, reload: load } = useResource(loader, 300);
+  const items = data ?? [];
 
   // ===== NEW: Delete Confirmation Popup =====
   /** Chi goi khi nguoi dung bam "Xac nhan xoa" tren popup (thay cho window.confirm). */
   const handleDelete = async (item: ClothingItem) => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
     setDeleting(true);
     try {
       const res = await itemApi.remove(item._id);
       setItemToDelete(null);
       // ===== NEW: Toast thay alert() =====
       if (res.message) setToast({ message: res.message, variant: 'success' });
+      setItems((previous) => previous?.filter((value) => value._id !== item._id) ?? null);
       void load();
     } catch (err) {
       setItemToDelete(null);
       setToast({ message: getErrorMessage(err), variant: 'error' });
     } finally {
+      deletingRef.current = false;
       setDeleting(false);
     }
   };
 
-  const closeDeleteConfirm = useCallback(() => setItemToDelete(null), []);
+  const closeDeleteConfirm = useCallback(() => { if (!deletingRef.current) setItemToDelete(null); }, []);
   // ===== END NEW =====
   // ===== NEW: Toast thay alert() =====
   const closeToast = useCallback(() => setToast(null), []);
@@ -90,11 +77,12 @@ export default function WardrobePage() {
   /** Cap nhat local state thay vi re-fetch -> luoi khong nhay spinner sau modal. */
   const handleItemUpdated = (updated: ClothingItem) => {
     setItems((prev) =>
-      prev
+      (prev ?? [])
         .map((it) => (it._id === updated._id ? updated : it))
         // Dang loc theo danh muc ma doi sang danh muc khac -> an khoi luoi.
         .filter((it) => category === 'all' || it.category === category)
     );
+    void load();
   };
   // ===== END NEW =====
 
@@ -143,15 +131,10 @@ export default function WardrobePage() {
             </div>
           </div>
 
-          {error && (
-            <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-          )}
-
-          {loading ? (
-            <div className="grid place-items-center py-20">
-              <VSpinner />
-            </div>
-          ) : items.length === 0 ? (
+          {error && <ErrorState message={error} onRetry={() => void load()} busy={loading} />}
+          {error && data && <p className="mb-3 text-xs text-[#52665F]">Đang hiển thị dữ liệu của lần tải thành công gần nhất.</p>}
+          {loading && data !== null && <LoadingState compact label="Đang cập nhật tủ đồ…" />}
+          {loading && data === null ? <CardSkeletons /> : error && data === null ? null : items.length === 0 ? (
             <div className="grid place-items-center rounded-2xl border border-dashed border-[#869BB2] bg-white/80 p-12 text-center shadow-sm">
               <Shirt size={36} className="mb-3 text-[#869BB2]" />
               <p className="font-serif-display text-xl font-semibold text-[#1F453E]">

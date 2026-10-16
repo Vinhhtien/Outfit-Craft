@@ -9,10 +9,10 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
  */
 export const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024, files: 2, fields: 12, fieldSize: 64 * 1024, parts: 14 }, // 10MB
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED.includes(file.mimetype)) {
-      return cb(ApiError.badRequest('Chi chap nhan anh JPEG, PNG hoac WebP'));
+      return cb(ApiError.badRequest('Chỉ chấp nhận ảnh JPEG, PNG hoặc WebP.'));
     }
     cb(null, true);
   },

@@ -15,6 +15,10 @@ import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { OutfitCanvas, type OutfitCanvasHandle } from '@/components/canvas/OutfitCanvas';
 import { VButton, VChip, VInput, VLabel, VModal, VSpinner, VToast } from '@/components/ui/vintage';
 import { itemApi, outfitApi, bodyProfileApi } from '@/lib/services';
+import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
+import { CloudImage } from '@/components/ui/CloudImage';
+import { useAuthStore } from '@/store/authStore';
+import { queueFitSave, flushFitSaves } from '@/store/fitSaveQueue';
 import { getErrorMessage } from '@/lib/api';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, needsLayoutUpgrade } from '@/lib/fabricCanvas';
 // ===== NEW: Body Profile =====
@@ -39,6 +43,19 @@ const EMPTY_FORM = {
 
 export default function StudioPage() {
   const canvasRef = useRef<OutfitCanvasHandle>(null);
+  const userId = useAuthStore((state) => state.user?.id);
+  const busyRef = useRef(false);
+  const [canvasBusy, setCanvasBusy] = useState(false);
+  const [initializing, setInitializing] = useState(true);
+  const [initialError, setInitialError] = useState('');
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const [pickerError, setPickerError] = useState('');
+  const pickerRequest = useRef<AbortController | null>(null);
+  const [addingItem, setAddingItem] = useState(false);
+  const addRef = useRef(false);
+  const saveRef = useRef(false);
+  const creationKey = useRef('');
+  useEffect(() => () => pickerRequest.current?.abort(), []);
   const [setFitEl, canvasScale] = useFitScale();
 
   const [items, setItems] = useState<ClothingItem[]>([]);
@@ -62,6 +79,8 @@ export default function StudioPage() {
   const [bodySheetOpen, setBodySheetOpen] = useState(false);
   const [saveBodyOpen, setSaveBodyOpen] = useState(false);
   const [savingBody, setSavingBody] = useState(false);
+  const savingBodyRef = useRef(false);
+  const [bodySaveError, setBodySaveError] = useState('');
   const [autoSnap, setAutoSnap] = useState(true);
 
   /** Outfit đang mở để sửa (null = phối mới). */
@@ -79,54 +98,15 @@ export default function StudioPage() {
   // ===== NEW: Ghi nho fit =====
   const [fitError, setFitError] = useState<string | null>(null);
   const closeFitError = useCallback(() => setFitError(null), []);
-  /** Fit dang cho luu theo mon: user chinh lien tiep -> chi luu ban cuoi khi dung tay. */
-  const pendingFitsRef = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; fit: ItemFit }>());
-  /** Mon da bao "da ghi nho" trong phien nay - khong bao lai moi lan chinh. */
-  const announcedFitRef = useRef(new Set<string>());
-
-  const saveItemFit = useCallback(async (itemId: string, fit: ItemFit, announce: boolean) => {
-    try {
-      const saved = await itemApi.saveFit(itemId, fit);
-      // Cap nhat tu do -> lan sau them mon nay tu dat theo fit moi.
-      setItems((list) => list.map((i) => (i._id === itemId ? { ...i, fit: saved.fit ?? fit } : i)));
-      if (announce) setToast(`Đã ghi nhớ vị trí & cỡ của "${saved.name}" - lần sau tự đặt đúng.`);
-    } catch (err) {
-      setFitError(getErrorMessage(err));
-    }
-  }, []);
-
-  const cancelPendingFit = (itemId: string) => {
-    const pending = pendingFitsRef.current.get(itemId);
-    if (pending) clearTimeout(pending.timer);
-    pendingFitsRef.current.delete(itemId);
-  };
-
-  /** Lan dau thu 1 mon: user can xong (dung tay ~0,8 s) thi tu ghi nho vao mon do. */
   const handleItemFit = useCallback((itemId: string, fit: ItemFit) => {
-    const pendings = pendingFitsRef.current;
-    const prev = pendings.get(itemId);
-    if (prev) clearTimeout(prev.timer);
-    const timer = setTimeout(() => {
-      pendings.delete(itemId);
-      const first = !announcedFitRef.current.has(itemId);
-      announcedFitRef.current.add(itemId);
-      void saveItemFit(itemId, fit, first);
-    }, 800);
-    pendings.set(itemId, { timer, fit });
-  }, [saveItemFit]);
+    if (!userId) return;
+    queueFitSave(userId, itemId, fit);
+    setItems((list) => list.map((item) => item._id === itemId ? { ...item, fit } : item));
+  }, [userId]);
 
-  // Roi trang khi con fit chua kip luu -> luu luon.
-  useEffect(() => {
-    const pendings = pendingFitsRef.current;
-    return () => {
-      pendings.forEach(({ timer, fit }, id) => {
-        clearTimeout(timer);
-        void itemApi.saveFit(id, fit).catch(() => undefined);
-      });
-      pendings.clear();
-    };
-  }, []);
-
+  useEffect(() => () => {
+    if (userId) void flushFitSaves(userId);
+  }, [userId]);
   /** Nut tren toolbar: ghi nho (de) vi tri + co hien tai cua mon dang chon. */
   const rememberSelectedFit = (c: OutfitCanvasHandle) => {
     const selected = c.getSelectedFit();
@@ -138,9 +118,7 @@ export default function StudioPage() {
       setFitError('Món đồ đang đặt tự do. Kéo sát vào người mẫu (cổ áo khớp cổ, cạp quần khớp eo) rồi ghi nhớ lại.');
       return;
     }
-    cancelPendingFit(selected.itemId);
-    announcedFitRef.current.add(selected.itemId);
-    void saveItemFit(selected.itemId, selected.fit, true);
+    if (userId) queueFitSave(userId, selected.itemId, selected.fit, 0);
   };
   // ===== END NEW =====
 
@@ -153,7 +131,7 @@ export default function StudioPage() {
 
   const applyOutfit = useCallback(async (outfit: Outfit) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) throw new Error('Khung phối đồ chưa sẵn sàng. Vui lòng chờ một lát.');
     const scene = outfit.scene3D;
     const fromScene = shouldBuildFromScene3D(outfit);
     // Outfit cu (khong co mannequin) hoac luu luc tat mannequin -> an mannequin, hien y nhu truoc.
@@ -201,7 +179,9 @@ export default function StudioPage() {
     const outfit = pendingRef.current;
     if (!outfit || !readyRef.current) return;
     pendingRef.current = null;
-    applyOutfit(outfit).catch((err) => setError(getErrorMessage(err)));
+    setCanvasBusy(true);
+    busyRef.current = true;
+    applyOutfit(outfit).catch((err) => setError(getErrorMessage(err))).finally(() => { busyRef.current = false; setCanvasBusy(false); });
   }, [applyOutfit]);
 
   const handleCanvasReady = useCallback(() => {
@@ -211,41 +191,44 @@ export default function StudioPage() {
   // ===== END NEW =====
 
   useEffect(() => {
+    if (!userId) return;
+    const controller = new AbortController();
     void (async () => {
+      setInitializing(true);
+      setLoadingItems(true);
+      setInitialError('');
       try {
-        const res = await itemApi.list({ limit: 100 });
-        setItems(res.data);
+        const [response, raw] = await Promise.all([itemApi.list({ limit: 100 }, controller.signal), bodyProfileApi.get(controller.signal)]);
+        if (controller.signal.aborted) return;
+        setItems(response.data);
+        userProfileRef.current = resolveMannequinProfile(raw);
+        const mine = bodyStateFromProfile(raw);
+        userBodyRef.current = mine;
+        setUserBody(mine);
+        const outfitId = new URLSearchParams(window.location.search).get('outfit');
+        if (!outfitId) setBody(mine);
+        else {
+          const outfit = await outfitApi.get(outfitId, controller.signal);
+          if (controller.signal.aborted) return;
+          pendingRef.current = outfit;
+          flushPending();
+        }
       } catch (err) {
-        setError(getErrorMessage(err));
+        if (!controller.signal.aborted) setInitialError(getErrorMessage(err));
       } finally {
-        setLoadingItems(false);
+        if (!controller.signal.aborted) { setLoadingItems(false); setInitializing(false); }
       }
     })();
+    return () => { controller.abort(); pendingRef.current = null; };
+  }, [flushPending, userId, reloadVersion]);
 
-    // ===== NEW: Body Profile =====
-    void (async () => {
-      const raw = await bodyProfileApi.get().catch(() => null);
-      userProfileRef.current = resolveMannequinProfile(raw);
-      const mine = bodyStateFromProfile(raw);
-      userBodyRef.current = mine;
-      setUserBody(mine);
-
-      // /studio?outfit=<id> -> mo outfit da luu de sua.
-      const outfitId = new URLSearchParams(window.location.search).get('outfit');
-      if (!outfitId) {
-        setBody(mine);
-        return;
-      }
-      try {
-        pendingRef.current = await outfitApi.get(outfitId);
-        flushPending();
-      } catch (err) {
-        setBody(mine);
-        setError(getErrorMessage(err));
-      }
-    })();
-    // ===== END NEW =====
-  }, [flushPending]);
+  const addCanvasItem = async (item: ClothingItem) => {
+    if (addRef.current || busyRef.current || initializing || initialError) return;
+    addRef.current = true; setAddingItem(true); setError('');
+    try { await canvasRef.current?.addItem(item); }
+    catch (err) { setError(getErrorMessage(err)); }
+    finally { addRef.current = false; setAddingItem(false); }
+  };
 
   const filtered =
     category === 'all' ? items : items.filter((i) => i.category === category);
@@ -255,6 +238,8 @@ export default function StudioPage() {
 
   // ===== NEW: Body Profile =====
   const startNewOutfit = () => {
+    if (busyRef.current || addRef.current || saveRef.current) return;
+    creationKey.current = '';
     canvasRef.current?.clear();
     setEditing(null);
     setForm(EMPTY_FORM);
@@ -264,18 +249,31 @@ export default function StudioPage() {
   };
 
   const openPicker = async () => {
+    pickerRequest.current?.abort();
+    const request = new AbortController();
+    pickerRequest.current = request;
     setPickerOpen(true);
+    setPickerError('');
     setSavedOutfits(null);
     try {
-      const res = await outfitApi.list({ page: 1 });
-      setSavedOutfits(res.data);
+      const all: Outfit[] = [];
+      let page = 1;
+      let pages = 1;
+      do {
+        const res = await outfitApi.list({ page }, request.signal);
+        all.push(...res.data); pages = res.pagination?.pages ?? 1; page++;
+      } while (page <= pages);
+      if (!request.signal.aborted) setSavedOutfits(all);
     } catch (err) {
-      setPickerOpen(false);
-      setError(getErrorMessage(err));
+      if (!request.signal.aborted) setPickerError(getErrorMessage(err));
     }
   };
 
   const openOutfit = async (id: string) => {
+    if (busyRef.current || addRef.current) return;
+    busyRef.current = true;
+    setCanvasBusy(true);
+    setPickerError('');
     setOpeningId(id);
     try {
       // GET /outfits/:id populate day du item (co category) -> dung cho outfit cu.
@@ -283,8 +281,10 @@ export default function StudioPage() {
       window.history.replaceState(null, '', `/studio?outfit=${id}`);
       setPickerOpen(false);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setPickerError(getErrorMessage(err));
     } finally {
+      busyRef.current = false;
+      setCanvasBusy(false);
       setOpeningId(null);
     }
   };
@@ -316,6 +316,9 @@ export default function StudioPage() {
   const isPreviewing = !sameBodyState(body, userBody);
 
   const saveBodyToProfile = async () => {
+    if (savingBodyRef.current) return;
+    savingBodyRef.current = true;
+    setBodySaveError('');
     setSavingBody(true);
     try {
       // PUT gop: chi gui so do da co / da chinh, phan con lai trong ho so giu nguyen.
@@ -328,14 +331,16 @@ export default function StudioPage() {
       setSaveBodyOpen(false);
       setToast('Đã lưu số đo vào hồ sơ.');
     } catch (err) {
-      setError(getErrorMessage(err));
+      setBodySaveError(getErrorMessage(err));
     } finally {
+      savingBodyRef.current = false;
       setSavingBody(false);
     }
   };
   // ===== END NEW =====
 
   const handleSave = async () => {
+    if (saveRef.current || busyRef.current || addRef.current || initializing || initialError) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -345,10 +350,13 @@ export default function StudioPage() {
       return;
     }
 
+    saveRef.current = true;
     setSaving(true);
     setError('');
     try {
+      if (!creationKey.current) creationKey.current = crypto.randomUUID();
       const body = {
+        ...(!editing ? { creationKey: creationKey.current } : {}),
         name: form.name.trim(),
         items: outfitItems,
         canvasJSON,
@@ -357,15 +365,17 @@ export default function StudioPage() {
         isPublic: form.isPublic,
         mannequin: snapshot, // NEW: Body Profile
       };
-      if (editing) await outfitApi.update(editing.id, body);
-      else await outfitApi.create(body);
+      const saved = editing ? await outfitApi.update(editing.id, body) : await outfitApi.create(body);
+      setEditing({ id: saved._id, name: saved.name });
+      window.history.replaceState(null, '', `/studio?outfit=${saved._id}`);
 
       setSaveOpen(false);
       setToast(editing ? 'Đã cập nhật outfit!' : 'Đã lưu outfit vào bộ sưu tập!');
-      startNewOutfit();
+      creationKey.current = '';
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
+      saveRef.current = false;
       setSaving(false);
     }
   };
@@ -458,6 +468,8 @@ export default function StudioPage() {
           </div>
         </ScallopBanner>
 
+        {initialError && <div className="mx-auto w-full max-w-7xl px-6"><ErrorState message={initialError} onRetry={() => setReloadVersion((value) => value + 1)} /></div>}
+        {(initializing || canvasBusy || addingItem) && <LoadingState compact label={addingItem ? 'Đang thêm ảnh lên canvas…' : 'Đang chuẩn bị khung phối đồ…'} />}
         {error && !saveOpen && (
           <div className="mx-auto w-full max-w-7xl shrink-0 px-6 pt-3 lg:px-10">
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
@@ -472,19 +484,19 @@ export default function StudioPage() {
               onCategory={setCategory}
               loading={loadingItems}
               items={filtered}
-              onPick={(item) => void canvasRef.current?.addItem(item)}
+              onPick={(item) => void addCanvasItem(item)}
             />
           </aside>
 
           {/* Canvas + toolbar */}
-          <section className="flex h-full min-h-0 flex-col items-center justify-between overflow-hidden py-1 lg:col-span-6">
+          <section className={`flex h-full min-h-0 flex-col items-center justify-between overflow-hidden py-1 lg:col-span-6 ${initializing || canvasBusy || addingItem || initialError ? 'pointer-events-none opacity-60' : ''}`}>
             <div className="mb-2 flex shrink-0 flex-wrap items-center justify-center gap-2">
               <div className="inline-flex items-center gap-1 rounded-full border border-[#1F453E]/25 bg-white p-1 shadow-sm">
                 {toolbar.map(({ icon: Icon, label, run, needSel }) => (
                   <button
                     key={label}
                     onClick={() => runTool(run)}
-                    disabled={needSel && !hasSelection}
+                    disabled={initializing || canvasBusy || addingItem || (needSel && !hasSelection)}
                     title={label}
                     className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-[#1F453E] transition-colors hover:bg-[#E2ECC8] active:bg-[#1F453E] active:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
                   >
@@ -494,7 +506,7 @@ export default function StudioPage() {
                 {/* NEW: Ghi nho fit - tach khoi mang toolbar vi doc ref (khong duoc nam trong du lieu render) */}
                 <button
                   onClick={() => runTool(rememberSelectedFit)}
-                  disabled={!hasSelection}
+                  disabled={initializing || canvasBusy || addingItem || !hasSelection}
                   title="Ghi nhớ vị trí & cỡ món này cho lần sau"
                   className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-[#1F453E] transition-colors hover:bg-[#E2ECC8] active:bg-[#1F453E] active:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
                 >
@@ -567,13 +579,14 @@ export default function StudioPage() {
         {bodyPanel}
       </BottomSheet>
 
-      <VModal open={saveBodyOpen} onClose={() => setSaveBodyOpen(false)} title="Lưu số đo này vào hồ sơ?">
+      <VModal open={saveBodyOpen} onClose={() => setSaveBodyOpen(false)} busy={savingBody} title="Lưu số đo này vào hồ sơ?">
+        {bodySaveError && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{bodySaveError}</p>}
         <p className="mb-5 text-sm text-[#2C4C45]">
           Giới tính, dáng và các số đo đang xem thử sẽ được ghi vào hồ sơ của bạn (số đo nào bạn chưa nhập thì
           hồ sơ giữ nguyên). Dữ liệu này chỉ mình bạn thấy.
         </p>
         <div className="flex gap-2">
-          <VButton variant="outline" onClick={() => setSaveBodyOpen(false)} className="flex-1">
+          <VButton variant="outline" disabled={savingBody} onClick={() => setSaveBodyOpen(false)} className="flex-1">
             Hủy
           </VButton>
           <VButton onClick={() => void saveBodyToProfile()} loading={savingBody} className="flex-1">
@@ -584,7 +597,7 @@ export default function StudioPage() {
       {/* ===== END NEW ===== */}
 
       {/* Modal luu outfit */}
-      <VModal open={saveOpen} onClose={() => setSaveOpen(false)} title={editing ? 'Cập nhật outfit' : 'Lưu outfit'}>
+      <VModal open={saveOpen} onClose={() => setSaveOpen(false)} busy={saving} title={editing ? 'Cập nhật outfit' : 'Lưu outfit'}>
         <div className="space-y-4">
           <VInput
             label="Tên outfit"
@@ -676,8 +689,8 @@ export default function StudioPage() {
       </VModal>
 
       {/* ===== NEW: Body Profile ===== chon outfit da luu de mo lai */}
-      <VModal open={pickerOpen} onClose={() => setPickerOpen(false)} title="Mở outfit đã lưu" wide>
-        {savedOutfits === null ? (
+      <VModal open={pickerOpen} onClose={() => { pickerRequest.current?.abort(); setPickerOpen(false); }} busy={Boolean(openingId)} title="Mở outfit đã lưu" wide>
+        {pickerError ? <ErrorState message={pickerError} onRetry={() => void openPicker()} /> : savedOutfits === null ? (
           <div className="grid h-40 place-items-center">
             <VSpinner />
           </div>
@@ -695,8 +708,7 @@ export default function StudioPage() {
                 >
                   <div className="grid aspect-[6/7] place-items-center bg-white">
                     {o.thumbnailUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={o.thumbnailUrl} alt={o.name} className="max-h-full max-w-full object-contain" />
+                      <CloudImage src={o.thumbnailUrl} alt={o.name} className="max-h-full max-w-full object-contain" />
                     ) : (
                       <Layers size={24} className="text-[#869BB2]" />
                     )}

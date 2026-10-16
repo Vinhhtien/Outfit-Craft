@@ -44,7 +44,7 @@ export const setSchedule = asyncHandler(async (req, res) => {
   const { outfit: outfitId, date, note } = req.body;
 
   if (!(await Outfit.exists({ _id: outfitId, owner }))) {
-    throw ApiError.notFound('Khong tim thay outfit nay trong bo suu tap cua ban');
+    throw ApiError.notFound('Không tìm thấy outfit này trong bộ sưu tập của bạn.');
   }
 
   const entry = await ScheduleEntry.findOneAndUpdate(
@@ -61,8 +61,8 @@ export const deleteSchedule = asyncHandler(async (req, res) => {
     _id: req.params.id,
     owner: req.user!.sub,
   });
-  if (!entry) throw ApiError.notFound('Khong tim thay lich nay');
-  res.json({ success: true, message: 'Da xoa lich' });
+  if (!entry) throw ApiError.notFound('Không tìm thấy lịch này.');
+  res.json({ success: true, message: 'Đã xóa lịch.' });
 });
 
 /**
@@ -74,8 +74,8 @@ export const markScheduleWorn = asyncHandler(async (req, res) => {
     _id: req.params.id,
     owner: req.user!.sub,
   });
-  if (!entry) throw ApiError.notFound('Khong tim thay lich nay');
-  if (entry.isWorn) throw ApiError.badRequest('Lich nay da duoc danh dau truoc do');
+  if (!entry) throw ApiError.notFound('Không tìm thấy lịch này.');
+  if (entry.isWorn) throw ApiError.badRequest('Lịch này đã được đánh dấu trước đó.');
 
   const outfit = await Outfit.findById(entry.outfit);
   if (outfit) {
