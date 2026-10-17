@@ -23,7 +23,7 @@ app.use(
     max: 300,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success: false, message: 'Ban gui qua nhieu request, thu lai sau' },
+    message: { success: false, message: 'Bạn thao tác quá nhanh. Vui lòng chờ một lát rồi thử lại.' },
   })
 );
 

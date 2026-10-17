@@ -7,6 +7,7 @@ import { upload } from '../middlewares/upload.js';
 const router = Router();
 router.use(protect); // toan bo route tu do do deu can dang nhap
 
+router.post('/with-images', upload.fields([{ name: 'image', maxCount: 1 }, { name: 'original', maxCount: 1 }]), c.createItemWithImages);
 router.post('/upload', upload.single('image'), c.uploadImage);
 router.get('/stats', c.getStats);           // dat truoc '/:id' de khong bi nuot
 router.get('/', c.getItems);

@@ -1,9 +1,11 @@
 'use client';
 
 // ===== NEW: Xem/Sua Item =====
-import { useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pencil, Plus, X } from 'lucide-react';
 import { VButton, VInput, VSelect, VChip, VModal, VLabel, VSpinner } from '@/components/ui/vintage';
+import { useResource } from '@/hooks/useResource';
+import { ErrorState } from '@/components/ui/AsyncState';
 import { itemApi } from '@/lib/services';
 import type { UpdateItemPayload } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
@@ -87,35 +89,15 @@ export function ItemDetailModal({
   /** Goi sau khi luu thanh cong de trang cha cap nhat luoi ngay. */
   onUpdated: (item: ClothingItem) => void;
 }) {
-  const [item, setItem] = useState<ClothingItem | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+  const loader = useCallback((signal: AbortSignal) => itemApi.get(itemId, signal), [itemId]);
+  const { data: item, setData: setItem, loading, error: loadError, reload } = useResource(loader);
+  const savingRef = useRef(false);
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormState | null>(null);
   const [newColor, setNewColor] = useState('#1f453e');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-
-    itemApi
-      .get(itemId)
-      .then((data) => {
-        if (!cancelled) setItem(data);
-      })
-      .catch((err) => {
-        if (!cancelled) setLoadError(getErrorMessage(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [itemId]);
 
   const startEdit = () => {
     if (!item) return;
@@ -138,7 +120,7 @@ export function ItemDetailModal({
   };
 
   const handleSave = async () => {
-    if (!item || !form) return;
+    if (!item || !form || savingRef.current) return;
     const name = form.name.trim();
     if (!name) {
       setSaveError('Tên món đồ không được để trống');
@@ -156,6 +138,7 @@ export function ItemDetailModal({
       notes: form.notes.trim(),
     };
 
+    savingRef.current = true;
     setSaving(true);
     setSaveError('');
     try {
@@ -167,12 +150,13 @@ export function ItemDetailModal({
     } catch (err) {
       setSaveError(getErrorMessage(err));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
   return (
-    <VModal open onClose={onClose} title="Chi tiết món đồ" wide serifTitle>
+    <VModal open onClose={onClose} busy={saving} title="Chi tiết món đồ" wide serifTitle>
       {loading && (
         <div className="grid place-items-center py-16">
           <VSpinner />
@@ -180,7 +164,7 @@ export function ItemDetailModal({
       )}
 
       {loadError && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{loadError}</p>
+        <ErrorState message={loadError} onRetry={() => void reload()} />
       )}
 
       {item && (

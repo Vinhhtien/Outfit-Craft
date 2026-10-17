@@ -92,6 +92,7 @@ export interface IOutfit extends Document {
   /** Anh PNG export tu canvas, dung lam thumbnail trong danh sach/lich. */
   thumbnailUrl?: string;
   thumbnailPublicId?: string;
+  creationKey?: string;
   seasons: Season[];
   occasions: Occasion[];
   tags: string[];
@@ -220,6 +221,7 @@ const outfitSchema = new Schema<IOutfit>(
     canvasJSON: { type: Schema.Types.Mixed, default: {} },
     thumbnailUrl: { type: String },
     thumbnailPublicId: { type: String },
+    creationKey: { type: String, select: false },
     seasons: { type: [String], enum: SEASONS, default: [] },
     occasions: { type: [String], enum: OCCASIONS, default: [] },
     tags: { type: [String], default: [] },
@@ -232,10 +234,11 @@ const outfitSchema = new Schema<IOutfit>(
     scene3D: { type: scene3DSchema, default: undefined },
     // ===== END NEW =====
   },
-  { timestamps: true }
+  { timestamps: true, optimisticConcurrency: true }
 );
 
 outfitSchema.index({ owner: 1, createdAt: -1 });
+outfitSchema.index({ owner: 1, creationKey: 1 }, { unique: true, partialFilterExpression: { creationKey: { $type: 'string' } } });
 // Feed OOTD cong khai.
 outfitSchema.index({ isPublic: 1, createdAt: -1 });
 // Tim outfit dang dung 1 item cu the (vd truoc khi xoa item).

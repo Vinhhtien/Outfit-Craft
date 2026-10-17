@@ -17,15 +17,15 @@ const BASE = 'https://api.openweathermap.org/data/2.5/weather';
 
 export async function getWeather(city: string): Promise<WeatherInfo> {
   if (!env.openWeatherKey) {
-    throw ApiError.badRequest('Chua cau hinh OPENWEATHER_API_KEY trong .env');
+    throw new ApiError(503, 'Dịch vụ thời tiết chưa sẵn sàng. Vui lòng thử lại sau.');
   }
 
   const url = `${BASE}?q=${encodeURIComponent(city)}&units=metric&lang=vi&appid=${env.openWeatherKey}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) }).catch(() => { throw new ApiError(502, 'Không thể kết nối dịch vụ thời tiết. Vui lòng thử lại.'); });
 
   if (!res.ok) {
     if (res.status === 404) throw ApiError.notFound(`Khong tim thay thanh pho: ${city}`);
-    throw ApiError.badRequest('Khong lay duoc du lieu thoi tiet');
+    throw ApiError.badRequest('Không lấy được dữ liệu thời tiết. Vui lòng thử lại.');
   }
 
   const data = await res.json() as {

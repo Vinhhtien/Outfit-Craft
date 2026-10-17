@@ -1,13 +1,12 @@
 'use client';
 
+import { useNotices } from './Notifications';
 import { forwardRef } from 'react';
 import { X } from 'lucide-react';
 // ===== NEW: Update Profile =====
-import { useEffect } from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import { useEffect, useId, useRef } from 'react';
 // ===== END NEW =====
 // ===== NEW: Toast thay alert() =====
-import { AlertCircle } from 'lucide-react';
 // ===== END NEW =====
 
 /*
@@ -117,6 +116,7 @@ export function VModal({
   children,
   wide,
   serifTitle,
+  busy = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -125,18 +125,49 @@ export function VModal({
   wide?: boolean;
   /** Tieu de font Serif (Playfair) thay vi Sans dam. */
   serifTitle?: boolean;
+  busy?: boolean;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  const busyRef = useRef(busy);
+  useEffect(() => { closeRef.current = onClose; busyRef.current = busy; }, [onClose, busy]);
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]') ?? []);
+    (focusable()[0] ?? dialog)?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (!dialog?.contains(document.activeElement)) return;
+      if (event.key === 'Escape' && !busyRef.current) { event.preventDefault(); event.stopPropagation(); closeRef.current(); }
+      if (event.key === 'Tab') {
+        const elements = focusable();
+        const first = elements[0], last = elements[elements.length - 1];
+        if (!first) { event.preventDefault(); dialog.focus(); return; }
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => { document.removeEventListener('keydown', handleKey); if (previous?.isConnected) previous.focus(); };
+  }, [open]);
   if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-[#1F453E]/40 p-4 backdrop-blur-[2px]"
-      onClick={onClose}
+      onClick={busy ? undefined : onClose}
     >
       <div
         className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-[#1F453E]/20 bg-white p-6 font-jakarta text-[#1F453E] shadow-2xl ${
           wide ? 'max-w-2xl' : 'max-w-md'
         }`}
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        aria-busy={busy}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between gap-4">
@@ -151,8 +182,9 @@ export function VModal({
           </h2>
           <button
             type="button"
-            onClick={onClose}
-            title="Đóng"
+            onClick={busy ? undefined : onClose}
+            disabled={busy}
+            title={busy ? 'Đang lưu, vui lòng chờ' : 'Đóng'}
             className="grid h-8 w-8 place-items-center rounded-full border border-[#CBD5E1] text-[#6B7B76] transition-colors hover:border-[#1F453E] hover:text-[#1F453E]"
           >
             <X size={14} />
@@ -183,48 +215,25 @@ export function VToast({
   variant?: 'success' | 'error';
   // ===== END NEW =====
 }) {
-  const isError = variant === 'error';
-
+  const id = useId();
+  const add = useNotices((state) => state.add);
+  const remove = useNotices((state) => state.remove);
   useEffect(() => {
     if (!message) return;
-    const t = setTimeout(onClose, duration);
-    return () => clearTimeout(t);
-  }, [message, duration, onClose]);
-
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={`pointer-events-none fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 transition-all duration-300 ${
-        message ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
-      }`}
-    >
-      {/* ===== NEW: Toast thay alert() ===== nen kem, mau theo variant */}
-      {message && (
-        <div
-          role={isError ? 'alert' : undefined}
-          className={`flex w-max max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border bg-[#FAF9F5] px-5 py-2.5 font-jakarta text-sm font-semibold shadow-lg ${
-            isError ? 'border-[#8C2D19]/40 text-[#8C2D19]' : 'border-[#1F453E] text-[#1F453E]'
-          }`}
-        >
-          {isError ? (
-            <AlertCircle size={16} className="shrink-0" />
-          ) : (
-            <CheckCircle2 size={16} className="shrink-0" />
-          )}
-          {message}
-        </div>
-      )}
-    </div>
-  );
+    add({ id, message, variant, onClose });
+    const timer = setTimeout(onClose, variant === 'error' ? Math.max(duration, 6000) : duration);
+    return () => { clearTimeout(timer); remove(id); };
+  }, [id, message, variant, onClose, duration, add, remove]);
+  return null;
 }
 // ===== END NEW =====
 
 /* ---------------- Spinner ---------------- */
-export function VSpinner({ className = '' }: { className?: string }) {
+export function VSpinner({ className = '', label = 'Đang xử lý' }: { className?: string; label?: string }) {
   return (
     <div
-      className={`h-6 w-6 animate-spin rounded-full border-2 border-[#1F453E] border-t-transparent ${className}`}
+      role="status" aria-label={label}
+      className={`h-6 w-6 motion-reduce:animate-none animate-spin rounded-full border-2 border-[#1F453E] border-t-transparent ${className}`}
     />
   );
 }

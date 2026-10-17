@@ -262,6 +262,7 @@ export async function addItemToCanvas(
 
   const img = (await FabricImage.fromURL(item.imageUrl, {
     crossOrigin: 'anonymous',
+    signal: AbortSignal.timeout(30000),
   })) as FabricImage & { itemData?: ItemObjectData };
 
   img.set({ originX: 'center', originY: 'center', ...ITEM_CONTROLS });
@@ -306,6 +307,7 @@ export async function addItemAtPlacement(
 
   const img = (await FabricImage.fromURL(item.imageUrl, {
     crossOrigin: 'anonymous',
+    signal: AbortSignal.timeout(30000),
   })) as FabricImage & { itemData?: ItemObjectData };
 
   img.set({ originX: 'center', originY: 'center', ...ITEM_CONTROLS });
@@ -445,7 +447,7 @@ export async function loadCanvasJSON(
   json: Record<string, unknown>,
   items: OutfitItem[] = []
 ): Promise<void> {
-  await canvas.loadFromJSON(json);
+  await canvas.loadFromJSON(json, undefined, { signal: AbortSignal.timeout(30000) });
   attachLegacyItemData(canvas.getObjects(), items); // NEW: Body Profile
   canvas.requestRenderAll();
 }
