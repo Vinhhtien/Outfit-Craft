@@ -206,6 +206,26 @@ export const commentApi = {
     api.delete<ApiResponse<null>>(`/outfits/${outfitId}/comments/${commentId}`).then((r) => r.data),
 };
 
+/* ---------------- User Public Profile ---------------- */
+export interface PublicUserProfileData {
+  user: {
+    _id: string;
+    displayName: string;
+    avatarUrl?: string;
+    createdAt: string;
+  };
+  stats: {
+    publicOutfitCount: number;
+    totalLikesReceived: number;
+  };
+  outfits: Outfit[];
+}
+
+export const userApi = {
+  getPublicProfile: (id: string, signal?: AbortSignal) =>
+    api.get<ApiResponse<PublicUserProfileData>>(`/users/${id}`, { signal }).then((r) => r.data.data),
+};
+
 // ===== NEW: Body Profile =====
 /* ---------------- Body Profile ---------------- */
 export const bodyProfileApi = {

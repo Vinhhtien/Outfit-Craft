@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import Link from 'next/link';
 import { Send, Trash2, MessageCircle, AlertCircle } from 'lucide-react';
 import { useResource } from '@/hooks/useResource';
 import { commentApi } from '@/lib/services';
@@ -142,24 +143,32 @@ export function OutfitCommentsSection({
               className="group flex items-start justify-between gap-2.5 rounded-xl border border-[#CBD5E1]/60 bg-[#FAF9F5] p-2.5 transition-colors hover:border-[#1F453E]/30"
             >
               <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                {c.user?.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={c.user.avatarUrl}
-                    alt={c.user.displayName}
-                    className="h-7 w-7 shrink-0 rounded-full border border-[#1F453E]/20 object-cover"
-                  />
-                ) : (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E2ECC8] text-[10px] font-bold text-[#1F453E]">
-                    {getInitials(c.user?.displayName || 'U')}
-                  </div>
-                )}
+                <Link
+                  href={`/profile/${c.user?._id || ''}`}
+                  className="shrink-0 transition-opacity hover:opacity-80"
+                >
+                  {c.user?.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={c.user.avatarUrl}
+                      alt={c.user.displayName}
+                      className="h-7 w-7 rounded-full border border-[#1F453E]/20 object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E2ECC8] text-[10px] font-bold text-[#1F453E]">
+                      {getInitials(c.user?.displayName || 'U')}
+                    </div>
+                  )}
+                </Link>
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-xs font-bold text-[#1F453E]">
+                    <Link
+                      href={`/profile/${c.user?._id || ''}`}
+                      className="truncate text-xs font-bold text-[#1F453E] hover:underline"
+                    >
                       {c.user?.displayName || 'Người dùng'}
-                    </span>
+                    </Link>
                     <span className="text-[10px] text-[#869BB2]">
                       {timeAgo(c.createdAt)}
                     </span>
