@@ -1,4 +1,5 @@
 'use client';
+import { useCategoryLabels } from '@/store/categoryStore';
 
 import { useState, useRef, useEffect } from 'react';
 import { Upload, Wand2, X } from 'lucide-react';
@@ -8,23 +9,13 @@ import { extractColors } from '@/lib/colorExtract';
 import { itemApi } from '@/lib/services';
 import { getErrorMessage, getFieldErrors } from '@/lib/api';
 import {
-  CATEGORIES, CATEGORY_LABELS, STYLES, SEASONS, SEASON_LABELS,
+  CATEGORIES, STYLES, SEASONS, SEASON_LABELS,
   OCCASIONS, OCCASION_LABELS,
 } from '@/types';
 import type { Category, Style, Season, Occasion } from '@/types';
 
 type Step = 'pick' | 'processing' | 'form';
 
-/** Nhiet do goi y mac dinh theo danh muc (C) - user van sua duoc. */
-const DEFAULT_TEMP: Record<Category, { min: number; max: number }> = {
-  top: { min: 18, max: 35 },
-  bottom: { min: 15, max: 35 },
-  outerwear: { min: -5, max: 20 },
-  dress: { min: 20, max: 38 },
-  shoes: { min: 0, max: 40 },
-  bag: { min: 0, max: 40 },
-  accessory: { min: 0, max: 40 },
-};
 
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -39,6 +30,7 @@ export function AddItemModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const CATEGORY_LABELS = useCategoryLabels();
   const fileRef = useRef<HTMLInputElement>(null);
   const operation = useRef(0);
   const savingRef = useRef(false);
@@ -148,7 +140,7 @@ export function AddItemModal({
       await itemApi.createWithImages({
         name: form.name.trim(), category: form.category, colors: form.colors,
         styles: form.styles, seasons: form.seasons, occasions: form.occasions,
-        tempRange: DEFAULT_TEMP[form.category], brand: form.brand.trim() || undefined,
+        brand: form.brand.trim() || undefined,
       }, cutoutBlob, originalFile, creationKey.current, (event) => {
         const percent = event.total ? Math.min(100, Math.round(event.loaded / event.total * 100)) : null;
         setSaveStage(percent === 100 ? 'Đang lưu ảnh và món đồ…' : `Đang tải ảnh${percent === null ? '…' : ` ${percent}%…`}`);

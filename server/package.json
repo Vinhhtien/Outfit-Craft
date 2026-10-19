@@ -5,11 +5,13 @@
   "description": "OutfitCraft API - Express + MongoDB",
   "main": "dist/server.js",
   "scripts": {
+    "admin:grant": "node --import tsx scripts/grant-admin.mjs",
+    "admin:demo": "node --import tsx scripts/seed-demo-admin.mjs",
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.mjs",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.mjs",
     "test:cloudinary": "node --import tsx scripts/verify-cloudinary.mjs"
   },
   "dependencies": {

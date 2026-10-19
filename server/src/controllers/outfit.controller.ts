@@ -148,7 +148,7 @@ export const getOutfit = asyncHandler(async (req, res) => {
 
   // Cho xem neu la chu so huu hoac outfit da cong khai.
   const isOwner = outfit.owner.toString() === req.user?.sub;
-  if (!isOwner && !outfit.isPublic) throw ApiError.forbidden();
+  if (!isOwner && (!outfit.isPublic || outfit.isHidden)) throw ApiError.forbidden();
 
   // ===== NEW: Body Profile =====
   // Snapshot mannequin la du lieu dang nguoi -> chi chu so huu duoc thay.
@@ -234,13 +234,13 @@ export const getPublicFeed = asyncHandler(async (req, res) => {
   const limit = Math.min(30, Number(req.query.limit) || 12);
 
   const [outfits, total] = await Promise.all([
-    Outfit.find({ isPublic: true })
+    Outfit.find({ isPublic: true, isHidden: { $ne: true } })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .populate('owner', 'displayName avatarUrl')
       .select('name thumbnailUrl tags likeCount createdAt owner'),
-    Outfit.countDocuments({ isPublic: true }),
+    Outfit.countDocuments({ isPublic: true, isHidden: { $ne: true } }),
   ]);
 
   res.json({
