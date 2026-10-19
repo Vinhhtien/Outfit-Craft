@@ -168,8 +168,13 @@ export const outfitApi = {
 
   markWorn: (id: string) => api.post<ApiResponse<null>>(`/outfits/${id}/wear`).then((r) => r.data),
 
-  feed: (page = 1) =>
-    api.get<ApiResponse<Outfit[]>>('/outfits/feed', { params: { page } }).then((r) => r.data),
+  feed: (
+    paramsOrPage: number | { page?: number; limit?: number; season?: string; occasion?: string; tag?: string; q?: string } = 1,
+    signal?: AbortSignal
+  ) => {
+    const params = typeof paramsOrPage === 'number' ? { page: paramsOrPage } : paramsOrPage;
+    return api.get<ApiResponse<Outfit[]>>('/outfits/feed', { params, signal }).then((r) => r.data);
+  },
 };
 
 // ===== NEW: Body Profile =====

@@ -233,14 +233,30 @@ export const getPublicFeed = asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(30, Number(req.query.limit) || 12);
 
+  const filter: Record<string, unknown> = { isPublic: true };
+
+  if (req.query.season && SEASONS.includes(req.query.season as any)) {
+    filter.seasons = req.query.season;
+  }
+  if (req.query.occasion && OCCASIONS.includes(req.query.occasion as any)) {
+    filter.occasions = req.query.occasion;
+  }
+  if (req.query.tag && typeof req.query.tag === 'string') {
+    filter.tags = req.query.tag.trim();
+  }
+  if (req.query.q && typeof req.query.q === 'string' && req.query.q.trim()) {
+    filter.name = { $regex: req.query.q.trim(), $options: 'i' };
+  }
+
   const [outfits, total] = await Promise.all([
-    Outfit.find({ isPublic: true })
+    Outfit.find(filter)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .populate('owner', 'displayName avatarUrl')
-      .select('name thumbnailUrl tags likeCount createdAt owner'),
-    Outfit.countDocuments({ isPublic: true }),
+      .populate('items.item', 'name imageUrl category brand')
+      .select('name thumbnailUrl tags seasons occasions likeCount createdAt owner items'),
+    Outfit.countDocuments(filter),
   ]);
 
   res.json({
