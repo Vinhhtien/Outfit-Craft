@@ -175,6 +175,11 @@ export const outfitApi = {
     const params = typeof paramsOrPage === 'number' ? { page: paramsOrPage } : paramsOrPage;
     return api.get<ApiResponse<Outfit[]>>('/outfits/feed', { params, signal }).then((r) => r.data);
   },
+
+  toggleLike: (id: string) =>
+    api
+      .post<ApiResponse<{ isLiked: boolean; likeCount: number }>>(`/outfits/${id}/like`)
+      .then((r) => r.data.data),
 };
 
 // ===== NEW: Body Profile =====

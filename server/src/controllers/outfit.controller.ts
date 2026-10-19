@@ -255,13 +255,62 @@ export const getPublicFeed = asyncHandler(async (req, res) => {
       .limit(limit)
       .populate('owner', 'displayName avatarUrl')
       .populate('items.item', 'name imageUrl category brand')
-      .select('name thumbnailUrl tags seasons occasions likeCount createdAt owner items'),
+      .select('name thumbnailUrl tags seasons occasions likeCount createdAt owner items')
+      .lean(),
     Outfit.countDocuments(filter),
   ]);
 
+  let likedOutfitIds = new Set<string>();
+  if (req.user?.sub && outfits.length > 0) {
+    const userLikes = await Like.find({
+      user: req.user.sub,
+      outfit: { $in: outfits.map((o) => o._id) },
+    }).select('outfit');
+    likedOutfitIds = new Set(userLikes.map((l) => l.outfit?.toString() || ''));
+  }
+
+  const enrichedOutfits = outfits.map((o) => ({
+    ...o,
+    isLiked: likedOutfitIds.has(o._id.toString()),
+  }));
+
   res.json({
     success: true,
-    data: outfits,
+    data: enrichedOutfits,
     pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+  });
+});
+
+/**
+ * POST /api/outfits/:id/like
+ * Tha tim / bo tha tim 1 outfit.
+ */
+export const toggleLikeOutfit = asyncHandler(async (req, res) => {
+  const outfit = await Outfit.findById(req.params.id);
+  if (!outfit) throw ApiError.notFound('Không tìm thấy outfit.');
+
+  const userId = req.user!.sub;
+  const existingLike = await Like.findOne({ user: userId, outfit: outfit._id });
+
+  let isLiked: boolean;
+  if (existingLike) {
+    await existingLike.deleteOne();
+    outfit.likeCount = Math.max(0, (outfit.likeCount || 0) - 1);
+    await outfit.save();
+    isLiked = false;
+  } else {
+    await Like.create({ user: userId, outfit: outfit._id });
+    outfit.likeCount = (outfit.likeCount || 0) + 1;
+    await outfit.save();
+    isLiked = true;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      isLiked,
+      likeCount: outfit.likeCount,
+    },
+    message: isLiked ? 'Đã thả tim bộ đồ.' : 'Đã bỏ thả tim bộ đồ.',
   });
 });

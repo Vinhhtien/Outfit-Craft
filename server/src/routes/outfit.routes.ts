@@ -13,5 +13,6 @@ router.get('/:id', c.getOutfit);
 router.patch('/:id', validate(c.updateOutfitSchema), c.updateOutfit);
 router.delete('/:id', c.deleteOutfit);
 router.post('/:id/wear', c.markAsWorn);
+router.post('/:id/like', c.toggleLikeOutfit);
 
 export default router;

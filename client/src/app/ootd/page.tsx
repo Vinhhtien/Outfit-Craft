@@ -50,6 +50,7 @@ interface FeedOutfit {
   seasons: Season[];
   occasions: Occasion[];
   likeCount: number;
+  isLiked?: boolean;
   createdAt: string;
   owner: FeedOwner | string;
   items?: { item: FeedItemDetail }[];
@@ -83,6 +84,7 @@ export default function OotdFeedPage() {
   const [selectedSeason, setSelectedSeason] = useState<Season | 'all'>('all');
   const [selectedOccasion, setSelectedOccasion] = useState<Occasion | 'all'>('all');
   const [selectedOutfit, setSelectedOutfit] = useState<FeedOutfit | null>(null);
+  const [likePending, setLikePending] = useState<Record<string, boolean>>({});
 
   const loader = useCallback(
     (signal: AbortSignal) =>
@@ -99,7 +101,64 @@ export default function OotdFeedPage() {
     [page, selectedSeason, selectedOccasion, searchQuery]
   );
 
-  const { data: res, loading, error, reload } = useResource(loader);
+  const { data: res, setData: setRes, loading, error, reload } = useResource(loader);
+
+  const handleToggleLike = async (outfitId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (likePending[outfitId]) return;
+
+    setLikePending((prev) => ({ ...prev, [outfitId]: true }));
+
+    // Optimistic UI update
+    setRes((prev) => {
+      if (!prev) return prev;
+      const list = (prev.data as unknown as FeedOutfit[]).map((item) => {
+        if (item._id === outfitId) {
+          const nextIsLiked = !item.isLiked;
+          const nextCount = nextIsLiked
+            ? (item.likeCount || 0) + 1
+            : Math.max(0, (item.likeCount || 0) - 1);
+          return { ...item, isLiked: nextIsLiked, likeCount: nextCount };
+        }
+        return item;
+      });
+      return { ...prev, data: list as unknown as typeof prev.data };
+    });
+
+    setSelectedOutfit((prev) => {
+      if (prev?._id === outfitId) {
+        const nextIsLiked = !prev.isLiked;
+        const nextCount = nextIsLiked
+          ? (prev.likeCount || 0) + 1
+          : Math.max(0, (prev.likeCount || 0) - 1);
+        return { ...prev, isLiked: nextIsLiked, likeCount: nextCount };
+      }
+      return prev;
+    });
+
+    try {
+      const result = await outfitApi.toggleLike(outfitId);
+      setRes((prev) => {
+        if (!prev) return prev;
+        const list = (prev.data as unknown as FeedOutfit[]).map((item) => {
+          if (item._id === outfitId) {
+            return { ...item, isLiked: result.isLiked, likeCount: result.likeCount };
+          }
+          return item;
+        });
+        return { ...prev, data: list as unknown as typeof prev.data };
+      });
+      setSelectedOutfit((prev) =>
+        prev?._id === outfitId
+          ? { ...prev, isLiked: result.isLiked, likeCount: result.likeCount }
+          : prev
+      );
+    } catch {
+      void reload();
+    } finally {
+      setLikePending((prev) => ({ ...prev, [outfitId]: false }));
+    }
+  };
 
   const outfits = (res?.data ?? []) as unknown as FeedOutfit[];
   const pagination = res?.pagination;
@@ -365,11 +424,25 @@ export default function OotdFeedPage() {
                     {/* Bottom Action Bar */}
                     <div className="flex items-center justify-between border-t border-[#E2ECC8]/60 bg-[#FAF9F5]/40 px-3.5 py-2.5">
                       <div className="flex items-center gap-3">
-                        {/* Heart / Like display */}
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-[#869BB2]">
-                          <Heart size={15} className="text-[#869BB2]" />
+                        {/* Heart / Like interactive button */}
+                        <button
+                          type="button"
+                          onClick={(e) => void handleToggleLike(outfit._id, e)}
+                          className={`group/like flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-all ${
+                            outfit.isLiked
+                              ? 'bg-rose-50 text-rose-600'
+                              : 'text-[#869BB2] hover:bg-rose-50/60 hover:text-rose-500'
+                          }`}
+                          title={outfit.isLiked ? 'Bỏ thích' : 'Thả tim'}
+                        >
+                          <Heart
+                            size={15}
+                            className={`transition-transform duration-200 group-hover/like:scale-125 ${
+                              outfit.isLiked ? 'fill-rose-500 text-rose-500' : 'text-current'
+                            }`}
+                          />
                           <span>{outfit.likeCount || 0}</span>
-                        </span>
+                        </button>
 
                         {/* Comment icon */}
                         <button
@@ -553,17 +626,39 @@ export default function OotdFeedPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-end gap-3 border-t border-[#E2ECC8]/70 pt-4">
-                <VButton variant="outline" onClick={() => setSelectedOutfit(null)}>
-                  Đóng
-                </VButton>
-                <VButton
-                  variant="primary"
-                  onClick={() => router.push(`/studio?outfit=${selectedOutfit._id}`)}
-                  className="inline-flex items-center gap-1.5"
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E2ECC8]/70 pt-4">
+                <button
+                  type="button"
+                  onClick={() => void handleToggleLike(selectedOutfit._id)}
+                  className={`group/modal-like flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition-all ${
+                    selectedOutfit.isLiked
+                      ? 'border-rose-200 bg-rose-50 text-rose-600 shadow-2xs'
+                      : 'border-[#CBD5E1] bg-white text-[#52665F] hover:border-rose-300 hover:text-rose-600'
+                  }`}
                 >
-                  <ExternalLink size={14} /> Mở trong Studio
-                </VButton>
+                  <Heart
+                    size={16}
+                    className={`transition-transform duration-200 group-hover/modal-like:scale-125 ${
+                      selectedOutfit.isLiked ? 'fill-rose-500 text-rose-500' : 'text-current'
+                    }`}
+                  />
+                  <span>
+                    {selectedOutfit.isLiked ? 'Đã thích' : 'Thả tim'} ({selectedOutfit.likeCount || 0})
+                  </span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <VButton variant="outline" onClick={() => setSelectedOutfit(null)}>
+                    Đóng
+                  </VButton>
+                  <VButton
+                    variant="primary"
+                    onClick={() => router.push(`/studio?outfit=${selectedOutfit._id}`)}
+                    className="inline-flex items-center gap-1.5"
+                  >
+                    <ExternalLink size={14} /> Mở trong Studio
+                  </VButton>
+                </div>
               </div>
             </div>
           </div>
