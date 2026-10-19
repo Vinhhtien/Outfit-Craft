@@ -143,6 +143,7 @@ export default function WardrobePage() {
                 setCategory(cat);
                 setView('items');
               }}
+              onOpenItem={(id) => setSelectedItemId(id)}
               onSwitchToItems={() => setView('items')}
             />
           ) : (

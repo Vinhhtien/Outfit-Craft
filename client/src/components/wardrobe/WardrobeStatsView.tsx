@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Sparkles,
   Layers,
+  Trophy,
 } from 'lucide-react';
 import { useResource } from '@/hooks/useResource';
 import { itemApi } from '@/lib/services';
@@ -15,11 +16,13 @@ import type { Category } from '@/types';
 
 interface WardrobeStatsViewProps {
   onSelectCategory?: (category: Category) => void;
+  onOpenItem?: (itemId: string) => void;
   onSwitchToItems?: () => void;
 }
 
 export function WardrobeStatsView({
   onSelectCategory,
+  onOpenItem,
   onSwitchToItems,
 }: WardrobeStatsViewProps) {
   const { data, loading, error, reload } = useResource(itemApi.stats);
@@ -61,7 +64,7 @@ export function WardrobeStatsView({
     );
   }
 
-  const { total, byCategory } = data;
+  const { total, byCategory, mostWorn } = data;
 
   // Task 50: Chuẩn bị phân bổ theo danh mục
   const categoryCountMap = new Map<Category, number>(
@@ -74,11 +77,14 @@ export function WardrobeStatsView({
     percent: total > 0 ? Math.round(((categoryCountMap.get(cat) ?? 0) / total) * 100) : 0,
   })).sort((a, b) => b.count - a.count);
 
+  // Task 51: Tính tỷ lệ mặc so với món mặc nhiều nhất
+  const maxWearCount = mostWorn.length > 0 ? Math.max(...mostWorn.map((i) => i.wearCount), 1) : 1;
+
   return (
     <div className="space-y-8">
-      {/* Task 49: Tổng số món đồ trong tủ */}
+      {/* Task 49 + 51: Tổng số món đồ và Highlight món mặc nhiều nhất */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {/* Card 1: Tổng số món */}
+        {/* Card 1: Tổng số món (Task 49) */}
         <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#6B7B76]">
@@ -100,7 +106,7 @@ export function WardrobeStatsView({
           <div className="absolute -bottom-4 -right-4 h-16 w-16 rounded-full bg-[#E2ECC8]/20" />
         </div>
 
-        {/* Card 2: Phân loại danh mục */}
+        {/* Card 2: Phân loại danh mục (Task 50) */}
         <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#6B7B76]">
@@ -118,6 +124,27 @@ export function WardrobeStatsView({
           </div>
           <p className="mt-3 text-xs text-[#6B7B76]">
             Các món đồ được phân chia khoa học theo từng loại trang phục
+          </p>
+        </div>
+
+        {/* Card 3: Top yêu thích nhất (Task 51) */}
+        <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#6B7B76]">
+              Món mặc nhiều nhất
+            </span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+              <Trophy size={20} />
+            </span>
+          </div>
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="font-serif-display text-5xl font-semibold text-[#1F453E]">
+              {mostWorn[0]?.wearCount ?? 0}
+            </span>
+            <span className="text-sm font-medium text-[#52665F]">lần diện đồ</span>
+          </div>
+          <p className="mt-3 truncate text-xs font-semibold text-[#1F453E]">
+            {mostWorn[0] ? mostWorn[0].name : 'Chưa có lượt mặc'}
           </p>
         </div>
       </section>
@@ -176,6 +203,100 @@ export function WardrobeStatsView({
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Task 51: Top 5 món đồ mặc nhiều nhất */}
+      <section className="rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)]">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+                <Trophy size={15} />
+              </span>
+              <h2 className="font-serif-display text-xl font-semibold text-[#1F453E] sm:text-2xl">
+                Top 5 món đồ mặc nhiều nhất
+              </h2>
+            </div>
+            <p className="mt-1 text-xs text-[#52665F] sm:text-sm">
+              Những món đồ được bạn ưu ái diện đi diện lại nhiều lần nhất.
+            </p>
+          </div>
+          <span className="text-xs font-semibold text-[#52665F]">
+            Tự động tính từ số lần phối đồ & nhật ký lịch
+          </span>
+        </div>
+
+        {mostWorn.length === 0 ? (
+          <p className="py-8 text-center text-sm text-[#6B7B76]">
+            Chưa có món đồ nào được ghi nhận lần mặc. Hãy lập lịch trang phục hoặc đánh dấu đã mặc!
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {mostWorn.map((item, index) => {
+              const rank = index + 1;
+              const rankColor =
+                rank === 1
+                  ? 'bg-amber-400 text-amber-950 border-amber-300'
+                  : rank === 2
+                  ? 'bg-slate-300 text-slate-900 border-slate-200'
+                  : rank === 3
+                  ? 'bg-amber-700/80 text-white border-amber-600'
+                  : 'bg-[#FAF9F5] text-[#1F453E] border-[#1F453E]/20';
+
+              const wearRatio = Math.round((item.wearCount / maxWearCount) * 100);
+
+              return (
+                <div
+                  key={item._id}
+                  onClick={() => onOpenItem?.(item._id)}
+                  className="group relative flex flex-col justify-between rounded-xl border border-[#CBD5E1] bg-white p-3.5 shadow-2xs transition-all hover:border-[#1F453E] hover:shadow-md cursor-pointer"
+                >
+                  {/* Huy hiệu thứ hạng */}
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-black shadow-xs ${rankColor}`}
+                    >
+                      #{rank}
+                    </span>
+                    <span className="rounded-full bg-[#E2ECC8] px-2 py-0.5 text-[10px] font-bold uppercase text-[#1F453E]">
+                      {item.wearCount} lần
+                    </span>
+                  </div>
+
+                  {/* Ảnh sản phẩm */}
+                  <div className="my-3 grid aspect-square place-items-center rounded-lg bg-[#FAF9F5] p-2 transition-transform group-hover:scale-105">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+
+                  {/* Thông tin món đồ */}
+                  <div>
+                    <h4 className="truncate text-sm font-semibold text-[#1F453E] group-hover:underline">
+                      {item.name}
+                    </h4>
+                    <p className="mt-0.5 text-xs text-[#6B7B76]">
+                      {CATEGORY_LABELS[item.category]}
+                    </p>
+
+                    {/* Thanh đo mức độ ưa chuộng */}
+                    <div className="mt-2.5">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#E2ECC8]/60">
+                        <div
+                          className="h-full rounded-full bg-[#1F453E]"
+                          style={{ width: `${wearRatio}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );
