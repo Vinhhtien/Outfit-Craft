@@ -3,6 +3,8 @@ import * as c from '../controllers/outfit.controller.js';
 import { validate } from '../middlewares/validate.js';
 import { protect } from '../middlewares/auth.js';
 
+import * as commentController from '../controllers/comment.controller.js';
+
 const router = Router();
 router.use(protect);
 
@@ -14,5 +16,10 @@ router.patch('/:id', validate(c.updateOutfitSchema), c.updateOutfit);
 router.delete('/:id', c.deleteOutfit);
 router.post('/:id/wear', c.markAsWorn);
 router.post('/:id/like', c.toggleLikeOutfit);
+
+// Comments
+router.get('/:id/comments', commentController.getOutfitComments);
+router.post('/:id/comments', validate(commentController.commentSchema), commentController.addComment);
+router.delete('/:id/comments/:commentId', commentController.deleteComment);
 
 export default router;

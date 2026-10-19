@@ -182,6 +182,30 @@ export const outfitApi = {
       .then((r) => r.data.data),
 };
 
+/* ---------------- Comments ---------------- */
+export interface CommentItem {
+  _id: string;
+  user: {
+    _id: string;
+    displayName: string;
+    avatarUrl?: string;
+  };
+  outfit: string;
+  content: string;
+  createdAt: string;
+}
+
+export const commentApi = {
+  list: (outfitId: string, signal?: AbortSignal) =>
+    api.get<ApiResponse<CommentItem[]>>(`/outfits/${outfitId}/comments`, { signal }).then((r) => r.data.data),
+
+  create: (outfitId: string, content: string) =>
+    api.post<ApiResponse<CommentItem>>(`/outfits/${outfitId}/comments`, { content }).then((r) => r.data.data),
+
+  remove: (outfitId: string, commentId: string) =>
+    api.delete<ApiResponse<null>>(`/outfits/${outfitId}/comments/${commentId}`).then((r) => r.data),
+};
+
 // ===== NEW: Body Profile =====
 /* ---------------- Body Profile ---------------- */
 export const bodyProfileApi = {

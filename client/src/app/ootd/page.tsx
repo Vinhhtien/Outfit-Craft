@@ -19,6 +19,7 @@ import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
 import { VButton, VModal } from '@/components/ui/vintage';
 import { useResource } from '@/hooks/useResource';
 import { outfitApi } from '@/lib/services';
+import { OutfitCommentsSection } from '@/components/ootd/OutfitCommentsSection';
 import {
   SEASONS,
   SEASON_LABELS,
@@ -51,6 +52,7 @@ interface FeedOutfit {
   occasions: Occasion[];
   likeCount: number;
   isLiked?: boolean;
+  commentCount?: number;
   createdAt: string;
   owner: FeedOwner | string;
   items?: { item: FeedItemDetail }[];
@@ -84,6 +86,7 @@ export default function OotdFeedPage() {
   const [selectedSeason, setSelectedSeason] = useState<Season | 'all'>('all');
   const [selectedOccasion, setSelectedOccasion] = useState<Occasion | 'all'>('all');
   const [selectedOutfit, setSelectedOutfit] = useState<FeedOutfit | null>(null);
+  const [activeModalTab, setActiveModalTab] = useState<'items' | 'comments'>('items');
   const [likePending, setLikePending] = useState<Record<string, boolean>>({});
 
   const loader = useCallback(
@@ -444,13 +447,18 @@ export default function OotdFeedPage() {
                           <span>{outfit.likeCount || 0}</span>
                         </button>
 
-                        {/* Comment icon */}
+                        {/* Comment icon button */}
                         <button
                           type="button"
-                          onClick={() => setSelectedOutfit(outfit)}
-                          className="flex items-center gap-1 text-xs text-[#869BB2] transition-colors hover:text-[#1F453E]"
+                          onClick={() => {
+                            setSelectedOutfit(outfit);
+                            setActiveModalTab('comments');
+                          }}
+                          className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold text-[#869BB2] transition-colors hover:bg-[#FAF9F5] hover:text-[#1F453E]"
+                          title="Xem bình luận"
                         >
                           <MessageCircle size={15} />
+                          <span>{outfit.commentCount || 0}</span>
                         </button>
                       </div>
 
@@ -586,42 +594,105 @@ export default function OotdFeedPage() {
                     </div>
                   </div>
 
-                  {/* Items used breakdown */}
-                  {selectedOutfit.items && selectedOutfit.items.length > 0 && (
-                    <div className="pt-2">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-[#869BB2]">
-                        Các món đồ trong bản phối ({selectedOutfit.items.length}):
-                      </p>
-                      <div className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-1">
-                        {selectedOutfit.items.map(({ item }) =>
-                          item ? (
-                            <div
-                              key={item._id}
-                              className="flex items-center gap-2.5 rounded-xl border border-[#CBD5E1] bg-[#FAF9F5] p-2"
-                            >
-                              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white p-1">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={item.imageUrl}
-                                  alt={item.name}
-                                  className="max-h-full max-w-full object-contain"
-                                />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-semibold text-[#1F453E]">
-                                  {item.name}
-                                </p>
-                                <p className="text-[10px] text-[#6B7B76]">
-                                  {CATEGORY_LABELS[item.category] || item.category}
-                                  {item.brand ? ` • ${item.brand}` : ''}
-                                </p>
-                              </div>
-                            </div>
-                          ) : null
+                  {/* Modal tab switcher: Mon do / Binh luan */}
+                  <div className="pt-2">
+                    <div className="flex items-center gap-2 border-b border-[#E2ECC8]/80 pb-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveModalTab('items')}
+                        className={`rounded-full px-3 py-1 text-xs font-bold transition-all ${
+                          activeModalTab === 'items'
+                            ? 'bg-[#1F453E] text-white shadow-2xs'
+                            : 'bg-[#FAF9F5] text-[#52665F] hover:bg-[#E2ECC8]/60'
+                        }`}
+                      >
+                        Món đồ ({selectedOutfit.items?.length || 0})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveModalTab('comments')}
+                        className={`rounded-full px-3 py-1 text-xs font-bold transition-all ${
+                          activeModalTab === 'comments'
+                            ? 'bg-[#1F453E] text-white shadow-2xs'
+                            : 'bg-[#FAF9F5] text-[#52665F] hover:bg-[#E2ECC8]/60'
+                        }`}
+                      >
+                        Bình luận ({selectedOutfit.commentCount || 0})
+                      </button>
+                    </div>
+
+                    {activeModalTab === 'items' ? (
+                      <div className="mt-3">
+                        {selectedOutfit.items && selectedOutfit.items.length > 0 ? (
+                          <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
+                            {selectedOutfit.items.map(({ item }) =>
+                              item ? (
+                                <div
+                                  key={item._id}
+                                  className="flex items-center gap-2.5 rounded-xl border border-[#CBD5E1] bg-[#FAF9F5] p-2"
+                                >
+                                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white p-1">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={item.imageUrl}
+                                      alt={item.name}
+                                      className="max-h-full max-w-full object-contain"
+                                    />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-xs font-semibold text-[#1F453E]">
+                                      {item.name}
+                                    </p>
+                                    <p className="text-[10px] text-[#6B7B76]">
+                                      {CATEGORY_LABELS[item.category] || item.category}
+                                      {item.brand ? ` • ${item.brand}` : ''}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : null
+                            )}
+                          </div>
+                        ) : (
+                          <p className="py-4 text-center text-xs text-[#869BB2]">
+                            Không có thông tin món đồ
+                          </p>
                         )}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="mt-3">
+                        <OutfitCommentsSection
+                          outfitId={selectedOutfit._id}
+                          outfitOwnerId={
+                            typeof selectedOutfit.owner === 'object'
+                              ? selectedOutfit.owner?._id
+                              : undefined
+                          }
+                          onCommentCountChange={(delta) => {
+                            setRes((prev) => {
+                              if (!prev) return prev;
+                              const list = (prev.data as unknown as FeedOutfit[]).map((item) =>
+                                item._id === selectedOutfit._id
+                                  ? {
+                                      ...item,
+                                      commentCount: Math.max(0, (item.commentCount || 0) + delta),
+                                    }
+                                  : item
+                              );
+                              return { ...prev, data: list as unknown as typeof prev.data };
+                            });
+                            setSelectedOutfit((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    commentCount: Math.max(0, (prev.commentCount || 0) + delta),
+                                  }
+                                : prev
+                            );
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

@@ -8,6 +8,7 @@ import { SEASONS, OCCASIONS } from '../types/index.js';
 // ===== NEW: OOTD Post =====
 import { OotdPost } from '../models/OotdPost.js';
 import { Like } from '../models/Like.js';
+import { Comment } from '../models/Comment.js';
 // ===== END NEW =====
 // ===== NEW: Body Profile =====
 import { mannequinSchema } from './bodyProfile.controller.js';
@@ -198,14 +199,18 @@ export const deleteOutfit = asyncHandler(async (req, res) => {
   await outfit.deleteOne();
 
   // ===== NEW: OOTD Post =====
-  // Xoa luon bai dang chia se outfit nay cung like cua bai, tranh du lieu mo coi.
+  // Xoa luon bai dang chia se outfit nay cung like/comments cua bai, tranh du lieu mo coi.
   const postIds = await OotdPost.find({ outfit: outfit._id }).distinct('_id');
-  if (postIds.length > 0) {
-    await Promise.all([
-      Like.deleteMany({ post: { $in: postIds } }),
-      OotdPost.deleteMany({ _id: { $in: postIds } }),
-    ]);
-  }
+  await Promise.all([
+    Like.deleteMany({ outfit: outfit._id }),
+    Comment.deleteMany({ outfit: outfit._id }),
+    ...(postIds.length > 0
+      ? [
+          Like.deleteMany({ post: { $in: postIds } }),
+          OotdPost.deleteMany({ _id: { $in: postIds } }),
+        ]
+      : []),
+  ]);
   // ===== END NEW =====
 
   await destroyImage(outfit.thumbnailPublicId);
@@ -260,18 +265,32 @@ export const getPublicFeed = asyncHandler(async (req, res) => {
     Outfit.countDocuments(filter),
   ]);
 
+  const outfitIds = outfits.map((o) => o._id);
+
   let likedOutfitIds = new Set<string>();
-  if (req.user?.sub && outfits.length > 0) {
+  if (req.user?.sub && outfitIds.length > 0) {
     const userLikes = await Like.find({
       user: req.user.sub,
-      outfit: { $in: outfits.map((o) => o._id) },
+      outfit: { $in: outfitIds },
     }).select('outfit');
     likedOutfitIds = new Set(userLikes.map((l) => l.outfit?.toString() || ''));
   }
 
+  const commentCounts =
+    outfitIds.length > 0
+      ? await Comment.aggregate([
+          { $match: { outfit: { $in: outfitIds } } },
+          { $group: { _id: '$outfit', count: { $sum: 1 } } },
+        ])
+      : [];
+  const commentCountMap = new Map<string, number>(
+    commentCounts.map((c: { _id: unknown; count: number }) => [String(c._id), c.count])
+  );
+
   const enrichedOutfits = outfits.map((o) => ({
     ...o,
     isLiked: likedOutfitIds.has(o._id.toString()),
+    commentCount: commentCountMap.get(o._id.toString()) || 0,
   }));
 
   res.json({
