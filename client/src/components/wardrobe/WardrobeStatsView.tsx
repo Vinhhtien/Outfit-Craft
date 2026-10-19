@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import {
   BarChart3,
   Shirt,
@@ -7,6 +8,8 @@ import {
   Sparkles,
   Layers,
   Trophy,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { useResource } from '@/hooks/useResource';
 import { itemApi } from '@/lib/services';
@@ -64,7 +67,11 @@ export function WardrobeStatsView({
     );
   }
 
-  const { total, byCategory, mostWorn } = data;
+  const { total, byCategory, mostWorn, neverWorn, neverWornItems = [] } = data;
+
+  // Task 49 + 52: Tính tỷ lệ món đã mặc
+  const wornCount = Math.max(0, total - neverWorn);
+  const wornPercent = total > 0 ? Math.round((wornCount / total) * 100) : 0;
 
   // Task 50: Chuẩn bị phân bổ theo danh mục
   const categoryCountMap = new Map<Category, number>(
@@ -82,74 +89,102 @@ export function WardrobeStatsView({
 
   return (
     <div className="space-y-8">
-      {/* Task 49 + 51: Tổng số món đồ và Highlight món mặc nhiều nhất */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* 1. KPI CARDS (Tasks 49, 51, 52) */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Tổng số món (Task 49) */}
-        <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
+        <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-5 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#6B7B76]">
-              Tổng món đồ trong tủ
+              Tổng món đồ
             </span>
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E2ECC8] text-[#1F453E]">
-              <Shirt size={20} />
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E2ECC8] text-[#1F453E]">
+              <Shirt size={18} />
             </span>
           </div>
-          <div className="mt-4 flex items-baseline gap-2">
-            <span className="font-serif-display text-5xl font-semibold text-[#1F453E]">
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="font-serif-display text-4xl font-semibold text-[#1F453E]">
               {total}
             </span>
-            <span className="text-sm font-medium text-[#52665F]">món đã số hóa</span>
+            <span className="text-xs font-medium text-[#52665F]">món trong tủ</span>
           </div>
-          <p className="mt-3 text-xs text-[#6B7B76]">
-            Toàn bộ trang phục và phụ kiện hiện có trong tủ đồ cá nhân
+          <p className="mt-2 text-xs text-[#6B7B76]">
+            Phân bổ trên {byCategory.length} danh mục khác nhau
           </p>
           <div className="absolute -bottom-4 -right-4 h-16 w-16 rounded-full bg-[#E2ECC8]/20" />
         </div>
 
-        {/* Card 2: Phân loại danh mục (Task 50) */}
-        <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
+        {/* Card 2: Đã từng mặc */}
+        <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-5 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#6B7B76]">
-              Đa dạng danh mục
+              Đã diện qua
             </span>
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E2ECC8]/60 text-[#1F453E]">
-              <Sparkles size={20} />
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E2ECC8]/60 text-[#1F453E]">
+              <CheckCircle2 size={18} />
             </span>
           </div>
-          <div className="mt-4 flex items-baseline gap-2">
-            <span className="font-serif-display text-5xl font-semibold text-[#1F453E]">
-              {byCategory.length}
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="font-serif-display text-4xl font-semibold text-[#1F453E]">
+              {wornCount}
             </span>
-            <span className="text-sm font-medium text-[#52665F]">nhóm danh mục</span>
+            <span className="text-xs font-medium text-[#52665F]">món ({wornPercent}%)</span>
           </div>
-          <p className="mt-3 text-xs text-[#6B7B76]">
-            Các món đồ được phân chia khoa học theo từng loại trang phục
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#E2ECC8]/50">
+            <div
+              className="h-full rounded-full bg-[#1F453E] transition-all duration-500"
+              style={{ width: `${wornPercent}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Card 3: Món chưa mặc lần nào (Task 52) */}
+        <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-5 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#6B7B76]">
+              Chưa mặc lần nào
+            </span>
+            <span className={`flex h-9 w-9 items-center justify-center rounded-full ${
+              neverWorn > 0 ? 'bg-amber-100 text-amber-800' : 'bg-[#E2ECC8] text-[#1F453E]'
+            }`}>
+              <AlertCircle size={18} />
+            </span>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="font-serif-display text-4xl font-semibold text-[#1F453E]">
+              {neverWorn}
+            </span>
+            <span className="text-xs font-medium text-[#52665F]">
+              món ({total > 0 ? Math.round((neverWorn / total) * 100) : 0}%)
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-[#6B7B76]">
+            {neverWorn > 0 ? 'Cần được ưu tiên phối trong các dịp tới' : 'Xuất sắc! Tủ đồ không bị lãng phí'}
           </p>
         </div>
 
-        {/* Card 3: Top yêu thích nhất (Task 51) */}
-        <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
+        {/* Card 4: Top yêu thích nhất (Task 51) */}
+        <div className="relative overflow-hidden rounded-2xl border border-[#1F453E]/15 bg-white p-5 shadow-[0_4px_20px_rgba(31,69,62,0.03)] transition-all hover:shadow-md">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#6B7B76]">
-              Món mặc nhiều nhất
+              Mặc nhiều nhất
             </span>
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-800">
-              <Trophy size={20} />
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+              <Trophy size={18} />
             </span>
           </div>
-          <div className="mt-4 flex items-baseline gap-2">
-            <span className="font-serif-display text-5xl font-semibold text-[#1F453E]">
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="font-serif-display text-4xl font-semibold text-[#1F453E]">
               {mostWorn[0]?.wearCount ?? 0}
             </span>
-            <span className="text-sm font-medium text-[#52665F]">lần diện đồ</span>
+            <span className="text-xs font-medium text-[#52665F]">lần mặc</span>
           </div>
-          <p className="mt-3 truncate text-xs font-semibold text-[#1F453E]">
+          <p className="mt-2 truncate text-xs font-semibold text-[#1F453E]">
             {mostWorn[0] ? mostWorn[0].name : 'Chưa có lượt mặc'}
           </p>
         </div>
       </section>
 
-      {/* Task 50: Thống kê theo danh mục */}
+      {/* 2. THỐNG KÊ THEO DANH MỤC (Task 50) */}
       <section className="rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)]">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -205,7 +240,7 @@ export function WardrobeStatsView({
         </div>
       </section>
 
-      {/* Task 51: Top 5 món đồ mặc nhiều nhất */}
+      {/* 3. TOP 5 MÓN ĐỒ MẶC NHIỀU NHẤT (Task 51) */}
       <section className="rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)]">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -296,6 +331,76 @@ export function WardrobeStatsView({
               );
             })}
           </div>
+        )}
+      </section>
+
+      {/* 4. MÓN ĐỒ CHƯA MẶC LẦN NÀO (Task 52) */}
+      <section className="rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)]">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-100 text-rose-800">
+                <AlertCircle size={15} />
+              </span>
+              <h2 className="font-serif-display text-xl font-semibold text-[#1F453E] sm:text-2xl">
+                Món đồ chưa mặc lần nào ({neverWorn})
+              </h2>
+            </div>
+            <p className="mt-1 text-xs text-[#52665F] sm:text-sm">
+              Những món đồ đang &quot;ngủ quên&quot; trong tủ. Hãy đưa chúng vào Studio để tạo outfit mới!
+            </p>
+          </div>
+          {neverWorn > 0 && (
+            <Link
+              href="/studio"
+              className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-[#1F453E] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#16352F]"
+            >
+              <Sparkles size={13} /> Phối đồ ngay
+            </Link>
+          )}
+        </div>
+
+        {neverWorn === 0 ? (
+          <div className="flex items-center gap-3 rounded-xl border border-[#E2ECC8] bg-[#E2ECC8]/30 p-4 text-[#1F453E]">
+            <CheckCircle2 size={22} className="text-[#1F453E]" />
+            <p className="text-sm font-medium">
+              Thật tuyệt vời! Toàn bộ món đồ trong tủ của bạn đều đã từng được diện ít nhất một lần.
+            </p>
+          </div>
+        ) : neverWornItems.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {neverWornItems.map((item) => (
+              <div
+                key={item._id}
+                onClick={() => onOpenItem?.(item._id)}
+                className="group relative cursor-pointer rounded-xl border border-[#CBD5E1] bg-white p-3 shadow-2xs transition-all hover:border-[#1F453E] hover:shadow-sm"
+              >
+                <div className="grid aspect-square place-items-center rounded-lg bg-[#FAF9F5] p-2 transition-transform group-hover:scale-105">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+                <h4 className="mt-2 truncate text-xs font-semibold text-[#1F453E] group-hover:underline">
+                  {item.name}
+                </h4>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-[11px] text-[#6B7B76]">
+                    {CATEGORY_LABELS[item.category]}
+                  </span>
+                  <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-700">
+                    0 lần
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-[#6B7B76]">
+            Có {neverWorn} món đồ chưa mặc lần nào.
+          </p>
         )}
       </section>
     </div>

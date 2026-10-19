@@ -125,6 +125,7 @@ export const itemApi = {
     byCategory: { _id: Category; count: number }[];
     mostWorn: ClothingItem[];
     neverWorn: number;
+    neverWornItems?: ClothingItem[];
   }>>('/items/stats').then((r) => r.data.data),
 };
 
