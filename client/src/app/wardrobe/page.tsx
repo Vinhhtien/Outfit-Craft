@@ -138,7 +138,13 @@ export default function WardrobePage() {
 
         <div className="mx-auto max-w-6xl px-4 py-8">
           {view === 'stats' ? (
-            <WardrobeStatsView onSwitchToItems={() => setView('items')} />
+            <WardrobeStatsView
+              onSelectCategory={(cat) => {
+                setCategory(cat);
+                setView('items');
+              }}
+              onSwitchToItems={() => setView('items')}
+            />
           ) : (
             <>
               <div className="mb-6 space-y-4">

@@ -5,16 +5,21 @@ import {
   Shirt,
   ArrowRight,
   Sparkles,
+  Layers,
 } from 'lucide-react';
 import { useResource } from '@/hooks/useResource';
 import { itemApi } from '@/lib/services';
 import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
+import { CATEGORIES, CATEGORY_LABELS } from '@/types';
+import type { Category } from '@/types';
 
 interface WardrobeStatsViewProps {
+  onSelectCategory?: (category: Category) => void;
   onSwitchToItems?: () => void;
 }
 
 export function WardrobeStatsView({
+  onSelectCategory,
   onSwitchToItems,
 }: WardrobeStatsViewProps) {
   const { data, loading, error, reload } = useResource(itemApi.stats);
@@ -57,6 +62,17 @@ export function WardrobeStatsView({
   }
 
   const { total, byCategory } = data;
+
+  // Task 50: Chuẩn bị phân bổ theo danh mục
+  const categoryCountMap = new Map<Category, number>(
+    byCategory.map((c) => [c._id, c.count])
+  );
+  const fullCategories = CATEGORIES.map((cat) => ({
+    category: cat,
+    label: CATEGORY_LABELS[cat],
+    count: categoryCountMap.get(cat) ?? 0,
+    percent: total > 0 ? Math.round(((categoryCountMap.get(cat) ?? 0) / total) * 100) : 0,
+  })).sort((a, b) => b.count - a.count);
 
   return (
     <div className="space-y-8">
@@ -103,6 +119,62 @@ export function WardrobeStatsView({
           <p className="mt-3 text-xs text-[#6B7B76]">
             Các món đồ được phân chia khoa học theo từng loại trang phục
           </p>
+        </div>
+      </section>
+
+      {/* Task 50: Thống kê theo danh mục */}
+      <section className="rounded-2xl border border-[#1F453E]/15 bg-white p-6 shadow-[0_4px_20px_rgba(31,69,62,0.03)]">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-serif-display text-xl font-semibold text-[#1F453E] sm:text-2xl">
+              Phân bố theo danh mục
+            </h2>
+            <p className="mt-1 text-xs text-[#52665F] sm:text-sm">
+              Tỷ lệ các loại trang phục trong tủ đồ. Bấm vào danh mục để xem các món tương ứng.
+            </p>
+          </div>
+          <span className="rounded-full border border-[#1F453E]/15 bg-[#E2ECC8]/60 px-3.5 py-1 text-xs font-semibold text-[#1F453E]">
+            {CATEGORIES.length} nhóm đồ
+          </span>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {fullCategories.map(({ category, label, count, percent }) => (
+            <div
+              key={category}
+              onClick={() => onSelectCategory?.(category)}
+              className="group relative cursor-pointer rounded-xl border border-[#CBD5E1]/80 bg-[#FAF9F5] p-4 transition-all hover:border-[#1F453E] hover:bg-white hover:shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#1F453E]/10 bg-white text-[#1F453E] group-hover:bg-[#E2ECC8]/40">
+                    <Layers size={15} />
+                  </span>
+                  <span className="text-sm font-semibold text-[#1F453E] group-hover:underline">
+                    {label}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-bold text-[#1F453E]">{count}</span>
+                  <span className="ml-1 text-xs text-[#6B7B76]">món</span>
+                </div>
+              </div>
+
+              {/* Thanh tỷ trọng phần trăm */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-[11px] text-[#6B7B76]">
+                  <span>Tỷ trọng</span>
+                  <span className="font-semibold text-[#1F453E]">{percent}%</span>
+                </div>
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full border border-[#CBD5E1]/60 bg-white">
+                  <div
+                    className="h-full rounded-full bg-[#1F453E] transition-all duration-500 group-hover:bg-[#16352F]"
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
     </div>
