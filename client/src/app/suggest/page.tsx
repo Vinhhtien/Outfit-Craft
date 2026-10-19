@@ -2,15 +2,17 @@
 
 import { useCallback, useState } from 'react';
 import {
-  Sparkles, CloudRain, Thermometer, Droplets, RefreshCw, Bot, ListOrdered,
+  Sparkles, CloudRain, Thermometer, Droplets, RefreshCw, Bot, ListOrdered, FolderPlus,
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
+import { VToast } from '@/components/ui/vintage';
 import { useResource } from '@/hooks/useResource';
 import { suggestionApi } from '@/lib/services';
 import { useAuthStore } from '@/store/authStore';
 import { RankedItemsView } from '@/components/suggest/RankedItemsView';
+import { SaveSuggestedOutfitModal } from '@/components/suggest/SaveSuggestedOutfitModal';
 import { ItemDetailModal } from '@/components/wardrobe/ItemDetailModal';
 import { OCCASIONS, OCCASION_LABELS, CATEGORY_LABELS } from '@/types';
 import type { ClothingItem, Occasion } from '@/types';
@@ -23,6 +25,8 @@ export default function SuggestPage() {
   const [occasion, setOccasion] = useState<Occasion>('daily');
   const [viewMode, setViewMode] = useState<'outfit' | 'ranked'>('outfit');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const city = cityInput ?? user?.defaultCity ?? '';
   const loader = useCallback((signal: AbortSignal) => suggestionApi.get({ city: city.trim() || undefined, occasion }, signal), [city, occasion]);
@@ -176,11 +180,23 @@ export default function SuggestPage() {
 
                   {/* Bo do goi y */}
                   <div className="rounded-2xl border border-[#1F453E]/15 bg-white p-5 shadow-[0_4px_20px_rgba(31,69,62,0.03)]">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <h2 className="font-serif-display text-lg font-semibold text-[#1F453E]">Bộ đồ gợi ý</h2>
-                      <span className="rounded-full border border-[#1F453E]/15 bg-[#E2ECC8] px-3 py-1 text-xs font-semibold text-[#1F453E]">
-                        Độ phù hợp {data.suggestion.totalScore}/100
-                      </span>
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <h2 className="font-serif-display text-lg font-semibold text-[#1F453E]">Bộ đồ gợi ý</h2>
+                        <span className="rounded-full border border-[#1F453E]/15 bg-[#E2ECC8] px-3 py-1 text-xs font-semibold text-[#1F453E]">
+                          Độ phù hợp {data.suggestion.totalScore}/100
+                        </span>
+                      </div>
+
+                      {picks.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsSaveModalOpen(true)}
+                          className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-[#1F453E] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all hover:bg-[#16352F]"
+                        >
+                          <FolderPlus size={14} /> Lưu bộ đồ này
+                        </button>
+                      )}
                     </div>
 
                     {picks.length === 0 ? (
@@ -192,9 +208,10 @@ export default function SuggestPage() {
                         {picks.map(({ label, item }) => (
                           <div
                             key={label}
-                            className="rounded-xl border border-[#CBD5E1] bg-white p-3 text-center shadow-2xs transition-all hover:border-[#1F453E]"
+                            onClick={() => setSelectedItemId(item!._id)}
+                            className="group cursor-pointer rounded-xl border border-[#CBD5E1] bg-white p-3 text-center shadow-2xs transition-all hover:border-[#1F453E] hover:shadow-xs"
                           >
-                            <div className="grid aspect-square place-items-center rounded-lg bg-[#FAF9F5] p-2">
+                            <div className="grid aspect-square place-items-center rounded-lg bg-[#FAF9F5] p-2 transition-transform group-hover:scale-105">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={item!.imageUrl}
@@ -202,7 +219,7 @@ export default function SuggestPage() {
                                 className="max-h-full max-w-full object-contain"
                               />
                             </div>
-                            <p className="mt-2 truncate text-sm font-semibold text-[#1F453E]">{item!.name}</p>
+                            <p className="mt-2 truncate text-sm font-semibold text-[#1F453E] group-hover:underline">{item!.name}</p>
                             <p className="text-xs text-[#6B7B76]">{label}</p>
                           </div>
                         ))}
@@ -234,6 +251,21 @@ export default function SuggestPage() {
           onUpdated={() => void fetchSuggestion()}
         />
       )}
+
+      {isSaveModalOpen && data && (
+        <SaveSuggestedOutfitModal
+          open={isSaveModalOpen}
+          onClose={() => setIsSaveModalOpen(false)}
+          items={picks as { label: string; item: ClothingItem }[]}
+          occasion={occasion}
+          weather={data.weather}
+          onSaved={() => {
+            setToastMessage('Đã lưu bộ đồ vào danh sách của bạn!');
+          }}
+        />
+      )}
+
+      <VToast message={toastMessage} onClose={() => setToastMessage(null)} />
     </ProtectedLayout>
   );
 }
