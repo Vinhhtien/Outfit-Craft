@@ -168,8 +168,62 @@ export const outfitApi = {
 
   markWorn: (id: string) => api.post<ApiResponse<null>>(`/outfits/${id}/wear`).then((r) => r.data),
 
-  feed: (page = 1) =>
-    api.get<ApiResponse<Outfit[]>>('/outfits/feed', { params: { page } }).then((r) => r.data),
+  feed: (
+    paramsOrPage: number | { page?: number; limit?: number; season?: string; occasion?: string; tag?: string; q?: string } = 1,
+    signal?: AbortSignal
+  ) => {
+    const params = typeof paramsOrPage === 'number' ? { page: paramsOrPage } : paramsOrPage;
+    return api.get<ApiResponse<Outfit[]>>('/outfits/feed', { params, signal }).then((r) => r.data);
+  },
+
+  toggleLike: (id: string) =>
+    api
+      .post<ApiResponse<{ isLiked: boolean; likeCount: number }>>(`/outfits/${id}/like`)
+      .then((r) => r.data.data),
+};
+
+/* ---------------- Comments ---------------- */
+export interface CommentItem {
+  _id: string;
+  user: {
+    _id: string;
+    displayName: string;
+    avatarUrl?: string;
+  };
+  outfit: string;
+  content: string;
+  createdAt: string;
+}
+
+export const commentApi = {
+  list: (outfitId: string, signal?: AbortSignal) =>
+    api.get<ApiResponse<CommentItem[]>>(`/outfits/${outfitId}/comments`, { signal }).then((r) => r.data.data),
+
+  create: (outfitId: string, content: string) =>
+    api.post<ApiResponse<CommentItem>>(`/outfits/${outfitId}/comments`, { content }).then((r) => r.data.data),
+
+  remove: (outfitId: string, commentId: string) =>
+    api.delete<ApiResponse<null>>(`/outfits/${outfitId}/comments/${commentId}`).then((r) => r.data),
+};
+
+/* ---------------- User Public Profile ---------------- */
+export interface PublicUserProfileData {
+  user: {
+    _id: string;
+    displayName: string;
+    avatarUrl?: string;
+    createdAt: string;
+  };
+  stats: {
+    publicOutfitCount: number;
+    totalLikesReceived: number;
+  };
+  outfits: Outfit[];
+}
+
+export const userApi = {
+  getPublicProfile: (id: string, signal?: AbortSignal) =>
+    api.get<ApiResponse<PublicUserProfileData>>(`/users/${id}`, { signal }).then((r) => r.data.data),
 };
 
 // ===== NEW: Body Profile =====

@@ -255,9 +255,14 @@ function ShowcaseSection({ viewer, userId }: { viewer: Viewer; userId: string | 
             <h2 className="mt-3 font-serif-display text-3xl md:text-4xl">Bản phối nổi bật tuần này</h2>
           </div>
           {viewer === 'user' && (
-            <Link href="/studio" className="text-sm font-semibold underline underline-offset-4 hover:text-[#16352F]">
-              Tạo bản phối của bạn
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link href="/ootd" className="text-sm font-semibold underline underline-offset-4 hover:text-[#16352F]">
+                Xem tất cả trên Bảng tin OOTD →
+              </Link>
+              <Link href="/studio" className="text-sm font-semibold underline underline-offset-4 hover:text-[#16352F]">
+                Tạo bản phối của bạn
+              </Link>
+            </div>
           )}
         </div>
 

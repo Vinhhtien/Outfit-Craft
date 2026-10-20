@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Shirt, LayoutGrid, Sparkles, CalendarDays, LogOut } from 'lucide-react';
+import { Shirt, LayoutGrid, Sparkles, CalendarDays, Compass, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
 const NAV = [
@@ -10,6 +10,7 @@ const NAV = [
   { href: '/studio', label: 'Phối đồ', icon: LayoutGrid },
   { href: '/suggest', label: 'Gợi ý', icon: Sparkles },
   { href: '/schedule', label: 'Lịch', icon: CalendarDays },
+  { href: '/ootd', label: 'Bảng tin OOTD', icon: Compass },
 ];
 
 /** Chu viet tat cho avatar: "Linh Mai" -> "LM", "imlinggiang" -> "I". */
