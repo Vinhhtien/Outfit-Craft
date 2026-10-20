@@ -8,6 +8,7 @@ import { SEASONS, OCCASIONS } from '../types/index.js';
 // ===== NEW: OOTD Post =====
 import { OotdPost } from '../models/OotdPost.js';
 import { Like } from '../models/Like.js';
+import { Comment } from '../models/Comment.js';
 // ===== END NEW =====
 // ===== NEW: Body Profile =====
 import { mannequinSchema } from './bodyProfile.controller.js';
@@ -198,14 +199,18 @@ export const deleteOutfit = asyncHandler(async (req, res) => {
   await outfit.deleteOne();
 
   // ===== NEW: OOTD Post =====
-  // Xoa luon bai dang chia se outfit nay cung like cua bai, tranh du lieu mo coi.
+  // Xoa luon bai dang chia se outfit nay cung like/comments cua bai, tranh du lieu mo coi.
   const postIds = await OotdPost.find({ outfit: outfit._id }).distinct('_id');
-  if (postIds.length > 0) {
-    await Promise.all([
-      Like.deleteMany({ post: { $in: postIds } }),
-      OotdPost.deleteMany({ _id: { $in: postIds } }),
-    ]);
-  }
+  await Promise.all([
+    Like.deleteMany({ outfit: outfit._id }),
+    Comment.deleteMany({ outfit: outfit._id }),
+    ...(postIds.length > 0
+      ? [
+          Like.deleteMany({ post: { $in: postIds } }),
+          OotdPost.deleteMany({ _id: { $in: postIds } }),
+        ]
+      : []),
+  ]);
   // ===== END NEW =====
 
   await destroyImage(outfit.thumbnailPublicId);
@@ -233,19 +238,98 @@ export const getPublicFeed = asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(30, Number(req.query.limit) || 12);
 
+  const filter: Record<string, unknown> = { isPublic: true };
+
+  if (req.query.season && SEASONS.includes(req.query.season as any)) {
+    filter.seasons = req.query.season;
+  }
+  if (req.query.occasion && OCCASIONS.includes(req.query.occasion as any)) {
+    filter.occasions = req.query.occasion;
+  }
+  if (req.query.tag && typeof req.query.tag === 'string') {
+    filter.tags = req.query.tag.trim();
+  }
+  if (req.query.q && typeof req.query.q === 'string' && req.query.q.trim()) {
+    filter.name = { $regex: req.query.q.trim(), $options: 'i' };
+  }
+
   const [outfits, total] = await Promise.all([
-    Outfit.find({ isPublic: true })
+    Outfit.find(filter)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .populate('owner', 'displayName avatarUrl')
-      .select('name thumbnailUrl tags likeCount createdAt owner'),
-    Outfit.countDocuments({ isPublic: true }),
+      .populate('items.item', 'name imageUrl category brand')
+      .select('name thumbnailUrl tags seasons occasions likeCount createdAt owner items')
+      .lean(),
+    Outfit.countDocuments(filter),
   ]);
+
+  const outfitIds = outfits.map((o) => o._id);
+
+  let likedOutfitIds = new Set<string>();
+  if (req.user?.sub && outfitIds.length > 0) {
+    const userLikes = await Like.find({
+      user: req.user.sub,
+      outfit: { $in: outfitIds },
+    }).select('outfit');
+    likedOutfitIds = new Set(userLikes.map((l) => l.outfit?.toString() || ''));
+  }
+
+  const commentCounts =
+    outfitIds.length > 0
+      ? await Comment.aggregate([
+          { $match: { outfit: { $in: outfitIds } } },
+          { $group: { _id: '$outfit', count: { $sum: 1 } } },
+        ])
+      : [];
+  const commentCountMap = new Map<string, number>(
+    commentCounts.map((c: { _id: unknown; count: number }) => [String(c._id), c.count])
+  );
+
+  const enrichedOutfits = outfits.map((o) => ({
+    ...o,
+    isLiked: likedOutfitIds.has(o._id.toString()),
+    commentCount: commentCountMap.get(o._id.toString()) || 0,
+  }));
 
   res.json({
     success: true,
-    data: outfits,
+    data: enrichedOutfits,
     pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+  });
+});
+
+/**
+ * POST /api/outfits/:id/like
+ * Tha tim / bo tha tim 1 outfit.
+ */
+export const toggleLikeOutfit = asyncHandler(async (req, res) => {
+  const outfit = await Outfit.findById(req.params.id);
+  if (!outfit) throw ApiError.notFound('Không tìm thấy outfit.');
+
+  const userId = req.user!.sub;
+  const existingLike = await Like.findOne({ user: userId, outfit: outfit._id });
+
+  let isLiked: boolean;
+  if (existingLike) {
+    await existingLike.deleteOne();
+    outfit.likeCount = Math.max(0, (outfit.likeCount || 0) - 1);
+    await outfit.save();
+    isLiked = false;
+  } else {
+    await Like.create({ user: userId, outfit: outfit._id });
+    outfit.likeCount = (outfit.likeCount || 0) + 1;
+    await outfit.save();
+    isLiked = true;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      isLiked,
+      likeCount: outfit.likeCount,
+    },
+    message: isLiked ? 'Đã thả tim bộ đồ.' : 'Đã bỏ thả tim bộ đồ.',
   });
 });
