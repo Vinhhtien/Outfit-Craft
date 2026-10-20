@@ -6,6 +6,8 @@ import suggestionRoutes from './suggestion.routes.js';
 import scheduleRoutes from './schedule.routes.js';
 // ===== NEW: Body Profile =====
 import userRoutes from './user.routes.js';
+import adminRoutes from './admin.routes.js';
+import { categoryConfig } from '../controllers/admin.controller.js';
 // ===== END NEW =====
 
 const router = Router();
@@ -17,6 +19,8 @@ router.use('/suggestions', suggestionRoutes);
 router.use('/schedule', scheduleRoutes);
 // ===== NEW: Body Profile =====
 router.use('/users', userRoutes);
+router.use('/admin', adminRoutes);
+router.get('/categories', categoryConfig);
 // ===== END NEW =====
 
 export default router;

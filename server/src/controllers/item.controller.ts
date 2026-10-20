@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { Types } from 'mongoose';
 import { ClothingItem } from '../models/ClothingItem.js';
 import { Outfit } from '../models/Outfit.js';
+import { Category } from '../models/Category.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { uploadBuffer, destroyImage, saveWithImages, queueImageCleanup } from '../services/upload.service.js';
@@ -143,7 +144,9 @@ export const createItem = asyncHandler(async (req, res) => {
       if (data.owner !== req.user!.sub || data.purpose !== 'item-upload' || data.url !== url || data.publicId !== publicId) throw new Error();
     } catch { throw ApiError.badRequest('Ảnh tải lên không hợp lệ hoặc đã hết hạn. Vui lòng tải lại ảnh.'); }
   }
-  const item = await ClothingItem.create({ ...body, owner: req.user!.sub });
+  const category = await Category.findOne({ code: body.category });
+  const tempRange = body.tempRange ?? (category ? { min: category.defaultTempMin, max: category.defaultTempMax } : undefined);
+  const item = await ClothingItem.create({ ...body, tempRange, owner: req.user!.sub });
   res.status(201).json({ success: true, data: item });
 });
 
@@ -157,6 +160,10 @@ export const createItemWithImages = asyncHandler(async (req, res) => {
   try { metadata = JSON.parse(req.body.metadata); }
   catch { throw ApiError.badRequest('Thông tin món đồ không đúng định dạng.'); }
   const body = itemMetadataSchema.parse(metadata);
+  if (!body.tempRange) {
+    const category = await Category.findOne({ code: body.category });
+    if (category) body.tempRange = { min: category.defaultTempMin, max: category.defaultTempMax };
+  }
   const files = req.files as Record<string, Express.Multer.File[]> | undefined;
   const image = files?.image?.[0];
   const original = files?.original?.[0];

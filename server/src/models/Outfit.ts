@@ -97,6 +97,8 @@ export interface IOutfit extends Document {
   occasions: Occasion[];
   tags: string[];
   isPublic: boolean;
+  isHidden: boolean;
+  moderationReason?: string;
   likeCount: number;
   // ===== NEW: Body Profile =====
   mannequin?: IOutfitMannequin | null;
@@ -226,6 +228,8 @@ const outfitSchema = new Schema<IOutfit>(
     occasions: { type: [String], enum: OCCASIONS, default: [] },
     tags: { type: [String], default: [] },
     isPublic: { type: Boolean, default: false },
+    isHidden: { type: Boolean, default: false },
+    moderationReason: { type: String, maxlength: 500 },
     likeCount: { type: Number, default: 0 },
     // ===== NEW: Body Profile =====
     mannequin: { type: outfitMannequinSchema, default: undefined },

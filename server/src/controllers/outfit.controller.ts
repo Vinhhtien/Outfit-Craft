@@ -149,7 +149,7 @@ export const getOutfit = asyncHandler(async (req, res) => {
 
   // Cho xem neu la chu so huu hoac outfit da cong khai.
   const isOwner = outfit.owner.toString() === req.user?.sub;
-  if (!isOwner && !outfit.isPublic) throw ApiError.forbidden();
+  if (!isOwner && (!outfit.isPublic || outfit.isHidden)) throw ApiError.forbidden();
 
   // ===== NEW: Body Profile =====
   // Snapshot mannequin la du lieu dang nguoi -> chi chu so huu duoc thay.
@@ -238,7 +238,7 @@ export const getPublicFeed = asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(30, Number(req.query.limit) || 12);
 
-  const filter: Record<string, unknown> = { isPublic: true };
+  const filter: Record<string, unknown> = { isPublic: true, isHidden: { $ne: true } };
 
   if (req.query.season && SEASONS.includes(req.query.season as any)) {
     filter.seasons = req.query.season;

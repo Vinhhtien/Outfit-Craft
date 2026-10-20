@@ -82,6 +82,7 @@ export const register = asyncHandler(async (req, res) => {
   }
 
   user.password = password; // pre('save') se hash bang bcrypt
+  if (!user.isActive) throw ApiError.forbidden('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.');
   user.displayName = displayName;
   if (defaultCity !== undefined) user.defaultCity = defaultCity;
   const otp = user.createRegistrationOtp();
@@ -169,6 +170,7 @@ export const verifyRegistration = asyncHandler(async (req, res) => {
   }
 
   // Tra ve giong het login de client tu dong dang nhap.
+  if (!user.isActive) throw ApiError.forbidden('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.');
   const token = signToken({ sub: user._id.toString(), email: user.email });
 
   res.json({
@@ -181,6 +183,7 @@ export const verifyRegistration = asyncHandler(async (req, res) => {
         displayName: user.displayName,
         avatarUrl: user.avatarUrl,
         defaultCity: user.defaultCity,
+        role: user.role,
       },
     },
   });
@@ -205,6 +208,7 @@ export const login = asyncHandler(async (req, res) => {
   }
   // ===== END NEW =====
 
+  if (!user.isActive) throw ApiError.forbidden('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.');
   const token = signToken({ sub: user._id.toString(), email: user.email });
 
   res.json({
@@ -217,6 +221,7 @@ export const login = asyncHandler(async (req, res) => {
         displayName: user.displayName,
         avatarUrl: user.avatarUrl,
         defaultCity: user.defaultCity,
+        role: user.role,
       },
     },
   });

@@ -5,6 +5,7 @@ import { getErrorMessage } from '@/lib/api';
 import { NotificationViewport } from '@/components/ui/Notifications';
 import { FitSaveStatus } from '@/components/ui/FitSaveStatus';
 import { VButton, VInput } from '@/components/ui/vintage';
+import { useCategoryStore } from '@/store/categoryStore';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { hydrate, expireSession, sessionExpired, user, login, logout } = useAuthStore();
@@ -16,7 +17,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const expire = () => expireSession();
     window.addEventListener('outfitcraft:session-expired', expire);
-    if (!started.current) { started.current = true; void hydrate(); }
+    if (!started.current) { started.current = true; void hydrate(); void useCategoryStore.getState().load().catch(() => {}); }
     return () => window.removeEventListener('outfitcraft:session-expired', expire);
   }, [hydrate, expireSession]);
   return <>
