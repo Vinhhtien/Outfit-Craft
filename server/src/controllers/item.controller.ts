@@ -251,7 +251,7 @@ export const deleteItem = asyncHandler(async (req, res) => {
 export const getStats = asyncHandler(async (req, res) => {
   const owner = req.user!.sub;
 
-  const [byCategory, total, mostWorn, neverWorn] = await Promise.all([
+  const [byCategory, total, mostWorn, neverWorn, neverWornItems] = await Promise.all([
     ClothingItem.aggregate([
       { $match: { owner: new Types.ObjectId(owner), isArchived: false } },
       { $group: { _id: '$category', count: { $sum: 1 } } },
@@ -260,10 +260,11 @@ export const getStats = asyncHandler(async (req, res) => {
     ClothingItem.countDocuments({ owner, isArchived: false }),
     ClothingItem.find({ owner, isArchived: false }).sort({ wearCount: -1 }).limit(5),
     ClothingItem.countDocuments({ owner, isArchived: false, wearCount: 0 }),
+    ClothingItem.find({ owner, isArchived: false, wearCount: 0 }).sort({ createdAt: -1 }).limit(20),
   ]);
 
   res.json({
     success: true,
-    data: { total, byCategory, mostWorn, neverWorn },
+    data: { total, byCategory, mostWorn, neverWorn, neverWornItems },
   });
 });

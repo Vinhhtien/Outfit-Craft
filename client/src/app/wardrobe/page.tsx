@@ -2,11 +2,12 @@
 import { useCategoryLabels } from '@/store/categoryStore';
 
 import { useCallback, useRef, useState } from 'react';
-import { Plus, Shirt, Search } from 'lucide-react';
+import { Plus, Shirt, Search, BarChart3 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { AddItemModal } from '@/components/wardrobe/AddItemModal';
 import { ItemCard } from '@/components/wardrobe/ItemCard';
+import { WardrobeStatsView } from '@/components/wardrobe/WardrobeStatsView';
 // ===== NEW: Xem/Sua Item =====
 import { ItemDetailModal } from '@/components/wardrobe/ItemDetailModal';
 // ===== END NEW =====
@@ -40,6 +41,7 @@ export default function WardrobePage() {
 
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<'items' | 'stats'>('items');
 
   const loader = useCallback((signal: AbortSignal) => itemApi.list({
     category: category === 'all' ? undefined : category, q: search.trim() || undefined, limit: 100,
@@ -58,7 +60,7 @@ export default function WardrobePage() {
       setItemToDelete(null);
       // ===== NEW: Toast thay alert() =====
       if (res.message) setToast({ message: res.message, variant: 'success' });
-      setItems((previous) => previous?.filter((value) => value._id !== item._id) ?? null);
+      setItems((prev) => (prev ?? []).filter((value) => value._id !== item._id));
       void load();
     } catch (err) {
       setItemToDelete(null);
@@ -95,78 +97,120 @@ export default function WardrobePage() {
         <ScallopBanner>
           <div>
             <h1 className="font-serif-display text-4xl font-normal uppercase tracking-wide text-[#1F453E]">
-              Tủ đồ của tôi
+              {view === 'stats' ? 'Thống kê tủ đồ' : 'Tủ đồ của tôi'}
             </h1>
             <p className="mt-1 text-sm font-medium text-[#2C4C45]">
-              {items.length} món đồ đã số hóa
+              {view === 'stats'
+                ? 'Tổng quan số lượng và quy mô tủ đồ cá nhân'
+                : `${items.length} món đồ đã số hóa`}
             </p>
           </div>
-          <VButton onClick={() => setModalOpen(true)}>
-            <Plus size={16} /> Thêm món đồ
-          </VButton>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* View Switcher: Danh sach vs Thong ke */}
+            <div className="flex items-center rounded-full border border-[#1F453E]/20 bg-white/80 p-1 shadow-2xs backdrop-blur-sm">
+              <button
+                type="button"
+                onClick={() => setView('items')}
+                className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                  view === 'items'
+                    ? 'bg-[#1F453E] text-white shadow-xs'
+                    : 'text-[#1F453E] hover:bg-[#E2ECC8]/60'
+                }`}
+              >
+                <Shirt size={13} /> Danh sách
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('stats')}
+                className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                  view === 'stats'
+                    ? 'bg-[#1F453E] text-white shadow-xs'
+                    : 'text-[#1F453E] hover:bg-[#E2ECC8]/60'
+                }`}
+              >
+                <BarChart3 size={13} /> Thống kê
+              </button>
+            </div>
+
+            <VButton onClick={() => setModalOpen(true)}>
+              <Plus size={16} /> Thêm món đồ
+            </VButton>
+          </div>
         </ScallopBanner>
 
         <div className="mx-auto max-w-6xl px-4 py-8">
-          <div className="mb-6 space-y-4">
-            <div className="relative max-w-sm">
-              <Search
-                size={15}
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6B7B76]"
-              />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm theo tên hoặc thương hiệu..."
-                className="w-full rounded-full border border-[#9EB0A8] bg-white py-2.5 pl-10 pr-5 text-sm text-[#1F453E] shadow-sm transition-colors placeholder:text-[#6B7B76] focus:border-[#1F453E] focus:outline-none"
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <VChip active={category === 'all'} onClick={() => setCategory('all')}>
-                Tất cả
-              </VChip>
-              {CATEGORIES.map((c) => (
-                <VChip key={c} active={category === c} onClick={() => setCategory(c)}>
-                  {CATEGORY_LABELS[c]}
-                </VChip>
-              ))}
-            </div>
-          </div>
-
-          {error && <ErrorState message={error} onRetry={() => void load()} busy={loading} />}
-          {error && data && <p className="mb-3 text-xs text-[#52665F]">Đang hiển thị dữ liệu của lần tải thành công gần nhất.</p>}
-          {loading && data !== null && <LoadingState compact label="Đang cập nhật tủ đồ…" />}
-          {loading && data === null ? <CardSkeletons /> : error && data === null ? null : items.length === 0 ? (
-            <div className="grid place-items-center rounded-2xl border border-dashed border-[#869BB2] bg-white/80 p-12 text-center shadow-sm">
-              <Shirt size={36} className="mb-3 text-[#869BB2]" />
-              <p className="font-serif-display text-xl font-semibold text-[#1F453E]">
-                {search || category !== 'all' ? 'Không tìm thấy món đồ nào' : 'Tủ đồ đang trống'}
-              </p>
-              <p className="mt-1 max-w-sm text-sm text-[#6B7B76]">
-                {search || category !== 'all'
-                  ? 'Thử đổi bộ lọc hoặc từ khóa khác.'
-                  : 'Thêm món đồ đầu tiên để bắt đầu phối outfit.'}
-              </p>
-              {!search && category === 'all' && (
-                <VButton onClick={() => setModalOpen(true)} className="mt-5">
-                  <Plus size={16} /> Thêm món đồ
-                </VButton>
-              )}
-            </div>
+          {view === 'stats' ? (
+            <WardrobeStatsView
+              onSelectCategory={(cat) => {
+                setCategory(cat);
+                setView('items');
+              }}
+              onOpenItem={(id) => setSelectedItemId(id)}
+              onSwitchToItems={() => setView('items')}
+            />
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-              {items.map((item) => (
-                <ItemCard
-                  key={item._id}
-                  item={item}
-                  // ===== NEW: Delete Confirmation Popup ===== mo popup thay vi xoa ngay
-                  onDelete={setItemToDelete}
-                  // ===== NEW: Xem/Sua Item =====
-                  onClick={(it) => setSelectedItemId(it._id)}
-                />
+            <>
+              <div className="mb-6 space-y-4">
+                <div className="relative max-w-sm">
+                  <Search
+                    size={15}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6B7B76]"
+                  />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Tìm theo tên hoặc thương hiệu..."
+                    className="w-full rounded-full border border-[#9EB0A8] bg-white py-2.5 pl-10 pr-5 text-sm text-[#1F453E] shadow-sm transition-colors placeholder:text-[#6B7B76] focus:border-[#1F453E] focus:outline-none"
+                  />
+                </div>
 
-              ))}
-            </div>
+                <div className="flex flex-wrap gap-2">
+                  <VChip active={category === 'all'} onClick={() => setCategory('all')}>
+                    Tất cả
+                  </VChip>
+                  {CATEGORIES.map((c) => (
+                    <VChip key={c} active={category === c} onClick={() => setCategory(c)}>
+                      {CATEGORY_LABELS[c]}
+                    </VChip>
+                  ))}
+                </div>
+              </div>
+
+              {error && <ErrorState message={error} onRetry={() => void load()} busy={loading} />}
+              {error && data && <p className="mb-3 text-xs text-[#52665F]">Đang hiển thị dữ liệu của lần tải thành công gần nhất.</p>}
+              {loading && data !== null && <LoadingState compact label="Đang cập nhật tủ đồ…" />}
+              {loading && data === null ? <CardSkeletons /> : error && data === null ? null : items.length === 0 ? (
+                <div className="grid place-items-center rounded-2xl border border-dashed border-[#869BB2] bg-white/80 p-12 text-center shadow-sm">
+                  <Shirt size={36} className="mb-3 text-[#869BB2]" />
+                  <p className="font-serif-display text-xl font-semibold text-[#1F453E]">
+                    {search || category !== 'all' ? 'Không tìm thấy món đồ nào' : 'Tủ đồ đang trống'}
+                  </p>
+                  <p className="mt-1 max-w-sm text-sm text-[#6B7B76]">
+                    {search || category !== 'all'
+                      ? 'Thử đổi bộ lọc hoặc từ khóa khác.'
+                      : 'Thêm món đồ đầu tiên để bắt đầu phối outfit.'}
+                  </p>
+                  {!search && category === 'all' && (
+                    <VButton onClick={() => setModalOpen(true)} className="mt-5">
+                      <Plus size={16} /> Thêm món đồ
+                    </VButton>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                  {items.map((item) => (
+                    <ItemCard
+                      key={item._id}
+                      item={item}
+                      // ===== NEW: Delete Confirmation Popup ===== mo popup thay vi xoa ngay
+                      onDelete={setItemToDelete}
+                      // ===== NEW: Xem/Sua Item =====
+                      onClick={(it) => setSelectedItemId(it._id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
