@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Writable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { createTestMongo, stopTestMongo } from './testMongo.mjs';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 
@@ -25,9 +25,13 @@ let mongo, server, base, uploads = 0, failUploadAt = 0, failDelete = false;
 const deleted = [];
 
 before(async () => {
-  mongo = await MongoMemoryServer.create();
+  mongo = await createTestMongo();
   await mongoose.connect(mongo.getUri(), { dbName: 'outfitcraft_quality_test' });
   await Promise.all([ClothingItem.init(), Outfit.init(), ImageCleanup.init(), User.init()]);
+  await User.create([
+    { _id: owner, email: 'avatar@example.test', password: 'test-password-only', displayName: 'Avatar test', isVerified: true },
+    { _id: stranger, email: 'stranger@example.test', password: 'test-password-only', displayName: 'Stranger', isVerified: true },
+  ]);
   mock.method(cloudinary.uploader, 'upload_stream', (options, callback) => new Writable({
     write(_chunk, _encoding, done) { done(); },
     final(done) {
@@ -49,7 +53,7 @@ after(async () => {
   mock.restoreAll();
   if (server) await new Promise((resolve) => server.close(resolve));
   await mongoose.disconnect();
-  await mongo?.stop();
+  await stopTestMongo(mongo);
 });
 beforeEach(() => { failUploadAt = 0; failDelete = false; deleted.length = 0; });
 
@@ -184,7 +188,6 @@ test('expired session, malformed JSON and invalid IDs produce readable API respo
 });
 
 test('avatar upload or database failure preserves the old image; replacement reclaims it', async () => {
-  await User.create({ _id: owner, email: 'avatar@example.test', password: 'test-password-only', displayName: 'Avatar test' });
   const avatar = () => { const body = new FormData(); body.append('avatar', new Blob([png], { type: 'image/png' }), 'avatar.png'); return body; };
   assert.equal((await request('/auth/profile', { method: 'PUT', body: avatar() })).status, 200);
   const original = (await User.findById(owner).select('+avatarPublicId')).avatarPublicId;

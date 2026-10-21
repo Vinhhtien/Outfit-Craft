@@ -9,6 +9,7 @@ function required(key: string, fallback?: string): string {
 
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
+  seedDemoAdmin: process.env.SEED_DEMO_ADMIN !== 'false',
   port: Number(process.env.PORT ?? 5000),
   mongoUri: required('MONGO_URI', 'mongodb://127.0.0.1:27017/outfitcraft'),
   jwtSecret: required('JWT_SECRET', 'dev-secret-doi-truoc-khi-deploy'),

@@ -1,4 +1,5 @@
 'use client';
+import { useCategoryLabels } from '@/store/categoryStore';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -30,7 +31,7 @@ import {
   bodyStateFromProfile, bodyStateToMannequin, bodyStateToProfile, sameBodyState, type BodyState,
 } from '@/lib/bodyMetrics';
 // ===== END NEW =====
-import { CATEGORIES, CATEGORY_LABELS, OCCASIONS, OCCASION_LABELS } from '@/types';
+import { CATEGORIES, OCCASIONS, OCCASION_LABELS } from '@/types';
 import type { Category, ClothingItem, ItemFit, MannequinProfile, Occasion, Outfit } from '@/types';
 
 const EMPTY_FORM = {
@@ -779,6 +780,7 @@ function WardrobePicker({
   items: ClothingItem[];
   onPick: (item: ClothingItem) => void;
 }) {
+  const CATEGORY_LABELS = useCategoryLabels();
   return (
     <>
       <h2 className="mb-2.5 shrink-0 border-b border-[#E2ECC8] pb-2 font-serif-display text-base font-semibold text-[#1F453E]">

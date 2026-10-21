@@ -60,6 +60,7 @@ export interface IUser extends Document {
   role: Role;
   /** false = bi admin khoa tai khoan. */
   isActive: boolean;
+  lockReason?: string;
   // ===== END NEW =====
   // ===== NEW: Body Profile =====
   /** Dang nguoi (tuy chon) - chi dung cho mannequin va goi y, KHONG bao gio tra ra API public. */
@@ -134,6 +135,7 @@ const userSchema = new Schema<IUser>(
     // Register/updateProfile validate bang Zod nen client khong tu gan role duoc.
     role: { type: String, enum: ROLES, default: 'user' },
     isActive: { type: Boolean, default: true },
+    lockReason: { type: String, maxlength: 500 },
     // ===== END NEW =====
     // ===== NEW: Body Profile =====
     // select:false -> /auth/me va moi populate('owner') deu khong keo theo; chi

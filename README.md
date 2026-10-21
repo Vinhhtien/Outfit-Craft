@@ -1,5 +1,7 @@
 # OutfitCraft
 
+Trang quản trị tại `/admin`: thống kê, người dùng, danh mục, kiểm duyệt outfit công khai và nhật ký. Xem [hướng dẫn cấp quyền và sử dụng admin](docs/ADMIN.md).
+
 Nền tảng web giúp số hóa tủ quần áo: upload ảnh → tách nền tự động → kéo-thả phối đồ trên canvas → gợi ý trang phục theo thời tiết.
 
 > Đồ án môn WDP — FPT University

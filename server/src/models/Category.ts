@@ -27,7 +27,7 @@ const categorySchema = new Schema<ICategory>(
     defaultTempMin: { type: Number, default: 15 },
     defaultTempMax: { type: Number, default: 35 },
   },
-  { timestamps: true }
+  { timestamps: true, optimisticConcurrency: true }
 );
 
 export const Category = model<ICategory>('Category', categorySchema);

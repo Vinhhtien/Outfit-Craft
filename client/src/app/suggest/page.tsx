@@ -1,4 +1,5 @@
 'use client';
+import { useCategoryLabels } from '@/store/categoryStore';
 
 import { useCallback, useState } from 'react';
 import {
@@ -14,10 +15,11 @@ import { useAuthStore } from '@/store/authStore';
 import { RankedItemsView } from '@/components/suggest/RankedItemsView';
 import { SaveSuggestedOutfitModal } from '@/components/suggest/SaveSuggestedOutfitModal';
 import { ItemDetailModal } from '@/components/wardrobe/ItemDetailModal';
-import { OCCASIONS, OCCASION_LABELS, CATEGORY_LABELS } from '@/types';
+import { OCCASIONS, OCCASION_LABELS } from '@/types';
 import type { ClothingItem, Occasion } from '@/types';
 
 export default function SuggestPage() {
+  const CATEGORY_LABELS = useCategoryLabels();
   const user = useAuthStore((s) => s.user);
 
   /** null = chua go gi -> dung thanh pho mac dinh trong ho so. */
@@ -34,7 +36,7 @@ export default function SuggestPage() {
 
   const picks: { label: string; item?: ClothingItem }[] = data
     ? [
-        { label: 'Váy liền', item: data.suggestion.dress },
+        { label: CATEGORY_LABELS.dress, item: data.suggestion.dress },
         { label: CATEGORY_LABELS.top, item: data.suggestion.top },
         { label: CATEGORY_LABELS.bottom, item: data.suggestion.bottom },
         { label: CATEGORY_LABELS.outerwear, item: data.suggestion.outerwear },

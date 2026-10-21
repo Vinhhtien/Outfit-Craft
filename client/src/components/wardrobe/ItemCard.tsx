@@ -1,8 +1,8 @@
 'use client';
+import { useCategoryLabels } from '@/store/categoryStore';
 
 import { Trash2, Plus } from 'lucide-react';
 import { CloudImage } from '@/components/ui/CloudImage';
-import { CATEGORY_LABELS } from '@/types';
 import type { ClothingItem } from '@/types';
 
 export function ItemCard({
@@ -19,6 +19,7 @@ export function ItemCard({
   onClick?: (item: ClothingItem) => void;
   // ===== END NEW =====
 }) {
+  const CATEGORY_LABELS = useCategoryLabels();
   return (
     <div
       // ===== NEW: Xem/Sua Item =====

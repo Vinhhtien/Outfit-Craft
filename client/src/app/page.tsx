@@ -89,7 +89,12 @@ function HeroSection({ viewer, user }: { viewer: Viewer; user: User | null }) {
             )}
             {viewer === 'user' && (
               <>
-                <Link href="/wardrobe" className={PILL_PRIMARY}>
+                {user?.role === 'admin' && (
+                  <Link href="/admin" className={PILL_PRIMARY}>
+                    Vào trang quản trị
+                  </Link>
+                )}
+                <Link href="/wardrobe" className={user?.role === 'admin' ? PILL_OUTLINE : PILL_PRIMARY}>
                   Vào tủ đồ của bạn
                 </Link>
                 <Link href="/studio" className={PILL_OUTLINE}>

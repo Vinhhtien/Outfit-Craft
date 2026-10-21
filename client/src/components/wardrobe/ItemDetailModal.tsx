@@ -1,4 +1,5 @@
 'use client';
+import { useCategoryLabels } from '@/store/categoryStore';
 
 // ===== NEW: Xem/Sua Item =====
 import { useCallback, useRef, useState } from 'react';
@@ -10,7 +11,7 @@ import { itemApi } from '@/lib/services';
 import type { UpdateItemPayload } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import {
-  CATEGORIES, CATEGORY_LABELS, STYLES, SEASONS, SEASON_LABELS,
+  CATEGORIES, STYLES, SEASONS, SEASON_LABELS,
   OCCASIONS, OCCASION_LABELS,
 } from '@/types';
 import type { Category, ClothingItem, Style, Season, Occasion } from '@/types';
@@ -89,6 +90,7 @@ export function ItemDetailModal({
   /** Goi sau khi luu thanh cong de trang cha cap nhat luoi ngay. */
   onUpdated: (item: ClothingItem) => void;
 }) {
+  const CATEGORY_LABELS = useCategoryLabels();
   const loader = useCallback((signal: AbortSignal) => itemApi.get(itemId, signal), [itemId]);
   const { data: item, setData: setItem, loading, error: loadError, reload } = useResource(loader);
   const savingRef = useRef(false);

@@ -1,4 +1,5 @@
 'use client';
+import { useCategoryLabels } from '@/store/categoryStore';
 
 import { useCallback, useRef, useState } from 'react';
 import { Plus, Shirt, Search, BarChart3 } from 'lucide-react';
@@ -18,10 +19,11 @@ import { useResource } from '@/hooks/useResource';
 import { CardSkeletons, LoadingState, ErrorState } from '@/components/ui/AsyncState';
 import { itemApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
-import { CATEGORIES, CATEGORY_LABELS } from '@/types';
+import { CATEGORIES } from '@/types';
 import type { Category, ClothingItem } from '@/types';
 
 export default function WardrobePage() {
+  const CATEGORY_LABELS = useCategoryLabels();
   const deletingRef = useRef(false);
   const [modalOpen, setModalOpen] = useState(false);
   // ===== NEW: Xem/Sua Item =====

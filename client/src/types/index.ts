@@ -104,6 +104,7 @@ export interface LegacyScene3D {
 }
 
 export interface User {
+  role?: 'user' | 'admin';
   id: string;
   email: string;
   displayName: string;

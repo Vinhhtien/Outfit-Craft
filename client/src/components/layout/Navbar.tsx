@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Shirt, LayoutGrid, Sparkles, CalendarDays, Compass, LogOut } from 'lucide-react';
+import { Shirt, LayoutGrid, Sparkles, CalendarDays, Compass, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
 const NAV = [
@@ -34,15 +34,15 @@ export function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 h-16 border-b border-[#16352F] bg-[#1F453E] font-jakarta text-white">
-      <div className="mx-auto flex h-full max-w-6xl items-center gap-4 px-4">
+    <header className="sticky top-0 z-50 min-h-16 border-b border-[#16352F] bg-[#1F453E] font-jakarta text-white sm:h-16">
+      <div className="mx-auto flex h-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:flex-nowrap sm:py-0">
         <Link href="/" className="flex shrink-0 items-baseline leading-none">
           <span className="font-script text-2xl text-[#E2ECC8]">Outfit</span>
           <span className="ml-1 font-serif-display text-lg tracking-[0.2em] text-white">CRAFT</span>
         </Link>
 
         {/* Guest: van giu <nav> rong (flex-1) de nut Dang nhap bi day sang phai. */}
-        <nav className="flex flex-1 items-center justify-center gap-2">
+        <nav className={`flex items-center justify-center gap-2 ${isAuthenticated ? 'order-3 w-full flex-none sm:order-none sm:w-auto sm:flex-1' : 'flex-1'}`}>
           {isAuthenticated && NAV.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
@@ -50,7 +50,7 @@ export function Navbar() {
                 key={href}
                 href={href}
                 title={label}
-                className={`flex items-center rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all sm:px-5 ${
+                className={`flex items-center rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all md:px-5 ${
                   active
                     ? 'border-white bg-[#E2ECC8] text-[#1F453E] shadow-sm'
                     : 'border-white/60 bg-[#7C90A0]/80 text-white hover:bg-[#869BB2]'
@@ -64,7 +64,8 @@ export function Navbar() {
         </nav>
 
         {isAuthenticated ? (
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            {user.role === 'admin' && <Link href="/admin" title="Quản trị" className="rounded-full border border-[#E2ECC8]/50 p-2 text-[#E2ECC8] hover:bg-white/10"><ShieldCheck size={17} /><span className="sr-only">Quản trị</span></Link>}
             {/* ===== NEW: Update Profile ===== */}
             {/* Ten + avatar dan toi trang Ho so (gom ca Doi mat khau). */}
             <Link

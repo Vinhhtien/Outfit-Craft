@@ -6,7 +6,7 @@
 
 import type { Canvas, FabricObject, FabricImage } from 'fabric';
 import type { Category, ClothingItem, ItemFit, MannequinProfile, Outfit, OutfitItem } from '@/types';
-import { CATEGORY_Z_INDEX } from '@/types';
+import { useCategoryStore } from '@/store/categoryStore';
 // ===== NEW: Body Profile =====
 import { buildMannequin, type MannequinAnchors, type Point } from './mannequin';
 import {
@@ -244,7 +244,7 @@ export function itemFitOf(obj: ItemObject, anchors: MannequinAnchors): ItemFit |
 const zOf = (o: FabricObject) =>
   isMannequinObject(o)
     ? -Infinity
-    : CATEGORY_Z_INDEX[(o as ItemObject).itemData?.category as keyof typeof CATEGORY_Z_INDEX] ?? 0;
+    : useCategoryStore.getState().layers[(o as ItemObject).itemData?.category as Category] ?? 0;
 // ===== END NEW =====
 
 /**
