@@ -46,8 +46,9 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      await login(email, password);
-      router.push('/wardrobe');
+      const user = await login(email, password);
+      // Admin vao thang trang quan tri, nguoi dung thuong vao tu do.
+      router.push(user.role === 'admin' ? '/admin' : '/wardrobe');
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

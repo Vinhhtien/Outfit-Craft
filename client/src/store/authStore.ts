@@ -12,7 +12,8 @@ interface AuthState {
   hydrateError: string;
   sessionExpired: boolean;
   expireSession: () => void;
-  login: (email: string, password: string) => Promise<void>;
+  /** Tra ve user vua dang nhap de trang login dieu huong theo role. */
+  login: (email: string, password: string) => Promise<User>;
   // ===== NEW: Register OTP =====
   /** Gui form dang ky -> server gui OTP ve email. Tra ve email da chuan hoa de dung o buoc xac thuc. */
   register: (body: { email: string; password: string; displayName: string; defaultCity?: string }) => Promise<string>;
@@ -41,6 +42,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { token, user } = await authApi.login({ email, password });
     tokenStore.set(token);
     set({ user, sessionExpired: false, hydrateError: '', isLoading: false });
+    return user;
   },
 
   // ===== NEW: Register OTP =====
