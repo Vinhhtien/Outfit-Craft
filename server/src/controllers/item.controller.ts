@@ -27,6 +27,10 @@ export const createItemSchema = z.object({
   tempRange: z.object({ min: z.number(), max: z.number() }).optional(),
   brand: z.string().optional(),
   notes: z.string().max(500).optional(),
+  purchasePrice: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().min(0).max(10_000_000_000).optional()
+  ),
 });
 
 // ===== NEW: Xem/Sua Item =====
@@ -45,6 +49,10 @@ export const updateItemSchema = z
     // Chuoi rong = xoa thuong hieu / ghi chu.
     brand: z.string().trim().max(100),
     notes: z.string().trim().max(500),
+    purchasePrice: z.preprocess(
+      (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+      z.number().min(0).max(10_000_000_000).optional()
+    ),
   })
   .partial()
   .strict();
@@ -251,7 +259,16 @@ export const deleteItem = asyncHandler(async (req, res) => {
 export const getStats = asyncHandler(async (req, res) => {
   const owner = req.user!.sub;
 
-  const [byCategory, total, mostWorn, neverWorn, neverWornItems] = await Promise.all([
+  const [
+    byCategory,
+    total,
+    mostWorn,
+    neverWorn,
+    neverWornItems,
+    financialAgg,
+    bestValueItems,
+    wastefulItems,
+  ] = await Promise.all([
     ClothingItem.aggregate([
       { $match: { owner: new Types.ObjectId(owner), isArchived: false } },
       { $group: { _id: '$category', count: { $sum: 1 } } },
@@ -261,10 +278,69 @@ export const getStats = asyncHandler(async (req, res) => {
     ClothingItem.find({ owner, isArchived: false }).sort({ wearCount: -1 }).limit(5),
     ClothingItem.countDocuments({ owner, isArchived: false, wearCount: 0 }),
     ClothingItem.find({ owner, isArchived: false, wearCount: 0 }).sort({ createdAt: -1 }).limit(20),
+    ClothingItem.aggregate([
+      {
+        $match: {
+          owner: new Types.ObjectId(owner),
+          isArchived: false,
+          purchasePrice: { $gt: 0 },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalValue: { $sum: '$purchasePrice' },
+          pricedCount: { $sum: 1 },
+          avgPrice: { $avg: '$purchasePrice' },
+        },
+      },
+    ]),
+    // Top 5 món tối ưu chi phí nhất (CPW = purchasePrice / wearCount thấp nhất trong những món đã mặc)
+    ClothingItem.aggregate([
+      {
+        $match: {
+          owner: new Types.ObjectId(owner),
+          isArchived: false,
+          purchasePrice: { $gt: 0 },
+          wearCount: { $gt: 0 },
+        },
+      },
+      {
+        $addFields: {
+          costPerWear: { $round: [{ $divide: ['$purchasePrice', '$wearCount'] }, 0] },
+        },
+      },
+      { $sort: { costPerWear: 1 } },
+      { $limit: 5 },
+    ]),
+    // Top 5 món giá cao nhưng chưa mặc hoặc ít mặc nhất (wearCount <= 1)
+    ClothingItem.find({
+      owner,
+      isArchived: false,
+      purchasePrice: { $gt: 0 },
+      wearCount: { $lte: 1 },
+    })
+      .sort({ purchasePrice: -1 })
+      .limit(5),
   ]);
+
+  const financial = financialAgg[0] || { totalValue: 0, pricedCount: 0, avgPrice: 0 };
 
   res.json({
     success: true,
-    data: { total, byCategory, mostWorn, neverWorn, neverWornItems },
+    data: {
+      total,
+      byCategory,
+      mostWorn,
+      neverWorn,
+      neverWornItems,
+      financial: {
+        totalValue: Math.round(financial.totalValue || 0),
+        pricedCount: financial.pricedCount || 0,
+        avgPrice: Math.round(financial.avgPrice || 0),
+      },
+      bestValueItems,
+      wastefulItems,
+    },
   });
 });

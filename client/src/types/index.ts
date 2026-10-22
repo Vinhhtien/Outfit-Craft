@@ -145,12 +145,29 @@ export interface ClothingItem {
   tempRange: { min: number; max: number };
   brand?: string;
   notes?: string;
+  purchasePrice?: number;
+  costPerWear?: number | null;
   wearCount: number;
   lastWornAt?: string;
   isArchived: boolean;
   fit?: ItemFit | null; // NEW: Ghi nho fit
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WardrobeStatsData {
+  total: number;
+  byCategory: { _id: Category; count: number }[];
+  mostWorn: ClothingItem[];
+  neverWorn: number;
+  neverWornItems?: ClothingItem[];
+  financial?: {
+    totalValue: number;
+    pricedCount: number;
+    avgPrice: number;
+  };
+  bestValueItems?: (ClothingItem & { costPerWear?: number })[];
+  wastefulItems?: ClothingItem[];
 }
 
 export interface OutfitItem {

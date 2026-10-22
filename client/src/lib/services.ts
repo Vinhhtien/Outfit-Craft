@@ -5,6 +5,7 @@ import type {
   ScheduleEntry, User, Category, Occasion,
   BodyProfile, MannequinProfile, // NEW: Body Profile
   ItemFit, // NEW: Ghi nho fit
+  WardrobeStatsData,
 } from '@/types';
 
 /* ---------------- Auth ---------------- */
@@ -74,7 +75,7 @@ export interface ItemFilters {
 export type UpdateItemPayload = Partial<
   Pick<
     ClothingItem,
-    'name' | 'category' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes'
+    'name' | 'category' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes' | 'purchasePrice'
   >
 >;
 // ===== END NEW =====
@@ -120,13 +121,7 @@ export const itemApi = {
   saveFit: (id: string, fit: ItemFit | null) =>
     api.put<ApiResponse<ClothingItem>>(`/items/${id}/fit`, { fit }).then((r) => r.data.data),
 
-  stats: () => api.get<ApiResponse<{
-    total: number;
-    byCategory: { _id: Category; count: number }[];
-    mostWorn: ClothingItem[];
-    neverWorn: number;
-    neverWornItems?: ClothingItem[];
-  }>>('/items/stats').then((r) => r.data.data),
+  stats: () => api.get<ApiResponse<WardrobeStatsData>>('/items/stats').then((r) => r.data.data),
 };
 
 /* ---------------- Outfits ---------------- */
