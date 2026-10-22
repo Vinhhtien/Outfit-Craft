@@ -24,12 +24,14 @@ interface WardrobeStatsViewProps {
   onSelectCategory?: (category: Category) => void;
   onOpenItem?: (itemId: string) => void;
   onSwitchToItems?: () => void;
+  onSwitchToDeclutter?: () => void;
 }
 
 export function WardrobeStatsView({
   onSelectCategory,
   onOpenItem,
   onSwitchToItems,
+  onSwitchToDeclutter,
 }: WardrobeStatsViewProps) {
   const { data, loading, error, reload } = useResource(itemApi.stats);
 
@@ -524,12 +526,23 @@ export function WardrobeStatsView({
             </p>
           </div>
           {neverWorn > 0 && (
-            <Link
-              href="/studio"
-              className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-[#1F453E] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#16352F]"
-            >
-              <Sparkles size={13} /> Phối đồ ngay
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              {onSwitchToDeclutter && (
+                <button
+                  type="button"
+                  onClick={onSwitchToDeclutter}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-600 bg-amber-50 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-amber-800 transition-colors hover:bg-amber-100"
+                >
+                  <Sparkles size={13} /> Gợi ý dọn tủ
+                </button>
+              )}
+              <Link
+                href="/studio"
+                className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-[#1F453E] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#16352F]"
+              >
+                <Sparkles size={13} /> Phối đồ ngay
+              </Link>
+            </div>
           )}
         </div>
 

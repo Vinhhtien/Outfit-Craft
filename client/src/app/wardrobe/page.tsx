@@ -2,12 +2,13 @@
 import { useCategoryLabels } from '@/store/categoryStore';
 
 import { useCallback, useRef, useState } from 'react';
-import { Plus, Shirt, Search, BarChart3 } from 'lucide-react';
+import { Plus, Shirt, Search, BarChart3, Sparkles } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { AddItemModal } from '@/components/wardrobe/AddItemModal';
 import { ItemCard } from '@/components/wardrobe/ItemCard';
 import { WardrobeStatsView } from '@/components/wardrobe/WardrobeStatsView';
+import { WardrobeDeclutterView } from '@/components/wardrobe/WardrobeDeclutterView';
 // ===== NEW: Xem/Sua Item =====
 import { ItemDetailModal } from '@/components/wardrobe/ItemDetailModal';
 // ===== END NEW =====
@@ -41,7 +42,7 @@ export default function WardrobePage() {
 
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [search, setSearch] = useState('');
-  const [view, setView] = useState<'items' | 'stats'>('items');
+  const [view, setView] = useState<'items' | 'stats' | 'declutter'>('items');
 
   const loader = useCallback((signal: AbortSignal) => itemApi.list({
     category: category === 'all' ? undefined : category, q: search.trim() || undefined, limit: 100,
@@ -97,16 +98,22 @@ export default function WardrobePage() {
         <ScallopBanner>
           <div>
             <h1 className="font-serif-display text-4xl font-normal uppercase tracking-wide text-[#1F453E]">
-              {view === 'stats' ? 'Thống kê tủ đồ' : 'Tủ đồ của tôi'}
+              {view === 'stats'
+                ? 'Thống kê tủ đồ'
+                : view === 'declutter'
+                ? 'Gợi ý dọn tủ'
+                : 'Tủ đồ của tôi'}
             </h1>
             <p className="mt-1 text-sm font-medium text-[#2C4C45]">
               {view === 'stats'
-                ? 'Tổng quan số lượng và quy mô tủ đồ cá nhân'
+                ? 'Tổng quan số lượng, quy mô và hiệu quả tài chính'
+                : view === 'declutter'
+                ? 'Gợi ý dọn dẹp các món đồ không mặc trong 6–12 tháng'
                 : `${items.length} món đồ đã số hóa`}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* View Switcher: Danh sach vs Thong ke */}
+            {/* View Switcher: Danh sach vs Thong ke vs Don tu */}
             <div className="flex items-center rounded-full border border-[#1F453E]/20 bg-white/80 p-1 shadow-2xs backdrop-blur-sm">
               <button
                 type="button"
@@ -130,6 +137,17 @@ export default function WardrobePage() {
               >
                 <BarChart3 size={13} /> Thống kê
               </button>
+              <button
+                type="button"
+                onClick={() => setView('declutter')}
+                className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                  view === 'declutter'
+                    ? 'bg-[#1F453E] text-white shadow-xs'
+                    : 'text-[#1F453E] hover:bg-[#E2ECC8]/60'
+                }`}
+              >
+                <Sparkles size={13} /> Dọn tủ
+              </button>
             </div>
 
             <VButton onClick={() => setModalOpen(true)}>
@@ -147,6 +165,17 @@ export default function WardrobePage() {
               }}
               onOpenItem={(id) => setSelectedItemId(id)}
               onSwitchToItems={() => setView('items')}
+              onSwitchToDeclutter={() => setView('declutter')}
+            />
+          ) : view === 'declutter' ? (
+            <WardrobeDeclutterView
+              onOpenItem={(id) => setSelectedItemId(id)}
+              onDeleteItem={(item) => setItemToDelete(item)}
+              onSwitchToItems={() => setView('items')}
+              onItemActionSuccess={(msg) => {
+                setToast({ message: msg, variant: 'success' });
+                void load();
+              }}
             />
           ) : (
             <>
