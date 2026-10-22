@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { env } from '../config/env.js';
 import { User } from '../models/User.js';
 import { ClothingItem } from '../models/ClothingItem.js';
 import { Outfit } from '../models/Outfit.js';
@@ -8,7 +9,7 @@ import { Like } from '../models/Like.js';
 
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/outfitcraft';
+const MONGODB_URI = env.mongoUri;
 
 async function seed() {
   console.log('Connecting to MongoDB:', MONGODB_URI);
@@ -65,6 +66,7 @@ async function seed() {
       occasions: ['daily', 'school', 'travel'],
       tempRange: { min: 20, max: 38 },
       brand: 'Uniqlo',
+      purchasePrice: 290000,
       wearCount: 15,
       lastWornAt: new Date(Date.now() - 86400000 * 2),
       isArchived: false,
@@ -81,6 +83,7 @@ async function seed() {
       occasions: ['daily', 'school', 'work'],
       tempRange: { min: 10, max: 30 },
       brand: "Levi's",
+      purchasePrice: 850000,
       wearCount: 12,
       lastWornAt: new Date(Date.now() - 86400000 * 3),
       isArchived: false,
@@ -97,6 +100,7 @@ async function seed() {
       occasions: ['daily', 'school', 'travel', 'sport'],
       tempRange: { min: 5, max: 40 },
       brand: 'Adidas',
+      purchasePrice: 1500000,
       wearCount: 8,
       lastWornAt: new Date(Date.now() - 86400000 * 5),
       isArchived: false,
@@ -113,6 +117,7 @@ async function seed() {
       occasions: ['work', 'date', 'party'],
       tempRange: { min: 12, max: 24 },
       brand: 'Zara',
+      purchasePrice: 1200000,
       wearCount: 5,
       lastWornAt: new Date(Date.now() - 86400000 * 10),
       isArchived: false,
@@ -129,6 +134,7 @@ async function seed() {
       occasions: ['daily', 'school', 'travel'],
       tempRange: { min: 0, max: 45 },
       brand: 'Muji',
+      purchasePrice: 180000,
       wearCount: 3,
       lastWornAt: new Date(Date.now() - 86400000 * 15),
       isArchived: false,
@@ -145,6 +151,7 @@ async function seed() {
       occasions: ['work', 'school', 'date'],
       tempRange: { min: 18, max: 30 },
       brand: 'Ralph Lauren',
+      purchasePrice: 650000,
       wearCount: 1,
       lastWornAt: new Date(Date.now() - 86400000 * 25),
       isArchived: false,
@@ -161,6 +168,7 @@ async function seed() {
       occasions: ['date', 'travel', 'party'],
       tempRange: { min: 22, max: 35 },
       brand: 'Vintage Craft',
+      purchasePrice: 550000,
       wearCount: 0, // Never worn!
       isArchived: false,
     },
@@ -176,6 +184,7 @@ async function seed() {
       occasions: ['work', 'travel'],
       tempRange: { min: 8, max: 18 },
       brand: 'Burberry Style',
+      purchasePrice: 1950000,
       wearCount: 0, // Never worn!
       isArchived: false,
     },

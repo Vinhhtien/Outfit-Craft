@@ -68,11 +68,33 @@ export function ItemCard({
             ))}
           </div>
         </div>
-        {item.wearCount > 0 && (
-          <p className="mt-1.5 inline-block rounded-full bg-[#869BB2]/15 px-2 py-0.5 text-[10px] font-semibold text-[#1F453E]">
-            Đã mặc {item.wearCount} lần
-          </p>
-        )}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {item.wearCount > 0 && (
+            <span className="rounded-full bg-[#869BB2]/15 px-2 py-0.5 text-[10px] font-semibold text-[#1F453E]">
+              Đã mặc {item.wearCount} lần
+            </span>
+          )}
+          {typeof item.purchasePrice === 'number' && item.purchasePrice > 0 && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                item.wearCount > 0
+                  ? 'border border-emerald-600/20 bg-emerald-50 text-emerald-800'
+                  : 'border border-[#869BB2]/30 bg-white text-[#52665F]'
+              }`}
+              title={
+                item.wearCount > 0
+                  ? `Giá mua: ${item.purchasePrice.toLocaleString('vi-VN')} ₫ · Chi phí mỗi lần mặc: ~${Math.round(
+                      item.purchasePrice / item.wearCount
+                    ).toLocaleString('vi-VN')} ₫/lần`
+                  : `Giá mua: ${item.purchasePrice.toLocaleString('vi-VN')} ₫ (Chưa mặc lần nào)`
+              }
+            >
+              {item.wearCount > 0
+                ? `~${Math.round(item.purchasePrice / item.wearCount).toLocaleString('vi-VN')} ₫/lần`
+                : `${item.purchasePrice.toLocaleString('vi-VN')} ₫`}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Nut hanh dong chi hien khi hover */}
