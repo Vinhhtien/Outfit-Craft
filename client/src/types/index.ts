@@ -170,6 +170,23 @@ export interface WardrobeStatsData {
   wastefulItems?: ClothingItem[];
 }
 
+export interface DormantItemInfo {
+  item: ClothingItem;
+  daysInactive: number;
+  tier: 'warning' | 'danger';
+  reason: string;
+}
+
+export interface DeclutterSuggestionsData {
+  totalDormant: number;
+  totalDormantValue: number;
+  countWarning: number;
+  countDanger: number;
+  warningList: DormantItemInfo[];
+  dangerList: DormantItemInfo[];
+  allDormant: DormantItemInfo[];
+}
+
 export interface OutfitItem {
   item: ClothingItem | string;
   left: number;

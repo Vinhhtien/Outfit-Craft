@@ -153,7 +153,7 @@ async function seed() {
       brand: 'Ralph Lauren',
       purchasePrice: 650000,
       wearCount: 1,
-      lastWornAt: new Date(Date.now() - 86400000 * 25),
+      lastWornAt: new Date(Date.now() - 86400000 * 220), // ~7.3 thang truoc (Warning: 6-12 thang)
       isArchived: false,
     },
     {
@@ -169,7 +169,8 @@ async function seed() {
       tempRange: { min: 22, max: 35 },
       brand: 'Vintage Craft',
       purchasePrice: 550000,
-      wearCount: 0, // Never worn!
+      wearCount: 2,
+      lastWornAt: new Date(Date.now() - 86400000 * 420), // ~14 thang truoc (Danger: >12 thang)
       isArchived: false,
     },
     {
@@ -186,6 +187,7 @@ async function seed() {
       brand: 'Burberry Style',
       purchasePrice: 1950000,
       wearCount: 0, // Never worn!
+      createdAt: new Date(Date.now() - 86400000 * 270), // Them vao tu 9 thang truoc (Warning)
       isArchived: false,
     },
   ];

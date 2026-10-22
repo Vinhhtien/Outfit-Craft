@@ -344,3 +344,101 @@ export const getStats = asyncHandler(async (req, res) => {
     },
   });
 });
+
+/**
+ * GET /api/items/declutter
+ * Lay danh sach goi y don tu:
+ * - 6-12 thang khong mac (180 - 365 ngay)
+ * - Tren 12 thang khong mac (> 365 ngay)
+ * - Tinh toan tong gia tri dong bang cua nhung mon do nay
+ */
+export const getDeclutterSuggestions = asyncHandler(async (req, res) => {
+  const owner = req.user!.sub;
+  const now = new Date();
+
+  // Lay tat ca items chua bi archive cua user
+  const items = await ClothingItem.find({
+    owner,
+    isArchived: false,
+  }).sort({ lastWornAt: 1, createdAt: 1 });
+
+  interface DormantItemDTO {
+    item: typeof items[0];
+    daysInactive: number;
+    tier: 'warning' | 'danger'; // warning: 6-12m (180-365 days), danger: >12m (>365 days)
+    reason: string;
+  }
+
+  const dormantItems: DormantItemDTO[] = [];
+
+  for (const item of items) {
+    const referenceDate = item.lastWornAt || item.createdAt;
+    const diffMs = now.getTime() - new Date(referenceDate).getTime();
+    const daysInactive = Math.max(0, Math.floor(diffMs / (24 * 60 * 60 * 1000)));
+
+    if (daysInactive >= 180) {
+      const isOver12Months = daysInactive >= 365;
+      const tier: 'warning' | 'danger' = isOver12Months ? 'danger' : 'warning';
+      let reason = '';
+      if (!item.lastWornAt || item.wearCount === 0) {
+        reason = `Đã thêm vào tủ ${daysInactive} ngày nhưng chưa mặc lần nào`;
+      } else {
+        const months = Math.floor(daysInactive / 30);
+        reason = `Lần mặc cuối cách đây ${daysInactive} ngày (khoảng ${months} tháng)`;
+      }
+
+      dormantItems.push({
+        item,
+        daysInactive,
+        tier,
+        reason,
+      });
+    }
+  }
+
+  const warningList = dormantItems.filter((d) => d.tier === 'warning');
+  const dangerList = dormantItems.filter((d) => d.tier === 'danger');
+
+  const totalDormantValue = dormantItems.reduce(
+    (sum, d) => sum + (d.item.purchasePrice || 0),
+    0
+  );
+
+  res.json({
+    success: true,
+    data: {
+      totalDormant: dormantItems.length,
+      totalDormantValue,
+      countWarning: warningList.length,
+      countDanger: dangerList.length,
+      warningList,
+      dangerList,
+      allDormant: dormantItems,
+    },
+  });
+});
+
+/** POST /api/items/:id/wear - Danh dau mon do da duoc mac hom nay */
+export const markItemWorn = asyncHandler(async (req, res) => {
+  const item = await ClothingItem.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user!.sub },
+    {
+      $inc: { wearCount: 1 },
+      $set: { lastWornAt: new Date() },
+    },
+    { new: true }
+  );
+  if (!item) throw ApiError.notFound('Không tìm thấy món đồ.');
+  res.json({ success: true, data: item, message: 'Đã đánh dấu đã mặc hôm nay!' });
+});
+
+/** POST /api/items/:id/archive - Luu tru mon do (isArchived = true) */
+export const archiveItem = asyncHandler(async (req, res) => {
+  const item = await ClothingItem.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user!.sub },
+    { $set: { isArchived: true } },
+    { new: true }
+  );
+  if (!item) throw ApiError.notFound('Không tìm thấy món đồ.');
+  res.json({ success: true, data: item, message: 'Đã lưu trữ món đồ vào kho cất.' });
+});

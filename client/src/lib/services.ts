@@ -6,6 +6,7 @@ import type {
   BodyProfile, MannequinProfile, // NEW: Body Profile
   ItemFit, // NEW: Ghi nho fit
   WardrobeStatsData,
+  DeclutterSuggestionsData,
 } from '@/types';
 
 /* ---------------- Auth ---------------- */
@@ -122,6 +123,15 @@ export const itemApi = {
     api.put<ApiResponse<ClothingItem>>(`/items/${id}/fit`, { fit }).then((r) => r.data.data),
 
   stats: () => api.get<ApiResponse<WardrobeStatsData>>('/items/stats').then((r) => r.data.data),
+
+  declutter: () =>
+    api.get<ApiResponse<DeclutterSuggestionsData>>('/items/declutter').then((r) => r.data.data),
+
+  markWorn: (id: string) =>
+    api.post<ApiResponse<ClothingItem>>(`/items/${id}/wear`).then((r) => r.data),
+
+  archive: (id: string) =>
+    api.post<ApiResponse<ClothingItem>>(`/items/${id}/archive`).then((r) => r.data),
 };
 
 /* ---------------- Outfits ---------------- */
