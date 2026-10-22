@@ -6,6 +6,7 @@ import { ClothingItem } from '../models/ClothingItem.js';
 import { Outfit } from '../models/Outfit.js';
 import { Comment } from '../models/Comment.js';
 import { Like } from '../models/Like.js';
+import { WishlistItem } from '../models/WishlistItem.js';
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ async function seed() {
     Outfit.deleteMany({}),
     Comment.deleteMany({}),
     Like.deleteMany({}),
+    WishlistItem.deleteMany({}),
   ]);
 
   console.log('Cleared existing data.');
@@ -278,7 +280,50 @@ async function seed() {
     },
   ]);
 
-  console.log('Created sample outfits and comments.');
+  // 4. Create sample Wishlist items for user1 (including duplicate warning case)
+  await WishlistItem.create([
+    {
+      owner: user1._id,
+      name: 'Áo sơ mi linen cổ bẻ xanh pastel',
+      category: 'top',
+      price: 480000,
+      colors: ['#93c5fd'],
+      priority: 'medium',
+      brand: 'Zara',
+      imageUrl: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=500',
+      productUrl: 'https://www.zara.com/vn',
+      notes: 'Đắn đo vì trong tủ đã có 1 áo Oxford xanh pastel tương tự',
+      isPurchased: false,
+    },
+    {
+      owner: user1._id,
+      name: 'Chân váy xếp ly Trắng Vintage',
+      category: 'bottom',
+      price: 350000,
+      colors: ['#ffffff'],
+      priority: 'high',
+      brand: 'Chuu Korea',
+      imageUrl: 'https://images.unsplash.com/photo-1583496661160-fb5886a0aaaa?w=500',
+      productUrl: 'https://shopee.vn',
+      notes: 'Cần mua sớm để phối cùng áo Blazer dạ Vintage cho tiết trời mùa thu',
+      isPurchased: false,
+    },
+    {
+      owner: user1._id,
+      name: 'Kính râm gọng tròn Retro phong cách 90s',
+      category: 'accessory',
+      price: 220000,
+      colors: ['#000000'],
+      priority: 'low',
+      brand: 'Vintage Look',
+      imageUrl: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=500',
+      productUrl: 'https://lazada.vn',
+      isPurchased: true,
+      purchasedAt: new Date(Date.now() - 86400000 * 5),
+    },
+  ]);
+
+  console.log('Created sample outfits, comments, and wishlist items.');
   console.log('SEED COMPLETED SUCCESSFULLY!');
   await mongoose.disconnect();
 }

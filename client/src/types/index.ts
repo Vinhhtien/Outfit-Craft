@@ -187,6 +187,46 @@ export interface DeclutterSuggestionsData {
   allDormant: DormantItemInfo[];
 }
 
+export const WISHLIST_PRIORITIES = ['low', 'medium', 'high'] as const;
+export type WishlistPriority = (typeof WISHLIST_PRIORITIES)[number];
+
+export interface WishlistItem {
+  _id: string;
+  owner: string;
+  name: string;
+  category: Category;
+  imageUrl?: string;
+  productUrl?: string;
+  price?: number;
+  colors: string[];
+  brand?: string;
+  notes?: string;
+  priority: WishlistPriority;
+  isPurchased: boolean;
+  purchasedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  duplicates?: ClothingItem[];
+  hasDuplicate?: boolean;
+  duplicateCount?: number;
+}
+
+export interface WishlistResponseData {
+  items: WishlistItem[];
+  stats: {
+    totalItems: number;
+    unpurchasedCount: number;
+    totalEstimatedBudget: number;
+    duplicateWarningCount: number;
+  };
+}
+
+export interface DuplicateCheckResult {
+  hasDuplicate: boolean;
+  duplicates: ClothingItem[];
+  count: number;
+}
+
 export interface OutfitItem {
   item: ClothingItem | string;
   left: number;
