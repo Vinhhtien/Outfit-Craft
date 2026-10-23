@@ -10,6 +10,11 @@ import type {
   WishlistItem,
   WishlistResponseData,
   DuplicateCheckResult,
+  TravelTrip,
+  TravelItem,
+  TravelPackingSuggestions,
+  TripType,
+  TravelItemCategory,
 } from '@/types';
 
 /* ---------------- Auth ---------------- */
@@ -164,6 +169,58 @@ export const wishlistApi = {
     api.post<ApiResponse<{ wishlistItem: WishlistItem; wardrobeItem: ClothingItem }>>(`/wishlist/${id}/move-to-wardrobe`).then((r) => r.data),
 };
 
+/* ---------------- Travel Packing ---------------- */
+export interface CreateTripBody {
+  title: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  tripType: TripType;
+  notes?: string;
+  autoAddEssentials?: boolean;
+}
+
+export interface AddTravelItemBody {
+  clothingItemId?: string;
+  name: string;
+  category: TravelItemCategory;
+  imageUrl?: string;
+  quantity?: number;
+  note?: string;
+}
+
+export const travelApi = {
+  list: (signal?: AbortSignal) =>
+    api.get<ApiResponse<TravelTrip[]>>('/travel', { signal }).then((r) => r.data.data),
+
+  getById: (id: string, signal?: AbortSignal) =>
+    api.get<ApiResponse<TravelTrip>>(`/travel/${id}`, { signal }).then((r) => r.data.data),
+
+  create: (body: CreateTripBody) =>
+    api.post<ApiResponse<TravelTrip>>('/travel', body).then((r) => r.data.data),
+
+  update: (id: string, body: Partial<CreateTripBody>) =>
+    api.patch<ApiResponse<TravelTrip>>(`/travel/${id}`, body).then((r) => r.data.data),
+
+  remove: (id: string) =>
+    api.delete<ApiResponse<null>>(`/travel/${id}`).then((r) => r.data),
+
+  addItem: (tripId: string, body: AddTravelItemBody) =>
+    api.post<ApiResponse<TravelTrip>>(`/travel/${tripId}/items`, body).then((r) => r.data.data),
+
+  updateItem: (tripId: string, itemId: string, body: { isPacked?: boolean; quantity?: number; note?: string }) =>
+    api.patch<ApiResponse<TravelTrip>>(`/travel/${tripId}/items/${itemId}`, body).then((r) => r.data.data),
+
+  removeItem: (tripId: string, itemId: string) =>
+    api.delete<ApiResponse<TravelTrip>>(`/travel/${tripId}/items/${itemId}`).then((r) => r.data.data),
+
+  batchAdd: (tripId: string, items: AddTravelItemBody[]) =>
+    api.post<ApiResponse<TravelTrip>>(`/travel/${tripId}/batch-add`, { items }).then((r) => r.data.data),
+
+  getSuggestions: (params: { destination: string; durationDays?: number; tripType?: string }, signal?: AbortSignal) =>
+    api.get<ApiResponse<TravelPackingSuggestions>>('/travel/suggestions', { params, signal }).then((r) => r.data.data),
+};
+
 /* ---------------- Outfits ---------------- */
 export interface SaveOutfitBody {
   creationKey?: string;
@@ -276,10 +333,14 @@ export const bodyProfileApi = {
 };
 // ===== END NEW =====
 
-/* ---------------- Suggestions ---------------- */
-export const suggestionApi = {
-  weather: (city?: string) =>
+/* ---------------- Suggestions & Weather ---------------- */
+export const weatherApi = {
+  get: (city?: string) =>
     api.get<ApiResponse<Weather>>('/suggestions/weather', { params: { city } }).then((r) => r.data.data),
+};
+
+export const suggestionApi = {
+  weather: (city?: string) => weatherApi.get(city),
 
   get: (params: { city?: string; occasion?: Occasion } = {}, signal?: AbortSignal) =>
     api.get<ApiResponse<{
