@@ -445,9 +445,61 @@ export function attachLegacyItemData(objects: FabricObject[], items: OutfitItem[
 export async function loadCanvasJSON(
   canvas: Canvas,
   json: Record<string, unknown>,
-  items: OutfitItem[] = []
+  items: OutfitItem[] = [],
+  anchors?: MannequinAnchors
 ): Promise<void> {
-  await canvas.loadFromJSON(json, undefined, { signal: AbortSignal.timeout(30000) });
-  attachLegacyItemData(canvas.getObjects(), items); // NEW: Body Profile
-  canvas.requestRenderAll();
+  const rawObjects = json.objects;
+  const hasObjects = Array.isArray(rawObjects) && rawObjects.length > 0;
+  if (hasObjects) {
+    await canvas.loadFromJSON(json, undefined, { signal: AbortSignal.timeout(30000) });
+    attachLegacyItemData(canvas.getObjects(), items); // NEW: Body Profile
+    canvas.requestRenderAll();
+    return;
+  }
+
+  // Truong hop canvasJSON rong (vi du duoc luu tu trang Goi Y):
+  // Phuc hoi lai cac object tren canvas tu danh sach items
+  if (items.length > 0) {
+    const { FabricImage } = await import('fabric');
+    const sorted = [...items].sort((a, b) => a.zIndex - b.zIndex);
+    for (const entry of sorted) {
+      const it = typeof entry.item === 'object' && entry.item ? (entry.item as ClothingItem) : null;
+      if (!it?.imageUrl) continue;
+      try {
+        const img = (await FabricImage.fromURL(it.imageUrl, {
+          crossOrigin: 'anonymous',
+          signal: AbortSignal.timeout(30000),
+        })) as FabricImage & { itemData?: ItemObjectData };
+
+        img.set({ originX: 'center', originY: 'center', ...ITEM_CONTROLS });
+        img.itemData = {
+          itemId: it._id,
+          category: it.category,
+          anchorRef: entry.anchorRef ?? null,
+          offset: entry.offset ?? ZERO,
+        };
+
+        const aspect = (img.height || 1) / (img.width || 1);
+        if (anchors) {
+          const fitted = it.fit ? placeFromFit(it.fit, it.category, anchors) : null;
+          applyPlacement(img, fitted ?? autoPlace(it.category, aspect, anchors), true);
+        } else {
+          img.set({
+            left: entry.left,
+            top: entry.top,
+            scaleX: entry.scaleX ?? 1,
+            scaleY: entry.scaleY ?? 1,
+            angle: entry.angle ?? 0,
+            flipX: Boolean(entry.flipX),
+          });
+          img.setCoords();
+        }
+
+        canvas.add(img);
+      } catch (err) {
+        console.warn('Không tải được ảnh món đồ lên canvas:', err);
+      }
+    }
+    canvas.requestRenderAll();
+  }
 }

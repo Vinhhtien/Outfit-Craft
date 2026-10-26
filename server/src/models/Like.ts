@@ -19,7 +19,15 @@ const likeSchema = new Schema<ILike>(
 );
 
 // Moi user chi like 1 outfit / post 1 lan.
-likeSchema.index({ user: 1, outfit: 1 }, { unique: true, sparse: true });
-likeSchema.index({ user: 1, post: 1 }, { unique: true, sparse: true });
+// Dung partialFilterExpression thay vi sparse: true vi sparse tren compound index van danh chi muc
+// neu field user ton tai, gay loi duplicate key { user: id, post: null } khi 1 user like outfit thu 2.
+likeSchema.index(
+  { user: 1, outfit: 1 },
+  { unique: true, partialFilterExpression: { outfit: { $exists: true, $type: 'objectId' } } }
+);
+likeSchema.index(
+  { user: 1, post: 1 },
+  { unique: true, partialFilterExpression: { post: { $exists: true, $type: 'objectId' } } }
+);
 
 export const Like = model<ILike>('Like', likeSchema);
