@@ -15,8 +15,9 @@ import { seedDefaultCategories } from './models/Category.js';
 async function bootstrap() {
   try {
     await connectDB();
+    await Like.collection.dropIndex('user_1_outfit_1').catch(() => {});
+    await Like.collection.dropIndex('user_1_post_1').catch(() => {});
     await Promise.all([ClothingItem.init(), Outfit.init(), ImageCleanup.init(), User.init(), Like.init()]);
-    await Like.syncIndexes().catch(() => {});
     const demo = await seedDemoAdmin();
     if (demo.status === 'created') console.log(`[admin] Da tao tai khoan demo: ${DEMO_ADMIN_EMAIL}`);
     if (demo.status === 'exists' && demo.usable === false) console.warn('[admin] Email demo da ton tai nhung khong phai admin kha dung. Giu nguyen tai khoan hien co.');
