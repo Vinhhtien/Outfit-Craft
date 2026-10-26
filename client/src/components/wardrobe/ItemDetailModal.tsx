@@ -131,7 +131,8 @@ export function ItemDetailModal({
       return;
     }
 
-    const priceNum = form.purchasePrice.trim() ? Number(form.purchasePrice) : undefined;
+    const trimmedPrice = form.purchasePrice.trim();
+    const priceNum = trimmedPrice ? Number(trimmedPrice) : null;
     const payload: UpdateItemPayload = {
       name,
       category: form.category,
@@ -141,7 +142,7 @@ export function ItemDetailModal({
       occasions: form.occasions,
       brand: form.brand.trim(),
       notes: form.notes.trim(),
-      purchasePrice: priceNum !== undefined && !isNaN(priceNum) ? priceNum : undefined,
+      purchasePrice: priceNum !== null && !isNaN(priceNum) ? priceNum : null,
     };
 
     savingRef.current = true;

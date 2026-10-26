@@ -20,6 +20,16 @@ export const getOutfitComments = asyncHandler(async (req, res) => {
   const outfit = await Outfit.findById(req.params.id);
   if (!outfit) throw ApiError.notFound('Không tìm thấy outfit.');
 
+  if (outfit.isHidden) {
+    throw ApiError.forbidden('Bộ đồ này đã bị ẩn bởi quản trị viên.');
+  }
+
+  const userId = req.user?.sub;
+  const isOwner = userId && outfit.owner.toString() === userId;
+  if (!outfit.isPublic && !isOwner) {
+    throw ApiError.forbidden('Không thể xem bình luận của bộ đồ riêng tư.');
+  }
+
   const comments = await Comment.find({ outfit: outfit._id })
     .sort({ createdAt: 1 })
     .populate('user', 'displayName avatarUrl')
@@ -36,6 +46,15 @@ export const addComment = asyncHandler(async (req, res) => {
   const { content } = req.body;
   const outfit = await Outfit.findById(req.params.id);
   if (!outfit) throw ApiError.notFound('Không tìm thấy outfit.');
+
+  if (outfit.isHidden) {
+    throw ApiError.forbidden('Bộ đồ này đã bị ẩn bởi quản trị viên.');
+  }
+
+  const isOwner = outfit.owner.toString() === req.user!.sub;
+  if (!outfit.isPublic && !isOwner) {
+    throw ApiError.forbidden('Không thể bình luận trên bộ đồ riêng tư.');
+  }
 
   const comment = await Comment.create({
     user: req.user!.sub,

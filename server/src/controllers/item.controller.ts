@@ -50,8 +50,8 @@ export const updateItemSchema = z
     brand: z.string().trim().max(100),
     notes: z.string().trim().max(500),
     purchasePrice: z.preprocess(
-      (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
-      z.number().min(0).max(10_000_000_000).optional()
+      (v) => (v === '' || v === null ? null : v === undefined ? undefined : Number(v)),
+      z.number().min(0).max(10_000_000_000).nullable().optional()
     ),
   })
   .partial()
@@ -201,9 +201,24 @@ export const updateItem = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Không có thông tin nào để cập nhật.');
   }
 
+  const setFields: Record<string, unknown> = {};
+  const unsetFields: Record<string, 1> = {};
+
+  for (const [key, value] of Object.entries(req.body)) {
+    if (value === null) {
+      unsetFields[key] = 1;
+    } else if (value !== undefined) {
+      setFields[key] = value;
+    }
+  }
+
+  const updateOp: Record<string, unknown> = {};
+  if (Object.keys(setFields).length > 0) updateOp.$set = setFields;
+  if (Object.keys(unsetFields).length > 0) updateOp.$unset = unsetFields;
+
   const item = await ClothingItem.findOneAndUpdate(
     { _id: req.params.id, owner: req.user!.sub },
-    { $set: req.body },
+    updateOp,
     { new: true, runValidators: true }
   );
   // ===== END NEW =====

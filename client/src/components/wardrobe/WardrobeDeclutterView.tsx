@@ -11,9 +11,7 @@ import {
   ArrowRight,
   Clock,
   Wallet,
-  Shirt,
   Calendar,
-  Layers,
 } from 'lucide-react';
 import { useResource } from '@/hooks/useResource';
 import { itemApi } from '@/lib/services';

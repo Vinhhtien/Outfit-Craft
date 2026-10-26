@@ -145,7 +145,7 @@ export interface ClothingItem {
   tempRange: { min: number; max: number };
   brand?: string;
   notes?: string;
-  purchasePrice?: number;
+  purchasePrice?: number | null;
   costPerWear?: number | null;
   wearCount: number;
   lastWornAt?: string;

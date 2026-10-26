@@ -2,17 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  X,
   AlertTriangle,
-  ExternalLink,
-  Plus,
-  Sparkles,
-  Shirt,
-  DollarSign,
   Heart,
-  Tag,
+  Loader2,
 } from 'lucide-react';
-import { VModal, VInput, VSelect, VButton, VLabel, VChip } from '@/components/ui/vintage';
+import { VModal, VInput, VSelect, VButton, VLabel } from '@/components/ui/vintage';
 import { wishlistApi } from '@/lib/services';
 import { useCategoryLabels } from '@/store/categoryStore';
 import { CATEGORIES } from '@/types';
@@ -220,6 +214,13 @@ export function AddWishlistModal({
             </button>
           </div>
         </div>
+
+        {checking && (
+          <div className="flex items-center gap-2 text-xs text-[#869BB2]">
+            <Loader2 size={13} className="animate-spin text-[#1F453E]" />
+            <span>Đang đối chiếu với tủ đồ của bạn...</span>
+          </div>
+        )}
 
         {/* 🔥 HỘP CẢNH BÁO MUA TRÙNG REAL-TIME */}
         {hasDuplicate && duplicates.length > 0 && (

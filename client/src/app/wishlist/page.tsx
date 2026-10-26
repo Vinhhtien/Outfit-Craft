@@ -11,9 +11,8 @@ import {
   Trash2,
   Wallet,
   ShoppingBag,
-  Sparkles,
   ArrowRight,
-  Filter,
+  Loader2,
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
@@ -24,7 +23,7 @@ import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
 import { wishlistApi } from '@/lib/services';
 import { useCategoryLabels } from '@/store/categoryStore';
 import { CATEGORIES } from '@/types';
-import type { Category, WishlistItem, WishlistPriority } from '@/types';
+import type { WishlistItem } from '@/types';
 
 export default function WishlistPage() {
   const CATEGORY_LABELS = useCategoryLabels();
@@ -62,7 +61,12 @@ export default function WishlistPage() {
     duplicateWarningCount: 0,
   };
 
+  // Moving to wardrobe state
+  const [movingIds, setMovingIds] = useState<Set<string>>(new Set());
+
   const handleMoveToWardrobe = async (item: WishlistItem) => {
+    if (movingIds.has(item._id)) return;
+    setMovingIds((prev) => new Set(prev).add(item._id));
     try {
       const res = await wishlistApi.moveToWardrobe(item._id);
       setToast({
@@ -72,6 +76,12 @@ export default function WishlistPage() {
       void reload();
     } catch {
       setToast({ message: 'Không thể chuyển vào tủ đồ.', variant: 'error' });
+    } finally {
+      setMovingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item._id);
+        return next;
+      });
     }
   };
 
@@ -416,11 +426,20 @@ export default function WishlistPage() {
                         {!item.isPurchased ? (
                           <button
                             type="button"
+                            disabled={movingIds.has(item._id)}
                             onClick={() => void handleMoveToWardrobe(item)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Đánh dấu đã mua và tự động thêm vào tủ đồ"
                           >
-                            <CheckCircle2 size={13} /> Đã mua
+                            {movingIds.has(item._id) ? (
+                              <>
+                                <Loader2 size={13} className="animate-spin" /> Đang chuyển...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 size={13} /> Đã mua
+                              </>
+                            )}
                           </button>
                         ) : (
                           <Link

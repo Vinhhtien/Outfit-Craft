@@ -28,6 +28,45 @@ export const checkDuplicateSchema = z.object({
   colors: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).default([]),
 });
 
+function hexToRgb(hex: string): [number, number, number] | null {
+  const clean = hex.trim().replace(/^#/, '');
+  if (clean.length !== 6) return null;
+  const num = parseInt(clean, 16);
+  if (isNaN(num)) return null;
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+/**
+ * Khoang cach mau mat nguoi cam nhan (redmean metric: 0 - 765).
+ */
+function colorDistance(hex1: string, hex2: string): number {
+  if (hex1.toLowerCase() === hex2.toLowerCase()) return 0;
+  const rgb1 = hexToRgb(hex1);
+  const rgb2 = hexToRgb(hex2);
+  if (!rgb1 || !rgb2) return Infinity;
+  const [r1, g1, b1] = rgb1;
+  const [r2, g2, b2] = rgb2;
+
+  // Hai mau cung gan den (max < 55) -> xem nhu tuong dong (den / xam dam)
+  if (Math.max(r1, g1, b1) < 55 && Math.max(r2, g2, b2) < 55) return 0;
+  // Hai mau cung gan trang (min > 210) -> xem nhu tuong dong (trang / kem / be)
+  if (Math.min(r1, g1, b1) > 210 && Math.min(r2, g2, b2) > 210) return 0;
+
+  const rmean = (r1 + r2) / 2;
+  const dr = r1 - r2;
+  const dg = g1 - g2;
+  const db = b1 - b2;
+  return Math.sqrt(
+    (((512 + rmean) * dr * dr) >> 8) +
+    4 * dg * dg +
+    (((767 - rmean) * db * db) >> 8)
+  );
+}
+
+function areColorsSimilar(c1: string, c2: string, threshold = 120): boolean {
+  return colorDistance(c1, c2) <= threshold;
+}
+
 /**
  * Ham kiem tra cac mon do trong tu co cung category va mau sac tuong dong
  */
@@ -36,22 +75,25 @@ async function findDuplicateWardrobeItems(
   category: string,
   colors: string[]
 ) {
-  if (colors.length === 0) {
-    // Neu chua chon mau, tim xem da co bao nhieu do cung danh muc
-    return ClothingItem.find({
-      owner,
-      category,
-      isArchived: false,
-    }).limit(5);
-  }
-
-  // Tim cac mon trong tu co cung category VA chua it nhat 1 mau trung
-  return ClothingItem.find({
+  const items = await ClothingItem.find({
     owner,
     category,
     isArchived: false,
-    colors: { $in: colors },
-  }).limit(5);
+  }).sort({ wearCount: -1, createdAt: -1 });
+
+  if (colors.length === 0) {
+    return items.slice(0, 5);
+  }
+
+  // Loc cac mon trong tu co chua it nhat 1 mau tuong dong voi mau cua wishlist
+  const matched = items.filter((item) => {
+    if (!item.colors || item.colors.length === 0) return false;
+    return item.colors.some((itemColor) =>
+      colors.some((targetColor) => areColorsSimilar(itemColor, targetColor))
+    );
+  });
+
+  return matched.slice(0, 5);
 }
 
 /**
@@ -132,6 +174,16 @@ export const checkDuplicates = asyncHandler(async (req, res) => {
     },
   });
 });
+
+const CATEGORY_TRANSPARENT_PLACEHOLDERS: Record<string, string> = {
+  top: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>',
+  bottom: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v3l-2 13h-4l-2-8-2 8H6L4 7V4z"/></svg>',
+  outerwear: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 7 4-4h10l4 4-2 13H5L3 7z"/><path d="M12 3v17"/></svg>',
+  dress: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l2 5-3 13H10L7 8l2-5z"/></svg>',
+  shoes: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h18v3H3z"/><path d="M3 17l4-9h4l2 5h5a3 3 0 0 1 3 4"/></svg>',
+  bag: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8V6a6 6 0 0 1 12 0v2"/><rect width="18" height="14" x="3" y="8" rx="2"/></svg>',
+  accessory: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 9v6"/></svg>',
+};
 
 const DEFAULT_CATEGORY_IMAGES: Record<string, string> = {
   top: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500',
@@ -219,16 +271,40 @@ export const deleteWishlistItem = asyncHandler(async (req, res) => {
  */
 export const moveToWardrobe = asyncHandler(async (req, res) => {
   const owner = req.user!.sub;
-  const wishlistItem = await WishlistItem.findOne({ _id: req.params.id, owner });
-  if (!wishlistItem) throw ApiError.notFound('Không tìm thấy món đồ trong wishlist.');
+
+  // Atomic update de chong click dup / goi API song song tao trung lap mon do
+  const wishlistItem = await WishlistItem.findOneAndUpdate(
+    { _id: req.params.id, owner, isPurchased: { $ne: true } },
+    { $set: { isPurchased: true, purchasedAt: new Date() } },
+    { new: true }
+  );
+
+  if (!wishlistItem) {
+    const exists = await WishlistItem.findOne({ _id: req.params.id, owner });
+    if (!exists) throw ApiError.notFound('Không tìm thấy món đồ trong wishlist.');
+    throw ApiError.badRequest('Món đồ này đã được chuyển vào tủ đồ rồi.');
+  }
+
+  // Su dung hinh silhouette trong suot (SVG) neu wishlist dung anh mac dinh chua tach nen,
+  // tranh viec dua hinh chu nhat Unsplash len canvas Studio gay de che quan ao.
+  const fallbackImage =
+    CATEGORY_TRANSPARENT_PLACEHOLDERS[wishlistItem.category] ||
+    CATEGORY_TRANSPARENT_PLACEHOLDERS.top;
+  const isDefaultUnsplash =
+    Boolean(wishlistItem.imageUrl) &&
+    Object.values(DEFAULT_CATEGORY_IMAGES).some((u) =>
+      wishlistItem.imageUrl?.includes(u.split('?')[0])
+    );
+  const itemImageUrl =
+    !wishlistItem.imageUrl || isDefaultUnsplash ? fallbackImage : wishlistItem.imageUrl;
 
   // Tao ClothingItem moi trong tu do
   const wardrobeItem = await ClothingItem.create({
     owner,
     name: wishlistItem.name,
     category: wishlistItem.category,
-    originalImageUrl: wishlistItem.imageUrl || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=500',
-    imageUrl: wishlistItem.imageUrl || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=500',
+    originalImageUrl: itemImageUrl,
+    imageUrl: itemImageUrl,
     colors: wishlistItem.colors,
     brand: wishlistItem.brand,
     purchasePrice: wishlistItem.price,
@@ -236,11 +312,6 @@ export const moveToWardrobe = asyncHandler(async (req, res) => {
     isArchived: false,
     notes: wishlistItem.notes,
   });
-
-  // Cap nhat trang thai wishlist
-  wishlistItem.isPurchased = true;
-  wishlistItem.purchasedAt = new Date();
-  await wishlistItem.save();
 
   res.json({
     success: true,
