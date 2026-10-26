@@ -7,7 +7,6 @@ import { Outfit } from '../models/Outfit.js';
 import { Comment } from '../models/Comment.js';
 import { Like } from '../models/Like.js';
 import { WishlistItem } from '../models/WishlistItem.js';
-import { TravelTrip } from '../models/TravelTrip.js';
 
 dotenv.config();
 
@@ -25,7 +24,6 @@ async function seed() {
     Comment.deleteMany({}),
     Like.deleteMany({}),
     WishlistItem.deleteMany({}),
-    TravelTrip.deleteMany({}),
   ]);
 
   console.log('Cleared existing data.');
@@ -325,102 +323,7 @@ async function seed() {
     },
   ]);
 
-  // 5. Create sample TravelTrip for user1 (Da Nang beach trip)
-  await TravelTrip.create({
-    owner: user1._id,
-    title: 'Kỳ nghỉ biển Đà Nẵng 3 ngày 2 đêm',
-    destination: 'Đà Nẵng',
-    startDate: new Date(Date.now() + 86400000 * 5),
-    endDate: new Date(Date.now() + 86400000 * 8),
-    tripType: 'beach',
-    notes: 'Du lịch nghỉ dưỡng cùng bạn bè, check-in biển Mỹ Khê và phố cổ Hội An',
-    weatherSnapshot: {
-      city: 'Đà Nẵng',
-      temp: 31,
-      feelsLike: 34,
-      humidity: 68,
-      condition: 'Clouds',
-      description: 'Nắng nhẹ, mây rải rác',
-      icon: '02d',
-      isRaining: false,
-      fetchedAt: new Date(),
-    },
-    items: [
-      {
-        clothingItem: createdItems[0]._id, // Áo phông trắng basic Cotton
-        name: 'Áo phông trắng basic Cotton',
-        category: 'top',
-        imageUrl: createdItems[0].imageUrl,
-        quantity: 2,
-        isPacked: true,
-        note: 'Mặc dạo biển và đi dạo phố ban ngày',
-      },
-      {
-        clothingItem: createdItems[1]._id, // Quần Jean Slim-fit Indigo
-        name: 'Quần Jean Slim-fit Indigo',
-        category: 'bottom',
-        imageUrl: createdItems[1].imageUrl,
-        quantity: 1,
-        isPacked: true,
-        note: 'Mặc buổi tối đi Hội An',
-      },
-      {
-        clothingItem: createdItems[2]._id, // Giày Sneaker Trắng Retro
-        name: 'Giày Sneaker Trắng Retro',
-        category: 'shoes',
-        imageUrl: createdItems[2].imageUrl,
-        quantity: 1,
-        isPacked: false,
-        note: 'Đi đường & dạo phố',
-      },
-      {
-        clothingItem: createdItems[4]._id, // Túi Tote Canvas Kem Vintage
-        name: 'Túi Tote Canvas Kem Vintage',
-        category: 'bag',
-        imageUrl: createdItems[4].imageUrl,
-        quantity: 1,
-        isPacked: true,
-      },
-      {
-        name: 'CCCD / Hộ chiếu & Vé máy bay',
-        category: 'documents',
-        quantity: 1,
-        isPacked: true,
-      },
-      {
-        name: 'Cáp sạc & Củ sạc điện thoại',
-        category: 'electronics',
-        quantity: 1,
-        isPacked: true,
-      },
-      {
-        name: 'Sạc pin dự phòng 20.000mAh',
-        category: 'electronics',
-        quantity: 1,
-        isPacked: false,
-      },
-      {
-        name: 'Kem chống nắng đi biển SPF 50+',
-        category: 'personal',
-        quantity: 1,
-        isPacked: true,
-      },
-      {
-        name: 'Kính râm chống tia UV',
-        category: 'accessory',
-        quantity: 1,
-        isPacked: false,
-      },
-      {
-        name: 'Bàn chải & Kem đánh răng mini',
-        category: 'personal',
-        quantity: 1,
-        isPacked: false,
-      },
-    ],
-  });
-
-  console.log('Created sample outfits, comments, wishlist items, and travel trip.');
+  console.log('Created sample outfits, comments, and wishlist items.');
   console.log('SEED COMPLETED SUCCESSFULLY!');
   await mongoose.disconnect();
 }

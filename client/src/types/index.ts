@@ -275,8 +275,6 @@ export interface Weather {
   isRaining: boolean;
 }
 
-export type WeatherInfo = Weather;
-
 export interface Suggestion {
   top?: ClothingItem;
   bottom?: ClothingItem;
@@ -302,95 +300,4 @@ export interface ApiResponse<T> {
   data: T;
   message?: string;
   pagination?: { page: number; limit: number; total: number; pages: number };
-}
-
-/* ---------------- Travel Packing ---------------- */
-export const TRIP_TYPES = ['leisure', 'beach', 'business', 'trekking', 'winter', 'other'] as const;
-export type TripType = (typeof TRIP_TYPES)[number];
-
-export const TRAVEL_ITEM_CATEGORIES = [
-  'top',
-  'bottom',
-  'outerwear',
-  'dress',
-  'shoes',
-  'bag',
-  'accessory',
-  'personal',
-  'documents',
-  'electronics',
-  'medical',
-] as const;
-export type TravelItemCategory = (typeof TRAVEL_ITEM_CATEGORIES)[number];
-
-export interface TravelItem {
-  _id: string;
-  clothingItem?: ClothingItem | string;
-  name: string;
-  category: TravelItemCategory;
-  imageUrl?: string;
-  quantity: number;
-  isPacked: boolean;
-  note?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface TripWeatherSnapshot {
-  city: string;
-  temp: number;
-  feelsLike: number;
-  humidity: number;
-  condition: string;
-  description: string;
-  icon: string;
-  isRaining: boolean;
-  fetchedAt: string;
-}
-
-export interface TravelTrip {
-  _id: string;
-  owner: string;
-  title: string;
-  destination: string;
-  startDate: string;
-  endDate: string;
-  tripType: TripType;
-  notes?: string;
-  weatherSnapshot?: TripWeatherSnapshot;
-  items: TravelItem[];
-  durationDays: number;
-  totalItems: number;
-  packedItems: number;
-  packedPercentage: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TravelPackingSuggestions {
-  weather: WeatherInfo;
-  weatherAdvice: string;
-  suggestedQuantities: {
-    top: number;
-    bottom: number;
-    outerwear: number;
-    shoes: number;
-    accessory: number;
-    bag: number;
-  };
-  wardrobeSuggestions: {
-    top: ClothingItem[];
-    bottom: ClothingItem[];
-    outerwear: ClothingItem[];
-    dress: ClothingItem[];
-    shoes: ClothingItem[];
-    bag: ClothingItem[];
-    accessory: ClothingItem[];
-  };
-  totalMatchedWardrobeItems: number;
-  defaultEssentials: {
-    name: string;
-    category: TravelItemCategory;
-    quantity: number;
-  }[];
 }
