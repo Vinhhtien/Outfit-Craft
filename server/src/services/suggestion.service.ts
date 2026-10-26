@@ -12,6 +12,7 @@ export interface OutfitSuggestion {
   top?: IClothingItem;
   bottom?: IClothingItem;
   dress?: IClothingItem;
+  set?: IClothingItem;
   outerwear?: IClothingItem;
   shoes?: IClothingItem;
   accessory?: IClothingItem;
@@ -111,6 +112,7 @@ export function buildSuggestion(
   const top = bestOf('top');
   const bottom = bestOf('bottom');
   const dress = bestOf('dress');
+  const setItem = bestOf('set');
   const shoes = bestOf('shoes');
   const accessory = bestOf('accessory');
 
@@ -118,11 +120,15 @@ export function buildSuggestion(
   const outerwear = weather.temp < 20 ? bestOf('outerwear') : undefined;
 
   const comboScore = (top?.score ?? 0) + (bottom?.score ?? 0);
-  const useDress = dress && dress.score * 2 > comboScore;
+  const dressScore = dress ? dress.score * 2 : 0;
+  const setScore = setItem ? setItem.score * 2 : 0;
+
+  const useSet = Boolean(setItem && setScore > comboScore && setScore >= dressScore);
+  const useDress = Boolean(!useSet && dress && dressScore > comboScore);
 
   const picked = [
-    useDress ? dress : top,
-    useDress ? undefined : bottom,
+    useSet ? setItem : (useDress ? dress : top),
+    useSet || useDress ? undefined : bottom,
     outerwear,
     shoes,
     accessory,
@@ -134,9 +140,10 @@ export function buildSuggestion(
   if (weather.temp > 32) reasons.push('Troi nong, uu tien chat lieu thoang mat');
 
   return {
-    top: useDress ? undefined : top?.item,
-    bottom: useDress ? undefined : bottom?.item,
+    top: useSet || useDress ? undefined : top?.item,
+    bottom: useSet || useDress ? undefined : bottom?.item,
     dress: useDress ? dress?.item : undefined,
+    set: useSet ? setItem?.item : undefined,
     outerwear: outerwear?.item,
     shoes: shoes?.item,
     accessory: accessory?.item,

@@ -110,7 +110,7 @@ export default function WishlistPage() {
               </h1>
             </div>
             <p className="mt-1 text-sm font-medium text-[#2C4C45]">
-              Lên danh sách đồ mong muốn · Tự động đối chiếu màu sắc &amp; danh mục để tránh mua lặp
+              Lên danh sách đồ mong muốn · Tự động đối chiếu món đồ trong tủ để tránh mua lặp
             </p>
           </div>
           <div>
@@ -179,10 +179,10 @@ export default function WishlistPage() {
                 <span className="font-serif-display text-4xl font-semibold text-amber-950">
                   {stats.duplicateWarningCount}
                 </span>
-                <span className="text-xs font-medium text-amber-900">món có nguy cơ lặp</span>
+                <span className="text-xs font-medium text-amber-900">món đã có trong tủ</span>
               </div>
               <p className="mt-2 text-xs text-amber-800">
-                Đã có món tương đồng danh mục &amp; màu sắc trong tủ
+                Đã có món đồ tương tự trong tủ đồ của bạn
               </p>
             </div>
 
@@ -352,7 +352,7 @@ export default function WishlistPage() {
                           <div className="flex items-center gap-1.5 truncate font-medium">
                             <AlertTriangle size={13} className="shrink-0 text-amber-700" />
                             <span className="truncate">
-                              Trùng màu &amp; loại với {item.duplicates?.length || 1} món trong tủ
+                              Đã có trong tủ ({item.duplicates?.length || 1} món tương tự)
                             </span>
                           </div>
                           <span className="shrink-0 text-[11px] font-bold underline">Xem</span>
@@ -502,7 +502,7 @@ export default function WishlistPage() {
 
               <div className="mt-4 space-y-2.5">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-[#6B7B76]">
-                  Các món đang có trong tủ cùng loại &amp; màu:
+                  Các món tương tự đang có trong tủ đồ:
                 </p>
                 {viewingDuplicatesItem.duplicates?.map((dup) => (
                   <div

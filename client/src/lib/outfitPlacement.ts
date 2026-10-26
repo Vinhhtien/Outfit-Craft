@@ -46,6 +46,7 @@ export const CATEGORY_GROUP: Record<Category, PlacementGroup> = {
   top: 'top',
   outerwear: 'outerwear',
   dress: 'dress',
+  set: 'dress',
   bottom: 'bottom',
   shoes: 'shoes',
   bag: 'side',

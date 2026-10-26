@@ -1,7 +1,7 @@
 /** Domain types - giu dong bo voi server/src/types/index.ts */
 
 export const CATEGORIES = [
-  'top', 'bottom', 'outerwear', 'dress', 'shoes', 'bag', 'accessory',
+  'top', 'bottom', 'outerwear', 'dress', 'set', 'shoes', 'bag', 'accessory',
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
@@ -10,6 +10,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   bottom: 'Quần / Chân váy',
   outerwear: 'Áo khoác',
   dress: 'Váy liền',
+  set: 'Set / Đồ bộ',
   shoes: 'Giày',
   bag: 'Túi',
   accessory: 'Phụ kiện',
@@ -17,7 +18,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 
 /** Layer mặc định trên canvas: số lớn = nằm trên. */
 export const CATEGORY_Z_INDEX: Record<Category, number> = {
-  shoes: 5, bottom: 10, dress: 20, top: 30,
+  shoes: 5, bottom: 10, dress: 20, set: 25, top: 30,
   outerwear: 40, bag: 50, accessory: 60,
 };
 
