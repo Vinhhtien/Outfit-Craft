@@ -8,6 +8,7 @@ export const CATEGORIES = [
   'bottom',       // quan, chan vay
   'outerwear',    // ao khoac, blazer
   'dress',        // vay lien than / jumpsuit
+  'set',          // set do, do bo, pijama, suit coord
   'shoes',
   'bag',
   'accessory',    // mu, kinh, that lung, trang suc
@@ -19,6 +20,7 @@ export const CATEGORY_Z_INDEX: Record<Category, number> = {
   shoes: 5,
   bottom: 10,
   dress: 20,
+  set: 25,
   top: 30,
   outerwear: 40,
   bag: 50,

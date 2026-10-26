@@ -6,11 +6,40 @@ import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { CATEGORIES } from '../types/index.js';
 
+const optionalUrl = z.preprocess((val) => {
+  if (typeof val !== 'string') return undefined;
+  const trimmed = val.trim();
+  if (!trimmed) return undefined;
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}, z.string().url('Đường dẫn URL không hợp lệ').optional());
+
+const optionalImage = z.preprocess((val) => {
+  if (typeof val !== 'string') return undefined;
+  const trimmed = val.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('data:image/')) return trimmed;
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}, z.string().refine((val) => {
+  if (val.startsWith('data:image/')) return true;
+  try {
+    new URL(val);
+    return true;
+  } catch {
+    return false;
+  }
+}, { message: 'Ảnh sản phẩm phải là link URL hợp lệ hoặc file ảnh tải lên' }).optional());
+
 export const createWishlistSchema = z.object({
   name: z.string().trim().min(1, 'Tên món đồ không được để trống').max(100),
   category: z.enum(CATEGORIES),
-  imageUrl: z.string().url().or(z.literal('')).optional(),
-  productUrl: z.string().url().or(z.literal('')).optional(),
+  imageUrl: optionalImage,
+  productUrl: optionalUrl,
   price: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
     z.number().min(0).max(10_000_000_000).optional()
@@ -25,74 +54,83 @@ export const updateWishlistSchema = createWishlistSchema.partial().strict();
 
 export const checkDuplicateSchema = z.object({
   category: z.enum(CATEGORIES),
+  name: z.string().trim().optional().default(''),
   colors: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).default([]),
 });
 
-function hexToRgb(hex: string): [number, number, number] | null {
-  const clean = hex.trim().replace(/^#/, '');
-  if (clean.length !== 6) return null;
-  const num = parseInt(clean, 16);
-  if (isNaN(num)) return null;
-  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+function cleanText(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const SYNONYMS: Record<string, string> = {
+  phong: 'thun',
+  tee: 'thun',
+  tshirt: 'thun',
+  bot: 'boot',
+  boots: 'boot',
+  sneakers: 'sneaker',
+};
+
+const STOP_WORDS = new Set([
+  'ao', 'quan', 'giay', 'vay', 'dam', 'tui', 'mu', 'non', 'that', 'lung', 'khan',
+  'cho', 'va', 'cua', 'dep', 'chiec', 'nam', 'nu', 'thoi', 'trang',
+]);
+
+function getKeywords(name: string): string[] {
+  const words = cleanText(name)
+    .split(' ')
+    .filter((w) => w.length > 1);
+  return words.map((w) => SYNONYMS[w] || w).filter((w) => !STOP_WORDS.has(w));
+}
+
+export function isSimilarItem(name1: string, name2: string): boolean {
+  const c1 = cleanText(name1);
+  const c2 = cleanText(name2);
+  if (!c1 || !c2) return false;
+  if (c1 === c2) return true;
+
+  const kw1 = getKeywords(name1);
+  const kw2 = getKeywords(name2);
+  if (kw1.length === 0 || kw2.length === 0) return false;
+
+  const strKw1 = kw1.join(' ');
+  const strKw2 = kw2.join(' ');
+  if (strKw1 === strKw2) return true;
+  if (strKw1.includes(strKw2) || strKw2.includes(strKw1)) return true;
+
+  const set2 = new Set(kw2);
+  const intersect = kw1.filter((w) => set2.has(w));
+  const minLen = Math.min(kw1.length, kw2.length);
+  const matchRatio = intersect.length / minLen;
+  return matchRatio >= 0.6 && intersect.length >= 2;
 }
 
 /**
- * Khoang cach mau mat nguoi cam nhan (redmean metric: 0 - 765).
- */
-function colorDistance(hex1: string, hex2: string): number {
-  if (hex1.toLowerCase() === hex2.toLowerCase()) return 0;
-  const rgb1 = hexToRgb(hex1);
-  const rgb2 = hexToRgb(hex2);
-  if (!rgb1 || !rgb2) return Infinity;
-  const [r1, g1, b1] = rgb1;
-  const [r2, g2, b2] = rgb2;
-
-  // Hai mau cung gan den (max < 55) -> xem nhu tuong dong (den / xam dam)
-  if (Math.max(r1, g1, b1) < 55 && Math.max(r2, g2, b2) < 55) return 0;
-  // Hai mau cung gan trang (min > 210) -> xem nhu tuong dong (trang / kem / be)
-  if (Math.min(r1, g1, b1) > 210 && Math.min(r2, g2, b2) > 210) return 0;
-
-  const rmean = (r1 + r2) / 2;
-  const dr = r1 - r2;
-  const dg = g1 - g2;
-  const db = b1 - b2;
-  return Math.sqrt(
-    (((512 + rmean) * dr * dr) >> 8) +
-    4 * dg * dg +
-    (((767 - rmean) * db * db) >> 8)
-  );
-}
-
-function areColorsSimilar(c1: string, c2: string, threshold = 120): boolean {
-  return colorDistance(c1, c2) <= threshold;
-}
-
-/**
- * Ham kiem tra cac mon do trong tu co cung category va mau sac tuong dong
+ * Kiem tra cac mon do trong tu co cung category va ten/loai tuong tu
+ * (Chi canh bao khi mon do da co trong tu, khong canh bao theo trung lap mau sac).
  */
 async function findDuplicateWardrobeItems(
   owner: string | Types.ObjectId,
-  category: string,
-  colors: string[]
+  name: string | undefined,
+  category: string
 ) {
+  if (!name || name.trim().length < 2) {
+    return [];
+  }
+
   const items = await ClothingItem.find({
     owner,
     category,
     isArchived: false,
   }).sort({ wearCount: -1, createdAt: -1 });
 
-  if (colors.length === 0) {
-    return items.slice(0, 5);
-  }
-
-  // Loc cac mon trong tu co chua it nhat 1 mau tuong dong voi mau cua wishlist
-  const matched = items.filter((item) => {
-    if (!item.colors || item.colors.length === 0) return false;
-    return item.colors.some((itemColor) =>
-      colors.some((targetColor) => areColorsSimilar(itemColor, targetColor))
-    );
-  });
-
+  const matched = items.filter((item) => isSimilarItem(name, item.name));
   return matched.slice(0, 5);
 }
 
@@ -124,13 +162,13 @@ export const getWishlist = asyncHandler(async (req, res) => {
         return { ...itemObj, duplicates: [], hasDuplicate: false };
       }
 
-      const duplicates = await findDuplicateWardrobeItems(owner, item.category, item.colors);
-      const hasExactColorDuplicate = item.colors.length > 0 && duplicates.length > 0;
+      const duplicates = await findDuplicateWardrobeItems(owner, item.name, item.category);
+      const hasDuplicate = duplicates.length > 0;
 
       return {
         ...itemObj,
         duplicates,
-        hasDuplicate: hasExactColorDuplicate,
+        hasDuplicate,
         duplicateCount: duplicates.length,
       };
     })
@@ -160,15 +198,15 @@ export const getWishlist = asyncHandler(async (req, res) => {
  */
 export const checkDuplicates = asyncHandler(async (req, res) => {
   const owner = req.user!.sub;
-  const { category, colors } = checkDuplicateSchema.parse(req.body);
+  const { category, name } = checkDuplicateSchema.parse(req.body);
 
-  const duplicates = await findDuplicateWardrobeItems(owner, category, colors);
-  const hasExactDuplicate = colors.length > 0 && duplicates.length > 0;
+  const duplicates = await findDuplicateWardrobeItems(owner, name, category);
+  const hasDuplicate = duplicates.length > 0;
 
   res.json({
     success: true,
     data: {
-      hasDuplicate: hasExactDuplicate,
+      hasDuplicate,
       duplicates,
       count: duplicates.length,
     },
@@ -180,6 +218,7 @@ const CATEGORY_TRANSPARENT_PLACEHOLDERS: Record<string, string> = {
   bottom: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v3l-2 13h-4l-2-8-2 8H6L4 7V4z"/></svg>',
   outerwear: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 7 4-4h10l4 4-2 13H5L3 7z"/><path d="M12 3v17"/></svg>',
   dress: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l2 5-3 13H10L7 8l2-5z"/></svg>',
+  set: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v5h12V6.54a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/><path d="M6 13h12l-1.5 8.5h-3L12 17l-1.5 4.5h-3z"/></svg>',
   shoes: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h18v3H3z"/><path d="M3 17l4-9h4l2 5h5a3 3 0 0 1 3 4"/></svg>',
   bag: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8V6a6 6 0 0 1 12 0v2"/><rect width="18" height="14" x="3" y="8" rx="2"/></svg>',
   accessory: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 9v6"/></svg>',
@@ -190,6 +229,7 @@ const DEFAULT_CATEGORY_IMAGES: Record<string, string> = {
   bottom: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=500',
   outerwear: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=500',
   dress: 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=500',
+  set: 'https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=500',
   shoes: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=500',
   bag: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=500',
   accessory: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=500',
@@ -214,8 +254,8 @@ export const createWishlistItem = asyncHandler(async (req, res) => {
     owner,
   });
 
-  const duplicates = await findDuplicateWardrobeItems(owner, wishlistItem.category, wishlistItem.colors);
-  const hasDuplicate = wishlistItem.colors.length > 0 && duplicates.length > 0;
+  const duplicates = await findDuplicateWardrobeItems(owner, wishlistItem.name, wishlistItem.category);
+  const hasDuplicate = duplicates.length > 0;
 
   res.status(201).json({
     success: true,
@@ -242,8 +282,8 @@ export const updateWishlistItem = asyncHandler(async (req, res) => {
 
   if (!item) throw ApiError.notFound('Không tìm thấy món đồ trong danh sách mong muốn.');
 
-  const duplicates = await findDuplicateWardrobeItems(owner, item.category, item.colors);
-  const hasDuplicate = item.colors.length > 0 && duplicates.length > 0;
+  const duplicates = await findDuplicateWardrobeItems(owner, item.name, item.category);
+  const hasDuplicate = duplicates.length > 0;
 
   res.json({
     success: true,

@@ -148,7 +148,7 @@ export const wishlistApi = {
   list: (filters: WishlistFilters = {}, signal?: AbortSignal) =>
     api.get<ApiResponse<WishlistResponseData>>('/wishlist', { params: filters, signal }).then((r) => r.data.data),
 
-  checkDuplicates: (body: { category: Category; colors: string[] }) =>
+  checkDuplicates: (body: { category: Category; name?: string; colors?: string[] }) =>
     api.post<ApiResponse<DuplicateCheckResult>>('/wishlist/check-duplicates', body).then((r) => r.data.data),
 
   create: (body: Partial<WishlistItem>) =>
