@@ -21,8 +21,18 @@ export const env = {
     apiKey: process.env.CLOUDINARY_API_KEY ?? '',
     apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
   },
-  openWeatherKey: process.env.OPENWEATHER_API_KEY ?? '',
-  geminiKey: process.env.GEMINI_API_KEY ?? '',
+  get openWeatherKey(): string {
+    if (!process.env.OPENWEATHER_API_KEY) {
+      dotenv.config({ override: true });
+    }
+    return process.env.OPENWEATHER_API_KEY ?? '';
+  },
+  get geminiKey(): string {
+    if (!process.env.GEMINI_API_KEY) {
+      dotenv.config({ override: true });
+    }
+    return process.env.GEMINI_API_KEY ?? '';
+  },
 
   // ===== NEW: Forgot Password =====
   /** URL trang web (dung de tao link dat lai mat khau trong email). */
