@@ -12,6 +12,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { VModal, VInput, VSelect, VButton, VLabel } from '@/components/ui/vintage';
+import { CloudImage } from '@/components/ui/CloudImage';
 import { wishlistApi } from '@/lib/services';
 import { useCategoryLabels } from '@/store/categoryStore';
 import { CATEGORIES } from '@/types';
@@ -351,8 +352,7 @@ export function AddWishlistModal({
                       className="flex items-center gap-2 rounded-lg border border-amber-300 bg-white p-2 text-xs shadow-2xs"
                     >
                       <div className="h-10 w-10 shrink-0 grid place-items-center rounded bg-[#FAF9F5] border border-[#CBD5E1]/60 p-0.5">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={dup.imageUrl} alt={dup.name} className="max-h-full max-w-full object-contain" />
+                        <CloudImage src={dup.imageUrl} alt={dup.name} className="max-h-full max-w-full object-contain" />
                       </div>
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-[#1F453E] max-w-[140px]" title={dup.name}>
@@ -547,7 +547,7 @@ export function AddWishlistModal({
                 type="url"
                 value={imageUrl.startsWith('data:image/') ? '' : imageUrl}
                 onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://images.unsplash.com/... hoặc link ảnh online"
+                placeholder="https://... hoặc link ảnh online (không bắt buộc)"
               />
               {imageUrl && !imageUrl.startsWith('data:image/') && (
                 <div className="flex items-center gap-2.5 rounded-lg border border-[#CBD5E1]/60 bg-white p-2 shadow-2xs">

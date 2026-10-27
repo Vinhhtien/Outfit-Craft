@@ -16,6 +16,7 @@ import {
 import { useResource } from '@/hooks/useResource';
 import { itemApi } from '@/lib/services';
 import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
+import { CloudImage } from '@/components/ui/CloudImage';
 import { useCategoryLabels } from '@/store/categoryStore';
 import type { ClothingItem, DormantItemInfo } from '@/types';
 
@@ -326,8 +327,7 @@ export function WardrobeDeclutterView({
                       className="mt-3 flex cursor-pointer gap-3.5"
                     >
                       <div className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-lg border border-[#CBD5E1]/60 bg-[#FAF9F5] p-1.5 transition-transform group-hover:scale-105">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <CloudImage
                           src={item.imageUrl}
                           alt={item.name}
                           className="max-h-full max-w-full object-contain"

@@ -74,8 +74,8 @@ export function VChip({
 const V_FIELD =
   'w-full rounded-lg border border-[#9EB0A8] bg-white px-3.5 py-2.5 text-sm text-[#1F453E] placeholder:text-[#6B7B76] transition-colors focus:border-[#1F453E] focus:outline-none';
 
-export function VLabel({ children }: { children: React.ReactNode }) {
-  return <span className="mb-1.5 block text-xs font-semibold text-[#1F453E]">{children}</span>;
+export function VLabel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <span className={`mb-1.5 block text-xs font-semibold text-[#1F453E] ${className}`}>{children}</span>;
 }
 
 type VInputProps = React.InputHTMLAttributes<HTMLInputElement> & { label?: string };

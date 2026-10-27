@@ -17,6 +17,7 @@ import {
 import { useResource } from '@/hooks/useResource';
 import { itemApi } from '@/lib/services';
 import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
+import { CloudImage } from '@/components/ui/CloudImage';
 import { CATEGORIES, CATEGORY_LABELS } from '@/types';
 import type { Category } from '@/types';
 
@@ -332,8 +333,7 @@ export function WardrobeStatsView({
                         {idx + 1}
                       </span>
                       <div className="h-11 w-11 shrink-0 grid place-items-center rounded-lg bg-[#FAF9F5] p-1 border border-[#CBD5E1]/60">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={item.imageUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                        <CloudImage src={item.imageUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
                       </div>
                       <div className="min-w-0">
                         <h4 className="truncate text-xs font-semibold text-[#1F453E] hover:underline">
@@ -387,8 +387,7 @@ export function WardrobeStatsView({
                         {idx + 1}
                       </span>
                       <div className="h-11 w-11 shrink-0 grid place-items-center rounded-lg bg-[#FAF9F5] p-1 border border-[#CBD5E1]/60">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={item.imageUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                        <CloudImage src={item.imageUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
                       </div>
                       <div className="min-w-0">
                         <h4 className="truncate text-xs font-semibold text-[#1F453E] hover:underline">
@@ -475,8 +474,7 @@ export function WardrobeStatsView({
 
                   {/* Ảnh sản phẩm */}
                   <div className="my-3 grid aspect-square place-items-center rounded-lg bg-[#FAF9F5] p-2 transition-transform group-hover:scale-105">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <CloudImage
                       src={item.imageUrl}
                       alt={item.name}
                       className="max-h-full max-w-full object-contain"
@@ -562,8 +560,7 @@ export function WardrobeStatsView({
                 className="group relative cursor-pointer rounded-xl border border-[#CBD5E1] bg-white p-3 shadow-2xs transition-all hover:border-[#1F453E] hover:shadow-sm"
               >
                 <div className="grid aspect-square place-items-center rounded-lg bg-[#FAF9F5] p-2 transition-transform group-hover:scale-105">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <CloudImage
                     src={item.imageUrl}
                     alt={item.name}
                     className="max-h-full max-w-full object-contain"
