@@ -10,6 +10,7 @@ import {
 import { useResource } from '@/hooks/useResource';
 import { suggestionApi } from '@/lib/services';
 import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
+import { CloudImage } from '@/components/ui/CloudImage';
 import { CATEGORIES, CATEGORY_LABELS } from '@/types';
 import type { Category, Occasion } from '@/types';
 
@@ -153,8 +154,7 @@ export function RankedItemsView({
 
                   {/* Item Image */}
                   <div className="my-3 grid aspect-square place-items-center rounded-xl bg-[#FAF9F5] p-3 transition-transform group-hover:scale-105">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <CloudImage
                       src={item.imageUrl}
                       alt={item.name}
                       className="max-h-full max-w-full object-contain"
