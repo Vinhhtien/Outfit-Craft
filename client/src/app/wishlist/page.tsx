@@ -13,7 +13,6 @@ import {
   ShoppingBag,
   ArrowRight,
   Loader2,
-  ImageOff,
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';

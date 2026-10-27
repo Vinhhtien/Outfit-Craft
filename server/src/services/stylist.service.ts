@@ -11,8 +11,7 @@ const GEMINI_URL =
 
 function describe(item?: IClothingItem): string | null {
   if (!item) return null;
-  const color = item.colors[0] ? ` mau ${item.colors[0]}` : '';
-  return `${item.name} (${item.category}${color})`;
+  return item.name;
 }
 
 // ===== NEW: Body Profile =====
@@ -33,17 +32,17 @@ export function toStylistBodyContext(profile?: BodyProfile | null): StylistBodyC
 }
 
 const SHAPE_LABELS: Record<BodyShape, string> = {
-  rectangle: 'chu nhat (rectangle)',
-  pear: 'qua le (pear)',
-  apple: 'qua tao (apple)',
-  hourglass: 'dong ho cat (hourglass)',
-  inverted_triangle: 'tam giac nguoc (inverted triangle)',
+  rectangle: 'chữ nhật (rectangle)',
+  pear: 'quả lê (pear)',
+  apple: 'quả táo (apple)',
+  hourglass: 'đồng hồ cát (hourglass)',
+  inverted_triangle: 'tam giác ngược (inverted triangle)',
 };
 
 const GENDER_LABELS: Record<BodyGender, string> = {
-  female: 'nu',
+  female: 'nữ',
   male: 'nam',
-  neutral: 'trung tinh',
+  neutral: 'trung tính',
 };
 
 /**
@@ -56,19 +55,19 @@ export function buildStylistPrompt(
   occasion?: string,
   body?: StylistBodyContext
 ): string {
-  const base = `Ban la stylist ca nhan. Hay tu van ngan gon (toi da 4 cau, tieng Viet, giong than thien).
-Thoi tiet: ${weather.city}, ${weather.temp}°C, ${weather.description}.
-Dip: ${occasion ?? 'hang ngay'}.
-Bo do duoc goi y: ${pieces.join(', ')}.
-Hay nhan xet vi sao bo nay hop, va them 1 meo phoi do.`;
+  const base = `Bạn là chuyên gia stylist cá nhân. Hãy tư vấn ngắn gọn (tối đa 4 câu, tiếng Việt tự nhiên, phong cách ấm áp, tinh tế).
+Thời tiết: ${weather.city}, ${weather.temp}°C, ${weather.description}.
+Dịp: ${occasion ?? 'hằng ngày'}.
+Bộ đồ được gợi ý: ${pieces.join(', ')}.
+Hãy nhận xét vì sao bộ này phù hợp, và thêm 1 mẹo phối đồ hoặc phụ kiện hữu ích.`;
 
   if (!body) return base;
 
-  const height = body.heightCm ? `, chieu cao khoang ${body.heightCm} cm` : '';
+  const height = body.heightCm ? `, chiều cao khoảng ${body.heightCm} cm` : '';
   return `${base}
-Dang nguoi cua ban: ${SHAPE_LABELS[body.shape]}, gioi tinh ${GENDER_LABELS[body.gender]}${height}.
-Hay goi y cach mac bo nay de ton dang va tao cam giac can doi ti le vai - eo - hong cho dang nguoi tren, kem 1 cau giai thich ngan ly do.
-Dung ngon ngu tich cuc, trung tinh ve co the: noi ve viec ton dang, can doi, lam noi bat; khong noi ve viec che hay giau mot bo phan co the, khong danh gia co the.`;
+Dáng người của bạn: ${SHAPE_LABELS[body.shape]}, giới tính ${GENDER_LABELS[body.gender]}${height}.
+Hãy gợi ý cách mặc bộ này để tôn dáng và tạo cảm giác cân đối tỉ lệ cơ thể, kèm 1 lời giải thích ngắn gọn.
+Dùng ngôn ngữ tích cực, tôn vinh vóc dáng tự nhiên.`;
 }
 // ===== END NEW =====
 
@@ -131,8 +130,11 @@ function buildRuleAdvice(
   weather: WeatherInfo,
   suggestion: OutfitSuggestion
 ): string {
+  const weatherDesc = weather.description ? weather.description.toLowerCase() : 'dễ chịu';
+  const cleanPieces = pieces.filter(Boolean);
+  const outfitText = cleanPieces.length > 0 ? cleanPieces.join(' + ') : 'trang phục thoải mái';
   const lines = [
-    `Voi thoi tiet ${weather.temp}\u00b0C (${weather.description}) tai ${weather.city}, ban co the mac: ${pieces.join(' + ')}.`,
+    `Với thời tiết ${weather.temp}°C (${weatherDesc}) tại ${weather.city}, bạn có thể phối: ${outfitText}.`,
     ...suggestion.reasons,
   ];
   return lines.join(' ');

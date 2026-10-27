@@ -4,19 +4,29 @@ import { useCategoryLabels } from '@/store/categoryStore';
 import { useCallback, useState } from 'react';
 import {
   Sparkles, CloudRain, Thermometer, Droplets, RefreshCw, Bot, ListOrdered, FolderPlus,
+  CalendarCheck,
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
 import { VToast } from '@/components/ui/vintage';
+import { CloudImage } from '@/components/ui/CloudImage';
 import { useResource } from '@/hooks/useResource';
-import { suggestionApi } from '@/lib/services';
+import { outfitApi, scheduleApi, suggestionApi } from '@/lib/services';
+import { getErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { RankedItemsView } from '@/components/suggest/RankedItemsView';
 import { SaveSuggestedOutfitModal } from '@/components/suggest/SaveSuggestedOutfitModal';
 import { ItemDetailModal } from '@/components/wardrobe/ItemDetailModal';
-import { OCCASIONS, OCCASION_LABELS } from '@/types';
-import type { ClothingItem, Occasion } from '@/types';
+import { OCCASIONS, OCCASION_LABELS, CATEGORY_Z_INDEX } from '@/types';
+import type { ClothingItem, Occasion, Season } from '@/types';
+
+function getDefaultSeason(temp?: number): Season[] {
+  if (temp === undefined) return ['summer'];
+  if (temp < 18) return ['winter'];
+  if (temp <= 25) return ['autumn', 'spring'];
+  return ['summer'];
+}
 
 export default function SuggestPage() {
   const CATEGORY_LABELS = useCategoryLabels();
@@ -29,6 +39,10 @@ export default function SuggestPage() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastVariant, setToastVariant] = useState<'success' | 'error'>('success');
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [todayScheduled, setTodayScheduled] = useState(false);
+  const [lastSavedOutfitId, setLastSavedOutfitId] = useState<string | null>(null);
 
   const city = cityInput ?? user?.defaultCity ?? '';
   const loader = useCallback((signal: AbortSignal) => suggestionApi.get({ city: city.trim() || undefined, occasion }, signal), [city, occasion]);
@@ -44,6 +58,97 @@ export default function SuggestPage() {
         { label: CATEGORY_LABELS.accessory, item: data.suggestion.accessory },
       ].filter((p) => p.item)
     : [];
+
+  const handleScheduleToday = async () => {
+    if (!data || picks.length === 0 || isScheduling) return;
+    setIsScheduling(true);
+    try {
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      let outfitId = lastSavedOutfitId;
+      if (!outfitId) {
+        const outfitItems = picks.map(({ item }, index) => {
+          let left = 200;
+          let top = 200;
+
+          switch (item!.category) {
+            case 'dress':
+            case 'top':
+              left = 200;
+              top = 130;
+              break;
+            case 'outerwear':
+              left = 210;
+              top = 140;
+              break;
+            case 'bottom':
+              left = 200;
+              top = 300;
+              break;
+            case 'shoes':
+              left = 200;
+              top = 450;
+              break;
+            case 'bag':
+              left = 320;
+              top = 260;
+              break;
+            case 'accessory':
+              left = 320;
+              top = 120;
+              break;
+            default:
+              left = 150 + (index % 3) * 100;
+              top = 150 + Math.floor(index / 3) * 120;
+          }
+
+          return {
+            item: item!._id,
+            left,
+            top,
+            scaleX: 1,
+            scaleY: 1,
+            angle: 0,
+            zIndex: CATEGORY_Z_INDEX[item!.category] ?? 10,
+          };
+        });
+
+        const tags = ['Gợi ý thời tiết', OCCASION_LABELS[occasion]];
+        if (data.weather?.description) {
+          tags.push(data.weather.description);
+        }
+
+        const created = await outfitApi.create({
+          name: `Gợi ý ${OCCASION_LABELS[occasion]} • ${today.toLocaleDateString('vi-VN')}`,
+          items: outfitItems,
+          canvasJSON: {},
+          seasons: getDefaultSeason(data.weather?.temp),
+          occasions: [occasion],
+          tags,
+          isPublic: false,
+        });
+
+        outfitId = created._id;
+        setLastSavedOutfitId(created._id);
+      }
+
+      await scheduleApi.set({
+        outfit: outfitId,
+        date: todayStr,
+        note: `Gợi ý theo thời tiết ${data.weather.temp}°C (${data.weather.city})`,
+      });
+
+      setTodayScheduled(true);
+      setToastVariant('success');
+      setToastMessage('Đã thêm bộ đồ gợi ý vào lịch ngày hôm nay!');
+    } catch (err) {
+      setToastVariant('error');
+      setToastMessage(getErrorMessage(err));
+    } finally {
+      setIsScheduling(false);
+    }
+  };
 
   return (
     <ProtectedLayout fullBleed hideFooter>
@@ -186,18 +291,34 @@ export default function SuggestPage() {
                       <div className="flex items-center gap-2">
                         <h2 className="font-serif-display text-lg font-semibold text-[#1F453E]">Bộ đồ gợi ý</h2>
                         <span className="rounded-full border border-[#1F453E]/15 bg-[#E2ECC8] px-3 py-1 text-xs font-semibold text-[#1F453E]">
-                          Độ phù hợp {data.suggestion.totalScore}/100
+                          Độ phù hợp {Math.min(100, Math.max(0, Math.round(data.suggestion.totalScore)))}/100
                         </span>
                       </div>
 
                       {picks.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setIsSaveModalOpen(true)}
-                          className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-[#1F453E] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all hover:bg-[#16352F]"
-                        >
-                          <FolderPlus size={14} /> Lưu bộ đồ này
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleScheduleToday()}
+                            disabled={isScheduling || todayScheduled}
+                            className={`inline-flex items-center gap-1.5 rounded-full border border-[#1F453E] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider shadow-xs transition-all disabled:opacity-60 ${
+                              todayScheduled
+                                ? 'bg-[#E2ECC8] text-[#1F453E]'
+                                : 'bg-[#E2ECC8] text-[#1F453E] hover:bg-[#d6e3b8]'
+                            }`}
+                          >
+                            <CalendarCheck size={14} />
+                            {todayScheduled ? '✓ Đã lên lịch hôm nay' : isScheduling ? 'Đang lên lịch...' : 'Mặc hôm nay'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setIsSaveModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-[#1F453E] bg-[#1F453E] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all hover:bg-[#16352F]"
+                          >
+                            <FolderPlus size={14} /> Lưu bộ đồ này
+                          </button>
+                        </div>
                       )}
                     </div>
 
@@ -206,22 +327,23 @@ export default function SuggestPage() {
                         Tủ đồ chưa đủ món để ghép thành bộ. Hãy thêm vài món nữa.
                       </p>
                     ) : (
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4">
                         {picks.map(({ label, item }) => (
                           <div
-                            key={label}
+                            key={`${item!._id}-${label}`}
                             onClick={() => setSelectedItemId(item!._id)}
                             className="group cursor-pointer rounded-xl border border-[#CBD5E1] bg-white p-3 text-center shadow-2xs transition-all hover:border-[#1F453E] hover:shadow-xs"
                           >
                             <div className="grid aspect-square place-items-center rounded-lg bg-[#FAF9F5] p-2 transition-transform group-hover:scale-105">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
+                              <CloudImage
                                 src={item!.imageUrl}
                                 alt={item!.name}
                                 className="max-h-full max-w-full object-contain"
                               />
                             </div>
-                            <p className="mt-2 truncate text-sm font-semibold text-[#1F453E] group-hover:underline">{item!.name}</p>
+                            <p className="mt-2 truncate text-sm font-semibold text-[#1F453E] group-hover:underline" title={item!.name}>
+                              {item!.name}
+                            </p>
                             <p className="text-xs text-[#6B7B76]">{label}</p>
                           </div>
                         ))}
@@ -230,8 +352,8 @@ export default function SuggestPage() {
 
                     {data.suggestion.reasons.length > 0 && (
                       <ul className="mt-4 space-y-1 border-t border-[#E2ECC8] pt-3">
-                        {data.suggestion.reasons.map((r) => (
-                          <li key={r} className="flex gap-2 text-sm text-[#6B7B76]">
+                        {data.suggestion.reasons.map((r, idx) => (
+                          <li key={`${r}-${idx}`} className="flex gap-2 text-sm text-[#6B7B76]">
                             <span className="text-[#1F453E]">•</span>
                             {r}
                           </li>
@@ -261,13 +383,19 @@ export default function SuggestPage() {
           items={picks as { label: string; item: ClothingItem }[]}
           occasion={occasion}
           weather={data.weather}
-          onSaved={() => {
+          onSaved={(outfitId) => {
+            setLastSavedOutfitId(outfitId);
+            setToastVariant('success');
             setToastMessage('Đã lưu bộ đồ vào danh sách của bạn!');
           }}
         />
       )}
 
-      <VToast message={toastMessage} onClose={() => setToastMessage(null)} />
+      <VToast
+        message={toastMessage}
+        variant={toastVariant}
+        onClose={() => setToastMessage(null)}
+      />
     </ProtectedLayout>
   );
 }

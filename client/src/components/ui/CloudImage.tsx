@@ -42,8 +42,8 @@ export function CloudImage({ src, alt = '', className = '', ...props }: ImgHTMLA
     );
   }
 
-  // eslint-disable-next-line @next/next/no-img-element
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       {...props}
       className={className}
