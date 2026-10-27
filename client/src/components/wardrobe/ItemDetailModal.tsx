@@ -5,6 +5,7 @@ import { useCategoryLabels } from '@/store/categoryStore';
 import { useCallback, useRef, useState } from 'react';
 import { Pencil, Plus, X } from 'lucide-react';
 import { VButton, VInput, VSelect, VChip, VModal, VLabel, VSpinner } from '@/components/ui/vintage';
+import { CloudImage } from '@/components/ui/CloudImage';
 import { useResource } from '@/hooks/useResource';
 import { ErrorState } from '@/components/ui/AsyncState';
 import { itemApi } from '@/lib/services';
@@ -179,8 +180,7 @@ export function ItemDetailModal({
           {/* Cot trai (40%): anh + so lan mac */}
           <div className="md:col-span-2">
             <div className="relative grid aspect-[3/4] place-items-center overflow-hidden rounded-2xl border border-[#CBD5E1] bg-[#F8F9F5] p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <CloudImage
                 src={item.imageUrl}
                 alt={item.name}
                 className="max-h-full max-w-full object-contain"

@@ -842,7 +842,7 @@ async function seed() {
       colors: ['#000000'],
       priority: 'low',
       brand: 'Vintage Look',
-      imageUrl: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=500',
+      imageUrl: '', // Không có ảnh (người dùng không cung cấp ảnh)
       productUrl: 'https://lazada.vn',
       isPurchased: true,
       purchasedAt: new Date(Date.now() - 86400000 * 5),

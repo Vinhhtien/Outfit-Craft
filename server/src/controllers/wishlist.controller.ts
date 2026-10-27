@@ -17,15 +17,16 @@ const optionalUrl = z.preprocess((val) => {
 }, z.string().url('Đường dẫn URL không hợp lệ').optional());
 
 const optionalImage = z.preprocess((val) => {
-  if (typeof val !== 'string') return undefined;
+  if (typeof val !== 'string') return '';
   const trimmed = val.trim();
-  if (!trimmed) return undefined;
+  if (!trimmed) return '';
   if (trimmed.startsWith('data:image/')) return trimmed;
   if (!/^https?:\/\//i.test(trimmed)) {
     return `https://${trimmed}`;
   }
   return trimmed;
 }, z.string().refine((val) => {
+  if (!val) return true;
   if (val.startsWith('data:image/')) return true;
   try {
     new URL(val);
@@ -33,7 +34,7 @@ const optionalImage = z.preprocess((val) => {
   } catch {
     return false;
   }
-}, { message: 'Ảnh sản phẩm phải là link URL hợp lệ hoặc file ảnh tải lên' }).optional());
+}, { message: 'Ảnh sản phẩm phải là link URL hợp lệ hoặc file ảnh tải lên' }).default(''));
 
 export const createWishlistSchema = z.object({
   name: z.string().trim().min(1, 'Tên món đồ không được để trống').max(100),
@@ -224,17 +225,6 @@ const CATEGORY_TRANSPARENT_PLACEHOLDERS: Record<string, string> = {
   accessory: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%231F453E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 9v6"/></svg>',
 };
 
-const DEFAULT_CATEGORY_IMAGES: Record<string, string> = {
-  top: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500',
-  bottom: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=500',
-  outerwear: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=500',
-  dress: 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=500',
-  set: 'https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=500',
-  shoes: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=500',
-  bag: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=500',
-  accessory: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=500',
-};
-
 /**
  * POST /api/wishlist - Them mon do vao wishlist
  */
@@ -242,11 +232,8 @@ export const createWishlistItem = asyncHandler(async (req, res) => {
   const owner = req.user!.sub;
   const body = createWishlistSchema.parse(req.body);
 
-  // Dat anh mac dinh theo danh muc neu nguoi dung khong dien URL anh
-  let imageUrl = body.imageUrl;
-  if (!imageUrl) {
-    imageUrl = DEFAULT_CATEGORY_IMAGES[body.category] || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=500';
-  }
+  // Khong tu dong lay anh tu Unsplash. Neu nguoi dung khong cung cap anh thi de trong ('').
+  const imageUrl = body.imageUrl?.trim() || '';
 
   const wishlistItem = await WishlistItem.create({
     ...body,
@@ -325,18 +312,15 @@ export const moveToWardrobe = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Món đồ này đã được chuyển vào tủ đồ rồi.');
   }
 
-  // Su dung hinh silhouette trong suot (SVG) neu wishlist dung anh mac dinh chua tach nen,
-  // tranh viec dua hinh chu nhat Unsplash len canvas Studio gay de che quan ao.
+  // Su dung hinh silhouette trong suot (SVG) neu wishlist chua co anh,
+  // tranh viec loi tren canvas Studio va dam bao ClothingItem co anh hop le.
   const fallbackImage =
     CATEGORY_TRANSPARENT_PLACEHOLDERS[wishlistItem.category] ||
     CATEGORY_TRANSPARENT_PLACEHOLDERS.top;
-  const isDefaultUnsplash =
-    Boolean(wishlistItem.imageUrl) &&
-    Object.values(DEFAULT_CATEGORY_IMAGES).some((u) =>
-      wishlistItem.imageUrl?.includes(u.split('?')[0])
-    );
   const itemImageUrl =
-    !wishlistItem.imageUrl || isDefaultUnsplash ? fallbackImage : wishlistItem.imageUrl;
+    wishlistItem.imageUrl && wishlistItem.imageUrl.trim()
+      ? wishlistItem.imageUrl
+      : fallbackImage;
 
   // Tao ClothingItem moi trong tu do
   const wardrobeItem = await ClothingItem.create({

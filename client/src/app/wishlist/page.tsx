@@ -13,11 +13,13 @@ import {
   ShoppingBag,
   ArrowRight,
   Loader2,
+  ImageOff,
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { AddWishlistModal } from '@/components/wishlist/AddWishlistModal';
 import { VButton, VToast } from '@/components/ui/vintage';
+import { CloudImage } from '@/components/ui/CloudImage';
 import { useResource } from '@/hooks/useResource';
 import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
 import { wishlistApi } from '@/lib/services';
@@ -362,8 +364,7 @@ export default function WishlistPage() {
                       {/* Ảnh & Thông tin */}
                       <div className="mt-3.5 flex gap-3.5">
                         <div className="relative grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-xl border border-[#CBD5E1]/60 bg-[#FAF9F5] p-2">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
+                          <CloudImage
                             src={item.imageUrl}
                             alt={item.name}
                             className="max-h-full max-w-full object-contain"
@@ -510,8 +511,7 @@ export default function WishlistPage() {
                     className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/50 p-2.5 text-xs"
                   >
                     <div className="h-12 w-12 shrink-0 grid place-items-center rounded-lg bg-white border border-[#CBD5E1]/60 p-1">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={dup.imageUrl} alt={dup.name} className="max-h-full max-w-full object-contain" />
+                      <CloudImage src={dup.imageUrl} alt={dup.name} className="max-h-full max-w-full object-contain" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-[#1F453E]">{dup.name}</p>
