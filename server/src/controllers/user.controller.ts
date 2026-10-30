@@ -19,8 +19,12 @@ export const getUserPublicProfile = asyncHandler(async (req, res) => {
     throw ApiError.notFound('Không tìm thấy người dùng.');
   }
 
-  // Lay cac ban phoi cong khai cua nguoi dung nay
-  const publicOutfits = await Outfit.find({ owner: user._id, isPublic: true })
+  // Lay cac ban phoi cong khai cua nguoi dung nay (loai bo outfit bi admin an)
+  const publicOutfits = await Outfit.find({
+    owner: user._id,
+    isPublic: true,
+    isHidden: { $ne: true },
+  })
     .sort({ createdAt: -1 })
     .populate('items.item', 'name imageUrl category brand')
     .select('name thumbnailUrl tags seasons occasions likeCount createdAt items')

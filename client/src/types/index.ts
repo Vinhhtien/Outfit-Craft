@@ -1,7 +1,7 @@
 /** Domain types - giu dong bo voi server/src/types/index.ts */
 
 export const CATEGORIES = [
-  'top', 'bottom', 'outerwear', 'dress', 'shoes', 'bag', 'accessory',
+  'top', 'bottom', 'outerwear', 'dress', 'set', 'shoes', 'bag', 'accessory',
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
@@ -10,6 +10,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   bottom: 'Quần / Chân váy',
   outerwear: 'Áo khoác',
   dress: 'Váy liền',
+  set: 'Set / Đồ bộ',
   shoes: 'Giày',
   bag: 'Túi',
   accessory: 'Phụ kiện',
@@ -17,7 +18,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 
 /** Layer mặc định trên canvas: số lớn = nằm trên. */
 export const CATEGORY_Z_INDEX: Record<Category, number> = {
-  shoes: 5, bottom: 10, dress: 20, top: 30,
+  shoes: 5, bottom: 10, dress: 20, set: 25, top: 30,
   outerwear: 40, bag: 50, accessory: 60,
 };
 
@@ -145,12 +146,86 @@ export interface ClothingItem {
   tempRange: { min: number; max: number };
   brand?: string;
   notes?: string;
+  purchasePrice?: number | null;
+  costPerWear?: number | null;
   wearCount: number;
   lastWornAt?: string;
   isArchived: boolean;
   fit?: ItemFit | null; // NEW: Ghi nho fit
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WardrobeStatsData {
+  total: number;
+  byCategory: { _id: Category; count: number }[];
+  mostWorn: ClothingItem[];
+  neverWorn: number;
+  neverWornItems?: ClothingItem[];
+  financial?: {
+    totalValue: number;
+    pricedCount: number;
+    avgPrice: number;
+  };
+  bestValueItems?: (ClothingItem & { costPerWear?: number })[];
+  wastefulItems?: ClothingItem[];
+}
+
+export interface DormantItemInfo {
+  item: ClothingItem;
+  daysInactive: number;
+  tier: 'warning' | 'danger';
+  reason: string;
+}
+
+export interface DeclutterSuggestionsData {
+  totalDormant: number;
+  totalDormantValue: number;
+  countWarning: number;
+  countDanger: number;
+  warningList: DormantItemInfo[];
+  dangerList: DormantItemInfo[];
+  allDormant: DormantItemInfo[];
+}
+
+export const WISHLIST_PRIORITIES = ['low', 'medium', 'high'] as const;
+export type WishlistPriority = (typeof WISHLIST_PRIORITIES)[number];
+
+export interface WishlistItem {
+  _id: string;
+  owner: string;
+  name: string;
+  category: Category;
+  imageUrl?: string;
+  productUrl?: string;
+  price?: number;
+  colors: string[];
+  brand?: string;
+  notes?: string;
+  priority: WishlistPriority;
+  isPurchased: boolean;
+  purchasedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  duplicates?: ClothingItem[];
+  hasDuplicate?: boolean;
+  duplicateCount?: number;
+}
+
+export interface WishlistResponseData {
+  items: WishlistItem[];
+  stats: {
+    totalItems: number;
+    unpurchasedCount: number;
+    totalEstimatedBudget: number;
+    duplicateWarningCount: number;
+  };
+}
+
+export interface DuplicateCheckResult {
+  hasDuplicate: boolean;
+  duplicates: ClothingItem[];
+  count: number;
 }
 
 export interface OutfitItem {

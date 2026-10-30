@@ -38,6 +38,7 @@ const DEFAULTS: Record<CategoryCode, { name: string; min: number; max: number }>
   bottom: { name: 'Quần / Chân váy', min: 15, max: 35 },
   outerwear: { name: 'Áo khoác', min: -5, max: 20 },
   dress: { name: 'Váy liền', min: 20, max: 38 },
+  set: { name: 'Set / Đồ bộ', min: 18, max: 35 },
   shoes: { name: 'Giày', min: 0, max: 40 },
   bag: { name: 'Túi', min: 0, max: 40 },
   accessory: { name: 'Phụ kiện', min: 0, max: 40 },

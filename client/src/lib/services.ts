@@ -5,6 +5,11 @@ import type {
   ScheduleEntry, User, Category, Occasion,
   BodyProfile, MannequinProfile, // NEW: Body Profile
   ItemFit, // NEW: Ghi nho fit
+  WardrobeStatsData,
+  DeclutterSuggestionsData,
+  WishlistItem,
+  WishlistResponseData,
+  DuplicateCheckResult,
 } from '@/types';
 
 /* ---------------- Auth ---------------- */
@@ -74,7 +79,7 @@ export interface ItemFilters {
 export type UpdateItemPayload = Partial<
   Pick<
     ClothingItem,
-    'name' | 'category' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes'
+    'name' | 'category' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes' | 'purchasePrice'
   >
 >;
 // ===== END NEW =====
@@ -120,13 +125,43 @@ export const itemApi = {
   saveFit: (id: string, fit: ItemFit | null) =>
     api.put<ApiResponse<ClothingItem>>(`/items/${id}/fit`, { fit }).then((r) => r.data.data),
 
-  stats: () => api.get<ApiResponse<{
-    total: number;
-    byCategory: { _id: Category; count: number }[];
-    mostWorn: ClothingItem[];
-    neverWorn: number;
-    neverWornItems?: ClothingItem[];
-  }>>('/items/stats').then((r) => r.data.data),
+  stats: () => api.get<ApiResponse<WardrobeStatsData>>('/items/stats').then((r) => r.data.data),
+
+  declutter: () =>
+    api.get<ApiResponse<DeclutterSuggestionsData>>('/items/declutter').then((r) => r.data.data),
+
+  markWorn: (id: string) =>
+    api.post<ApiResponse<ClothingItem>>(`/items/${id}/wear`).then((r) => r.data),
+
+  archive: (id: string) =>
+    api.post<ApiResponse<ClothingItem>>(`/items/${id}/archive`).then((r) => r.data),
+};
+
+/* ---------------- Wishlist ---------------- */
+export interface WishlistFilters {
+  category?: string;
+  priority?: string;
+  purchased?: string;
+}
+
+export const wishlistApi = {
+  list: (filters: WishlistFilters = {}, signal?: AbortSignal) =>
+    api.get<ApiResponse<WishlistResponseData>>('/wishlist', { params: filters, signal }).then((r) => r.data.data),
+
+  checkDuplicates: (body: { category: Category; name?: string; colors?: string[] }) =>
+    api.post<ApiResponse<DuplicateCheckResult>>('/wishlist/check-duplicates', body).then((r) => r.data.data),
+
+  create: (body: Partial<WishlistItem>) =>
+    api.post<ApiResponse<WishlistItem>>('/wishlist', body).then((r) => r.data.data),
+
+  update: (id: string, body: Partial<WishlistItem>) =>
+    api.patch<ApiResponse<WishlistItem>>(`/wishlist/${id}`, body).then((r) => r.data.data),
+
+  remove: (id: string) =>
+    api.delete<ApiResponse<null>>(`/wishlist/${id}`).then((r) => r.data),
+
+  moveToWardrobe: (id: string) =>
+    api.post<ApiResponse<{ wishlistItem: WishlistItem; wardrobeItem: ClothingItem }>>(`/wishlist/${id}/move-to-wardrobe`).then((r) => r.data),
 };
 
 /* ---------------- Outfits ---------------- */

@@ -5,6 +5,7 @@ import { useCategoryLabels } from '@/store/categoryStore';
 import { useCallback, useRef, useState } from 'react';
 import { Pencil, Plus, X } from 'lucide-react';
 import { VButton, VInput, VSelect, VChip, VModal, VLabel, VSpinner } from '@/components/ui/vintage';
+import { CloudImage } from '@/components/ui/CloudImage';
 import { useResource } from '@/hooks/useResource';
 import { ErrorState } from '@/components/ui/AsyncState';
 import { itemApi } from '@/lib/services';
@@ -27,6 +28,7 @@ type FormState = {
   occasions: Occasion[];
   brand: string;
   notes: string;
+  purchasePrice: string;
 };
 
 const MAX_NOTES = 500;
@@ -41,6 +43,7 @@ function toForm(item: ClothingItem): FormState {
     occasions: [...item.occasions],
     brand: item.brand ?? '',
     notes: item.notes ?? '',
+    purchasePrice: typeof item.purchasePrice === 'number' ? String(item.purchasePrice) : '',
   };
 }
 
@@ -129,6 +132,8 @@ export function ItemDetailModal({
       return;
     }
 
+    const trimmedPrice = form.purchasePrice.trim();
+    const priceNum = trimmedPrice ? Number(trimmedPrice) : null;
     const payload: UpdateItemPayload = {
       name,
       category: form.category,
@@ -138,6 +143,7 @@ export function ItemDetailModal({
       occasions: form.occasions,
       brand: form.brand.trim(),
       notes: form.notes.trim(),
+      purchasePrice: priceNum !== null && !isNaN(priceNum) ? priceNum : null,
     };
 
     savingRef.current = true;
@@ -174,8 +180,7 @@ export function ItemDetailModal({
           {/* Cot trai (40%): anh + so lan mac */}
           <div className="md:col-span-2">
             <div className="relative grid aspect-[3/4] place-items-center overflow-hidden rounded-2xl border border-[#CBD5E1] bg-[#F8F9F5] p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <CloudImage
                 src={item.imageUrl}
                 alt={item.name}
                 className="max-h-full max-w-full object-contain"
@@ -213,6 +218,27 @@ export function ItemDetailModal({
                   <p className={`text-sm ${item.brand ? 'font-medium text-[#1F453E]' : 'text-[#6B7B76]'}`}>
                     {item.brand || 'Chưa có'}
                   </p>
+                </ViewRow>
+
+                <ViewRow label="Giá mua & Chi phí mỗi lần mặc (CPW)">
+                  {typeof item.purchasePrice === 'number' && item.purchasePrice > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-[#1F453E]">
+                        {item.purchasePrice.toLocaleString('vi-VN')} ₫
+                      </span>
+                      {item.wearCount > 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-600/20 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                          ~{Math.round(item.purchasePrice / item.wearCount).toLocaleString('vi-VN')} ₫ / lần mặc
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                          Chưa mặc lần nào
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[#6B7B76]">Chưa cập nhật giá mua</p>
+                  )}
                 </ViewRow>
 
                 <ViewRow label="Màu sắc">
@@ -282,6 +308,16 @@ export function ItemDetailModal({
                     value={form.brand}
                     onChange={(e) => setForm({ ...form, brand: e.target.value })}
                     placeholder="Uniqlo, Zara..."
+                  />
+
+                  <VInput
+                    label="Giá mua (VNĐ)"
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={form.purchasePrice}
+                    onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })}
+                    placeholder="Ví dụ: 350000"
                   />
 
                   <div>

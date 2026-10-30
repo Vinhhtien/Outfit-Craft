@@ -32,10 +32,7 @@ export async function extractColors(
   for (let i = 0; i < data.length; i += 4) {
     const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
 
-    if (a < 200) continue;                       // nen trong suot
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    if (max > 245 && min > 245) continue;        // gan trang
-    if (max < 12) continue;                      // gan den tuyet doi
+    if (a < 200) continue;                       // nen trong suot (da tach nen)
 
     // Luong tu hoa ve buoc 32 de gom cac sac do gan nhau vao 1 cum.
     const key = `${r >> 5}-${g >> 5}-${b >> 5}`;

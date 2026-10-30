@@ -77,7 +77,7 @@ test('admin accounts cannot be locked and unknown status fields cannot change ro
 });
 test('category changes are validated, available to the app and retained across seeding', async () => {
   const categories = await request('/admin/categories');
-  assert.equal(categories.body.data.length, 7);
+  assert.equal(categories.body.data.length, 8);
   assert.equal(categories.body.data.find((c) => c.code === 'top').itemCount, 1);
   const values = { name: 'Áo mới', layerOrder: 42, defaultTempMin: 19, defaultTempMax: 31 };
   assert.equal((await request('/admin/categories/top', { method: 'PATCH', ...json({ ...values, defaultTempMin: 40 }) })).status, 400);

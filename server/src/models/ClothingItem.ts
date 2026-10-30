@@ -47,6 +47,7 @@ export interface IClothingItem extends Document {
   tempRange: { min: number; max: number };
   brand?: string;
   notes?: string;
+  purchasePrice?: number;
   /** Dem so lan item duoc dung trong outfit -> thong ke "do it mac nhat". */
   wearCount: number;
   lastWornAt?: Date;
@@ -83,6 +84,7 @@ const clothingItemSchema = new Schema<IClothingItem>(
     },
     brand: { type: String, trim: true },
     notes: { type: String, maxlength: 500 },
+    purchasePrice: { type: Number, min: 0 },
     wearCount: { type: Number, default: 0 },
     lastWornAt: { type: Date },
     isArchived: { type: Boolean, default: false },
@@ -103,8 +105,18 @@ const clothingItemSchema = new Schema<IClothingItem>(
     },
     // ===== END NEW =====
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
+
+clothingItemSchema.virtual('costPerWear').get(function (this: IClothingItem) {
+  if (typeof this.purchasePrice !== 'number' || this.purchasePrice <= 0) return null;
+  const count = Math.max(1, this.wearCount || 0);
+  return Math.round(this.purchasePrice / count);
+});
 
 // Truy van chinh cua man Wardrobe: loc theo chu so huu + danh muc.
 clothingItemSchema.index({ owner: 1, category: 1, isArchived: 1 });
