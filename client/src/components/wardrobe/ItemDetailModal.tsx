@@ -3,7 +3,8 @@ import { useCategoryLabels } from '@/store/categoryStore';
 
 // ===== NEW: Xem/Sua Item =====
 import { useCallback, useRef, useState } from 'react';
-import { Pencil, Plus, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Pencil, Plus, Sparkles, X } from 'lucide-react';
 import { VButton, VInput, VSelect, VChip, VModal, VLabel, VSpinner } from '@/components/ui/vintage';
 import { CloudImage } from '@/components/ui/CloudImage';
 import { useResource } from '@/hooks/useResource';
@@ -86,14 +87,18 @@ export function ItemDetailModal({
   itemId,
   onClose,
   onUpdated,
+  onMixWith,
 }: {
   /** Trang cha render kem key={itemId} -> doi item la mount lai, state tu reset. */
   itemId: string;
   onClose: () => void;
   /** Goi sau khi luu thanh cong de trang cha cap nhat luoi ngay. */
   onUpdated: (item: ClothingItem) => void;
+  /** "Phoi voi mon nay". Bo trong -> chuyen sang trang Goi y, ghim mon nay. */
+  onMixWith?: (item: ClothingItem) => void;
 }) {
   const CATEGORY_LABELS = useCategoryLabels();
+  const router = useRouter();
   const loader = useCallback((signal: AbortSignal) => itemApi.get(itemId, signal), [itemId]);
   const { data: item, setData: setItem, loading, error: loadError, reload } = useResource(loader);
   const savingRef = useRef(false);
@@ -200,14 +205,26 @@ export function ItemDetailModal({
                   <h3 className="font-serif-display text-2xl font-semibold leading-tight text-[#1F453E]">
                     {item.name}
                   </h3>
-                  <button
-                    type="button"
-                    onClick={startEdit}
-                    title="Chỉnh sửa"
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#1F453E] px-3 py-1.5 text-xs font-semibold text-[#1F453E] transition-colors hover:bg-[#E2ECC8]/50"
-                  >
-                    <Pencil size={12} /> Chỉnh sửa
-                  </button>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                    {!item.isArchived && (
+                      <button
+                        type="button"
+                        onClick={() => (onMixWith ? onMixWith(item) : router.push(`/suggest?anchor=${item._id}`))}
+                        title="Gợi ý bộ đồ phối cùng món này"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-[#1F453E] bg-[#1F453E] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#16352F]"
+                      >
+                        <Sparkles size={12} /> Phối với món này
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={startEdit}
+                      title="Chỉnh sửa"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#1F453E] px-3 py-1.5 text-xs font-semibold text-[#1F453E] transition-colors hover:bg-[#E2ECC8]/50"
+                    >
+                      <Pencil size={12} /> Chỉnh sửa
+                    </button>
+                  </div>
                 </div>
 
                 <ViewRow label="Danh mục">

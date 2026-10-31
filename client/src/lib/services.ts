@@ -1,7 +1,7 @@
 import type { AxiosProgressEvent } from 'axios';
 import { api } from './api';
 import type {
-  ApiResponse, ClothingItem, Outfit, Weather, Suggestion,
+  ApiResponse, ClothingItem, Outfit, Weather, Suggestion, SuggestionAnchor,
   ScheduleEntry, User, Category, Occasion,
   BodyProfile, MannequinProfile, // NEW: Body Profile
   ItemFit, // NEW: Ghi nho fit
@@ -281,9 +281,11 @@ export const suggestionApi = {
   weather: (city?: string) =>
     api.get<ApiResponse<Weather>>('/suggestions/weather', { params: { city } }).then((r) => r.data.data),
 
-  get: (params: { city?: string; occasion?: Occasion } = {}, signal?: AbortSignal) =>
+  /** anchor: id mon co dinh -> tra them `options` (toi da 3 phuong an) va `anchor`. */
+  get: (params: { city?: string; occasion?: Occasion; anchor?: string } = {}, signal?: AbortSignal) =>
     api.get<ApiResponse<{
       weather: Weather; suggestion: Suggestion; advice: string; adviceSource: 'ai' | 'rule';
+      options?: Suggestion[]; anchor?: SuggestionAnchor;
     }>>('/suggestions', { params, signal, timeout: 45000 }).then((r) => r.data.data),
 
   ranked: (params: { city?: string; occasion?: Occasion; category?: Category } = {}) =>

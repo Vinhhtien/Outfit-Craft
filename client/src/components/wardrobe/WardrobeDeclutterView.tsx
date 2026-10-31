@@ -358,9 +358,9 @@ export function WardrobeDeclutterView({
                     <div className="grid grid-cols-2 gap-1.5">
                       {/* Action 1: Phối đồ ngay */}
                       <Link
-                        href={`/studio?item=${item._id}`}
+                        href={`/suggest?anchor=${item._id}`}
                         className="flex items-center justify-center gap-1 rounded-lg border border-[#1F453E] bg-[#1F453E] px-2.5 py-1.5 text-center text-xs font-semibold text-white transition-colors hover:bg-[#16352F]"
-                        title="Đưa vào Studio để phối trang phục diện ngay"
+                        title="Gợi ý bộ đồ phối cùng món này"
                       >
                         <Sparkles size={12} /> Phối đồ
                       </Link>

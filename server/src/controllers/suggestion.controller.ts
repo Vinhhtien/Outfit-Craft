@@ -3,9 +3,13 @@ import { User } from '../models/User.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { getWeather } from '../services/weather.service.js';
-import { buildSuggestion, scoreItem } from '../services/suggestion.service.js';
+import { buildAnchoredSuggestions, buildSuggestion, scoreItem } from '../services/suggestion.service.js';
 import { getStylistAdvice, toStylistBodyContext } from '../services/stylist.service.js';
 import { Occasion, OCCASIONS } from '../types/index.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Cung moc voi man Don tu (getDeclutterSuggestions): >= 180 ngay chua mac. */
+const DORMANT_DAYS = 180;
 
 /** GET /api/suggestions/weather?city=Hanoi */
 export const getWeatherInfo = asyncHandler(async (req, res) => {
@@ -36,7 +40,42 @@ export const getSuggestion = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Tủ đồ của bạn đang trống. Hãy thêm vài món đồ trước.');
   }
 
+  // ?anchor=<itemId>: phoi quanh 1 mon co dinh (tu "Phoi voi mon nay" / Don tu).
+  const anchorId = req.query.anchor ? String(req.query.anchor) : undefined;
+  const anchorItem = anchorId ? items.find((i) => String(i._id) === anchorId) : undefined;
+  if (anchorId && !anchorItem) {
+    throw ApiError.notFound('Không tìm thấy món đồ để phối. Có thể món đã bị xoá hoặc lưu trữ.');
+  }
+
   const weather = await getWeather(city);
+
+  if (anchorItem) {
+    const { options, weatherWarning, missing } = buildAnchoredSuggestions(anchorItem, items, weather, occasion);
+    const referenceDate = anchorItem.lastWornAt || anchorItem.createdAt;
+    const daysInactive = Math.max(0, Math.floor((Date.now() - new Date(referenceDate).getTime()) / DAY_MS));
+    const isDormant = daysInactive >= DORMANT_DAYS;
+    const { advice, source } = await getStylistAdvice(
+      options[0],
+      weather,
+      occasion,
+      toStylistBodyContext(user?.bodyProfile),
+      { name: anchorItem.name, isDormant }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        weather,
+        suggestion: options[0],
+        options,
+        anchor: { item: anchorItem, daysInactive, isDormant, weatherWarning, missing },
+        advice,
+        adviceSource: source,
+      },
+    });
+    return;
+  }
+
   const suggestion = buildSuggestion(items, weather, occasion);
   const { advice, source } = await getStylistAdvice(
     suggestion,

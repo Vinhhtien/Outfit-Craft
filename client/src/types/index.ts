@@ -280,11 +280,23 @@ export interface Suggestion {
   top?: ClothingItem;
   bottom?: ClothingItem;
   dress?: ClothingItem;
+  set?: ClothingItem;
   outerwear?: ClothingItem;
   shoes?: ClothingItem;
+  bag?: ClothingItem;
   accessory?: ClothingItem;
   totalScore: number;
   reasons: string[];
+}
+
+/** Mon dang ghim khi goi y "Phoi voi mon nay". */
+export interface SuggestionAnchor {
+  item: ClothingItem;
+  daysInactive: number;
+  /** Lau chua mac (>= 180 ngay, cung moc voi man Don tu). */
+  isDormant: boolean;
+  weatherWarning?: string;
+  missing: string[];
 }
 
 export interface ScheduleEntry {

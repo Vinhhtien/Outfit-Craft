@@ -71,6 +71,20 @@ Dùng ngôn ngữ tích cực, tôn vinh vóc dáng tự nhiên.`;
 }
 // ===== END NEW =====
 
+/** Mon dang ghim khi user chon "Phoi voi mon nay". */
+export interface StylistAnchorContext {
+  name: string;
+  /** Lau chua mac (cung moc voi man Don tu). */
+  isDormant: boolean;
+}
+
+function withAnchor(prompt: string, anchor?: StylistAnchorContext): string {
+  if (!anchor) return prompt;
+  const dormant = anchor.isDormant ? ' Món này đã lâu người dùng chưa mặc, hãy khích lệ họ diện lại.' : '';
+  return `${prompt}
+Bộ đồ được phối xoay quanh món "${anchor.name}". Hãy tập trung vào cách làm nổi bật món này.${dormant}`;
+}
+
 /**
  * Sinh loi tu van phoi do bang LLM.
  * Neu chua co API key hoac goi that bai -> tra ve text tu rule-based,
@@ -80,25 +94,28 @@ export async function getStylistAdvice(
   suggestion: OutfitSuggestion,
   weather: WeatherInfo,
   occasion?: string,
-  body?: StylistBodyContext // NEW: Body Profile
+  body?: StylistBodyContext, // NEW: Body Profile
+  anchor?: StylistAnchorContext
 ): Promise<{ advice: string; source: 'ai' | 'rule' }> {
   const pieces = [
     describe(suggestion.dress),
+    describe(suggestion.set),
     describe(suggestion.top),
     describe(suggestion.bottom),
     describe(suggestion.outerwear),
     describe(suggestion.shoes),
+    describe(suggestion.bag),
     describe(suggestion.accessory),
   ].filter(Boolean) as string[];
 
   const fallback = () => ({
-    advice: buildRuleAdvice(pieces, weather, suggestion),
+    advice: buildRuleAdvice(pieces, weather, suggestion, anchor),
     source: 'rule' as const,
   });
 
   if (!env.geminiKey || pieces.length === 0) return fallback();
 
-  const prompt = buildStylistPrompt(pieces, weather, occasion, body);
+  const prompt = withAnchor(buildStylistPrompt(pieces, weather, occasion, body), anchor);
 
   try {
     const res = await fetch(`${GEMINI_URL}?key=${env.geminiKey}`, {
@@ -128,12 +145,18 @@ export async function getStylistAdvice(
 function buildRuleAdvice(
   pieces: (string | null)[],
   weather: WeatherInfo,
-  suggestion: OutfitSuggestion
+  suggestion: OutfitSuggestion,
+  anchor?: StylistAnchorContext
 ): string {
   const weatherDesc = weather.description ? weather.description.toLowerCase() : 'dễ chịu';
   const cleanPieces = pieces.filter(Boolean);
   const outfitText = cleanPieces.length > 0 ? cleanPieces.join(' + ') : 'trang phục thoải mái';
   const lines = [
+    ...(anchor
+      ? [anchor.isDormant
+          ? `Đã lâu bạn chưa diện "${anchor.name}", hôm nay thử lấy món này làm điểm nhấn nhé!`
+          : `Hôm nay hãy để "${anchor.name}" làm điểm nhấn.`]
+      : []),
     `Với thời tiết ${weather.temp}°C (${weatherDesc}) tại ${weather.city}, bạn có thể phối: ${outfitText}.`,
     ...suggestion.reasons,
   ];
