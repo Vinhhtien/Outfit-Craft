@@ -175,8 +175,28 @@ export default function StudioPage() {
     });
   }, []);
 
+  /** Mon do mang tu trang Goi y (?items=id1,id2) -> dat len canvas de thu ngay. */
+  const pendingTryOnRef = useRef<ClothingItem[] | null>(null);
+
   /** Nap outfit dang cho khi canvas da san sang. */
   const flushPending = useCallback(() => {
+    const tryOn = pendingTryOnRef.current;
+    if (tryOn && readyRef.current) {
+      pendingTryOnRef.current = null;
+      setCanvasBusy(true);
+      busyRef.current = true;
+      void (async () => {
+        try {
+          for (const item of tryOn) await canvasRef.current?.addItem(item);
+        } catch (err) {
+          setError(getErrorMessage(err));
+        } finally {
+          busyRef.current = false;
+          setCanvasBusy(false);
+        }
+      })();
+      return;
+    }
     const outfit = pendingRef.current;
     if (!outfit || !readyRef.current) return;
     pendingRef.current = null;
@@ -206,8 +226,18 @@ export default function StudioPage() {
         const mine = bodyStateFromProfile(raw);
         userBodyRef.current = mine;
         setUserBody(mine);
-        const outfitId = new URLSearchParams(window.location.search).get('outfit');
-        if (!outfitId) setBody(mine);
+        const params = new URLSearchParams(window.location.search);
+        const outfitId = params.get('outfit');
+        const tryOnIds = [...new Set((params.get('items') ?? '').split(',').filter(Boolean))];
+        if (!outfitId && tryOnIds.length > 0) {
+          setBody(mine);
+          const byId = new Map(response.data.map((it) => [it._id, it]));
+          const tryOn = await Promise.all(tryOnIds.map((id) => byId.get(id) ?? itemApi.get(id, controller.signal)));
+          if (controller.signal.aborted) return;
+          window.history.replaceState(null, '', '/studio');
+          pendingTryOnRef.current = tryOn;
+          flushPending();
+        } else if (!outfitId) setBody(mine);
         else {
           const outfit = await outfitApi.get(outfitId, controller.signal);
           if (controller.signal.aborted) return;
@@ -220,13 +250,16 @@ export default function StudioPage() {
         if (!controller.signal.aborted) { setLoadingItems(false); setInitializing(false); }
       }
     })();
-    return () => { controller.abort(); pendingRef.current = null; };
+    return () => { controller.abort(); pendingRef.current = null; pendingTryOnRef.current = null; };
   }, [flushPending, userId, reloadVersion]);
 
   const addCanvasItem = async (item: ClothingItem) => {
     if (addRef.current || busyRef.current || initializing || initialError) return;
     addRef.current = true; setAddingItem(true); setError('');
-    try { await canvasRef.current?.addItem(item); }
+    try {
+      const added = await canvasRef.current?.addItem(item);
+      if (added === false) setToast(`"${item.name}" đã có trên canvas - mỗi món chỉ thêm được 1 lần.`);
+    }
     catch (err) { setError(getErrorMessage(err)); }
     finally { addRef.current = false; setAddingItem(false); }
   };

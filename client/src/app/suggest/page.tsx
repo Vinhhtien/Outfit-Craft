@@ -2,8 +2,9 @@
 import { useCategoryLabels } from '@/store/categoryStore';
 
 import { useCallback, useState } from 'react';
+import Link from 'next/link';
 import {
-  Sparkles, CloudRain, Thermometer, Droplets, RefreshCw, Bot, ListOrdered, FolderPlus,
+  Sparkles, CloudRain, Thermometer, Droplets, RefreshCw, Bot, ListOrdered, FolderPlus, Shirt,
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
@@ -191,13 +192,21 @@ export default function SuggestPage() {
                       </div>
 
                       {picks.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setIsSaveModalOpen(true)}
-                          className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-[#1F453E] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all hover:bg-[#16352F]"
-                        >
-                          <FolderPlus size={14} /> Lưu bộ đồ này
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            href={`/studio?items=${picks.map((p) => p.item!._id).join(',')}`}
+                            className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-white px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-[#1F453E] shadow-xs transition-all hover:bg-[#E2ECC8]/60"
+                          >
+                            <Shirt size={14} /> Thử đồ
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => setIsSaveModalOpen(true)}
+                            className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-[#1F453E] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-xs transition-all hover:bg-[#16352F]"
+                          >
+                            <FolderPlus size={14} /> Lưu bộ đồ này
+                          </button>
+                        </div>
                       )}
                     </div>
 
