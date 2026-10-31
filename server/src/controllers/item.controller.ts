@@ -27,6 +27,10 @@ export const createItemSchema = z.object({
   tempRange: z.object({ min: z.number(), max: z.number() }).optional(),
   brand: z.string().optional(),
   notes: z.string().max(500).optional(),
+  purchasePrice: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+    z.number().min(0).max(10_000_000_000).optional()
+  ),
 });
 
 // ===== NEW: Xem/Sua Item =====
@@ -45,6 +49,10 @@ export const updateItemSchema = z
     // Chuoi rong = xoa thuong hieu / ghi chu.
     brand: z.string().trim().max(100),
     notes: z.string().trim().max(500),
+    purchasePrice: z.preprocess(
+      (v) => (v === '' || v === null ? null : v === undefined ? undefined : Number(v)),
+      z.number().min(0).max(10_000_000_000).nullable().optional()
+    ),
   })
   .partial()
   .strict();
@@ -193,9 +201,24 @@ export const updateItem = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Không có thông tin nào để cập nhật.');
   }
 
+  const setFields: Record<string, unknown> = {};
+  const unsetFields: Record<string, 1> = {};
+
+  for (const [key, value] of Object.entries(req.body)) {
+    if (value === null) {
+      unsetFields[key] = 1;
+    } else if (value !== undefined) {
+      setFields[key] = value;
+    }
+  }
+
+  const updateOp: Record<string, unknown> = {};
+  if (Object.keys(setFields).length > 0) updateOp.$set = setFields;
+  if (Object.keys(unsetFields).length > 0) updateOp.$unset = unsetFields;
+
   const item = await ClothingItem.findOneAndUpdate(
     { _id: req.params.id, owner: req.user!.sub },
-    { $set: req.body },
+    updateOp,
     { new: true, runValidators: true }
   );
   // ===== END NEW =====
@@ -251,7 +274,16 @@ export const deleteItem = asyncHandler(async (req, res) => {
 export const getStats = asyncHandler(async (req, res) => {
   const owner = req.user!.sub;
 
-  const [byCategory, total, mostWorn, neverWorn, neverWornItems] = await Promise.all([
+  const [
+    byCategory,
+    total,
+    mostWorn,
+    neverWorn,
+    neverWornItems,
+    financialAgg,
+    bestValueItems,
+    wastefulItems,
+  ] = await Promise.all([
     ClothingItem.aggregate([
       { $match: { owner: new Types.ObjectId(owner), isArchived: false } },
       { $group: { _id: '$category', count: { $sum: 1 } } },
@@ -261,10 +293,167 @@ export const getStats = asyncHandler(async (req, res) => {
     ClothingItem.find({ owner, isArchived: false }).sort({ wearCount: -1 }).limit(5),
     ClothingItem.countDocuments({ owner, isArchived: false, wearCount: 0 }),
     ClothingItem.find({ owner, isArchived: false, wearCount: 0 }).sort({ createdAt: -1 }).limit(20),
+    ClothingItem.aggregate([
+      {
+        $match: {
+          owner: new Types.ObjectId(owner),
+          isArchived: false,
+          purchasePrice: { $gt: 0 },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalValue: { $sum: '$purchasePrice' },
+          pricedCount: { $sum: 1 },
+          avgPrice: { $avg: '$purchasePrice' },
+        },
+      },
+    ]),
+    // Top 5 món tối ưu chi phí nhất (CPW = purchasePrice / wearCount thấp nhất trong những món đã mặc)
+    ClothingItem.aggregate([
+      {
+        $match: {
+          owner: new Types.ObjectId(owner),
+          isArchived: false,
+          purchasePrice: { $gt: 0 },
+          wearCount: { $gt: 0 },
+        },
+      },
+      {
+        $addFields: {
+          costPerWear: { $round: [{ $divide: ['$purchasePrice', '$wearCount'] }, 0] },
+        },
+      },
+      { $sort: { costPerWear: 1 } },
+      { $limit: 5 },
+    ]),
+    // Top 5 món giá cao nhưng chưa mặc hoặc ít mặc nhất (wearCount <= 1)
+    ClothingItem.find({
+      owner,
+      isArchived: false,
+      purchasePrice: { $gt: 0 },
+      wearCount: { $lte: 1 },
+    })
+      .sort({ purchasePrice: -1 })
+      .limit(5),
   ]);
+
+  const financial = financialAgg[0] || { totalValue: 0, pricedCount: 0, avgPrice: 0 };
 
   res.json({
     success: true,
-    data: { total, byCategory, mostWorn, neverWorn, neverWornItems },
+    data: {
+      total,
+      byCategory,
+      mostWorn,
+      neverWorn,
+      neverWornItems,
+      financial: {
+        totalValue: Math.round(financial.totalValue || 0),
+        pricedCount: financial.pricedCount || 0,
+        avgPrice: Math.round(financial.avgPrice || 0),
+      },
+      bestValueItems,
+      wastefulItems,
+    },
   });
+});
+
+/**
+ * GET /api/items/declutter
+ * Lay danh sach goi y don tu:
+ * - 6-12 thang khong mac (180 - 365 ngay)
+ * - Tren 12 thang khong mac (> 365 ngay)
+ * - Tinh toan tong gia tri dong bang cua nhung mon do nay
+ */
+export const getDeclutterSuggestions = asyncHandler(async (req, res) => {
+  const owner = req.user!.sub;
+  const now = new Date();
+
+  // Lay tat ca items chua bi archive cua user
+  const items = await ClothingItem.find({
+    owner,
+    isArchived: false,
+  }).sort({ lastWornAt: 1, createdAt: 1 });
+
+  interface DormantItemDTO {
+    item: typeof items[0];
+    daysInactive: number;
+    tier: 'warning' | 'danger'; // warning: 6-12m (180-365 days), danger: >12m (>365 days)
+    reason: string;
+  }
+
+  const dormantItems: DormantItemDTO[] = [];
+
+  for (const item of items) {
+    const referenceDate = item.lastWornAt || item.createdAt;
+    const diffMs = now.getTime() - new Date(referenceDate).getTime();
+    const daysInactive = Math.max(0, Math.floor(diffMs / (24 * 60 * 60 * 1000)));
+
+    if (daysInactive >= 180) {
+      const isOver12Months = daysInactive >= 365;
+      const tier: 'warning' | 'danger' = isOver12Months ? 'danger' : 'warning';
+      let reason = '';
+      if (!item.lastWornAt || item.wearCount === 0) {
+        reason = `Đã thêm vào tủ ${daysInactive} ngày nhưng chưa mặc lần nào`;
+      } else {
+        const months = Math.floor(daysInactive / 30);
+        reason = `Lần mặc cuối cách đây ${daysInactive} ngày (khoảng ${months} tháng)`;
+      }
+
+      dormantItems.push({
+        item,
+        daysInactive,
+        tier,
+        reason,
+      });
+    }
+  }
+
+  const warningList = dormantItems.filter((d) => d.tier === 'warning');
+  const dangerList = dormantItems.filter((d) => d.tier === 'danger');
+
+  const totalDormantValue = dormantItems.reduce(
+    (sum, d) => sum + (d.item.purchasePrice || 0),
+    0
+  );
+
+  res.json({
+    success: true,
+    data: {
+      totalDormant: dormantItems.length,
+      totalDormantValue,
+      countWarning: warningList.length,
+      countDanger: dangerList.length,
+      warningList,
+      dangerList,
+      allDormant: dormantItems,
+    },
+  });
+});
+
+/** POST /api/items/:id/wear - Danh dau mon do da duoc mac hom nay */
+export const markItemWorn = asyncHandler(async (req, res) => {
+  const item = await ClothingItem.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user!.sub },
+    {
+      $inc: { wearCount: 1 },
+      $set: { lastWornAt: new Date() },
+    },
+    { new: true }
+  );
+  if (!item) throw ApiError.notFound('Không tìm thấy món đồ.');
+  res.json({ success: true, data: item, message: 'Đã đánh dấu đã mặc hôm nay!' });
+});
+
+/** POST /api/items/:id/archive - Luu tru mon do (isArchived = true) */
+export const archiveItem = asyncHandler(async (req, res) => {
+  const item = await ClothingItem.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user!.sub },
+    { $set: { isArchived: true } },
+    { new: true }
+  );
+  if (!item) throw ApiError.notFound('Không tìm thấy món đồ.');
+  res.json({ success: true, data: item, message: 'Đã lưu trữ món đồ vào kho cất.' });
 });

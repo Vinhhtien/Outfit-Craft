@@ -105,7 +105,14 @@ export const createOutfit = asyncHandler(async (req, res) => {
   const outfit = await saveWithImages(
     thumbnailDataUrl ? [() => uploadDataUrl(thumbnailDataUrl, `outfitcraft/${owner}/outfits`)] : [],
     async ([image]) => {
-      try { return await Outfit.create({ ...rest, owner, thumbnailUrl: image?.url, thumbnailPublicId: image?.publicId }); }
+      try {
+        let thumbnailUrl: string | undefined = image?.url;
+        if (!thumbnailUrl && rest.items && rest.items.length > 0) {
+          const firstItem = await ClothingItem.findById(rest.items[0].item);
+          if (firstItem?.imageUrl) thumbnailUrl = firstItem.imageUrl;
+        }
+        return await Outfit.create({ ...rest, owner, thumbnailUrl, thumbnailPublicId: image?.publicId });
+      }
       catch (error) {
         if ((error as { code?: number }).code === 11000 && rest.creationKey) {
           const existing = await Outfit.findOne({ owner, creationKey: rest.creationKey });
@@ -308,7 +315,16 @@ export const toggleLikeOutfit = asyncHandler(async (req, res) => {
   const outfit = await Outfit.findById(req.params.id);
   if (!outfit) throw ApiError.notFound('Không tìm thấy outfit.');
 
+  if (outfit.isHidden) {
+    throw ApiError.forbidden('Bộ đồ này đã bị ẩn bởi quản trị viên.');
+  }
+
   const userId = req.user!.sub;
+  const isOwner = outfit.owner.toString() === userId;
+  if (!outfit.isPublic && !isOwner) {
+    throw ApiError.forbidden('Không thể tương tác với bộ đồ riêng tư.');
+  }
+
   const existingLike = await Like.findOne({ user: userId, outfit: outfit._id });
 
   let isLiked: boolean;

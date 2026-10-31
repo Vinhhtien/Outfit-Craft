@@ -293,7 +293,7 @@ export const OutfitCanvas = forwardRef<
           profileRef.current = profile;
           showRef.current = visible;
           anchorsRef.current = buildMannequin(profile).anchors;
-          await loadCanvasJSON(canvas, json, items);
+          await loadCanvasJSON(canvas, json, items, anchorsRef.current);
           if (legacyProfile) upgradeLegacyLayout(canvas, legacyProfile, profile);
           // loadFromJSON xoa sach canvas (ke ca mannequin) -> ve lai o lop duoi cung.
           await setMannequin(canvas, profile, showRef.current);

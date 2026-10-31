@@ -7,6 +7,7 @@ import {
   ExternalLink,
   AlertCircle,
   FolderPlus,
+  CalendarCheck,
 } from 'lucide-react';
 import {
   VModal,
@@ -15,7 +16,8 @@ import {
   VLabel,
   VChip,
 } from '@/components/ui/vintage';
-import { outfitApi } from '@/lib/services';
+import { CloudImage } from '@/components/ui/CloudImage';
+import { outfitApi, scheduleApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import {
   SEASONS,
@@ -52,9 +54,10 @@ export function SaveSuggestedOutfitModal({
 }: SaveSuggestedOutfitModalProps) {
   const router = useRouter();
 
-  const [name, setName] = useState(
-    () => `Gợi ý ${OCCASION_LABELS[occasion]} • ${new Date().toLocaleDateString('vi-VN')}`
-  );
+  const [userEditedName, setUserEditedName] = useState<string | null>(null);
+  const defaultName = `Gợi ý ${OCCASION_LABELS[occasion]} • ${new Date().toLocaleDateString('vi-VN')}`;
+  const name = userEditedName ?? defaultName;
+
   const [selectedSeasons, setSelectedSeasons] = useState<Season[]>(() =>
     getDefaultSeason(weather?.temp)
   );
@@ -63,6 +66,8 @@ export function SaveSuggestedOutfitModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedOutfitId, setSavedOutfitId] = useState<string | null>(null);
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduledToday, setScheduledToday] = useState(false);
 
   const toggleSeason = (s: Season) => {
     setSelectedSeasons((prev) =>
@@ -74,6 +79,26 @@ export function SaveSuggestedOutfitModal({
     setSelectedOccasions((prev) =>
       prev.includes(o) ? prev.filter((item) => item !== o) : [...prev, o]
     );
+  };
+
+  const handleScheduleForToday = async () => {
+    if (!savedOutfitId || isScheduling) return;
+    setIsScheduling(true);
+    setError(null);
+    try {
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      await scheduleApi.set({
+        outfit: savedOutfitId,
+        date: todayStr,
+        note: weather ? `Gợi ý theo thời tiết ${weather.temp}°C (${weather.city})` : 'Gợi ý từ OutfitCraft',
+      });
+      setScheduledToday(true);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsScheduling(false);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -200,6 +225,14 @@ export function SaveSuggestedOutfitModal({
             >
               <ExternalLink size={14} /> Mở trong Studio để chỉnh sửa
             </VButton>
+            <VButton
+              variant="outline"
+              onClick={() => void handleScheduleForToday()}
+              disabled={isScheduling || scheduledToday}
+              className="inline-flex items-center gap-2 border-[#1F453E] text-[#1F453E] hover:bg-[#E2ECC8]/40"
+            >
+              <CalendarCheck size={14} /> {scheduledToday ? '✓ Đã lên lịch hôm nay' : 'Lên lịch mặc hôm nay'}
+            </VButton>
             <VButton variant="outline" onClick={onClose}>
               Đóng
             </VButton>
@@ -224,8 +257,7 @@ export function SaveSuggestedOutfitModal({
                   className="flex items-center gap-2 rounded-xl border border-[#CBD5E1] bg-[#FAF9F5] p-2"
                 >
                   <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-white p-1">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <CloudImage
                       src={item.imageUrl}
                       alt={item.name}
                       className="max-h-full max-w-full object-contain"
@@ -247,7 +279,7 @@ export function SaveSuggestedOutfitModal({
             <VLabel>Tên bộ đồ</VLabel>
             <VInput
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setUserEditedName(e.target.value)}
               placeholder="Nhập tên bộ trang phục..."
               maxLength={100}
               autoFocus

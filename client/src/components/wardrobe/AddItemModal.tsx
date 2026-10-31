@@ -56,6 +56,7 @@ export function AddItemModal({
     seasons: [] as Season[],
     occasions: [] as Occasion[],
     brand: '',
+    purchasePrice: '',
   });
 
   useEffect(() => () => { operation.current++; }, []);
@@ -75,7 +76,7 @@ export function AddItemModal({
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl('');
     setForm({
-      name: '', category: 'top', colors: [], styles: [], seasons: [], occasions: [], brand: '',
+      name: '', category: 'top', colors: [], styles: [], seasons: [], occasions: [], brand: '', purchasePrice: '',
     });
   };
 
@@ -137,10 +138,12 @@ export function AddItemModal({
     setFieldErrors({});
     setSaveStage('Đang tải ảnh…');
     try {
+      const parsedPrice = form.purchasePrice ? Number(form.purchasePrice) : undefined;
       await itemApi.createWithImages({
         name: form.name.trim(), category: form.category, colors: form.colors,
         styles: form.styles, seasons: form.seasons, occasions: form.occasions,
         brand: form.brand.trim() || undefined,
+        purchasePrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : undefined,
       }, cutoutBlob, originalFile, creationKey.current, (event) => {
         const percent = event.total ? Math.min(100, Math.round(event.loaded / event.total * 100)) : null;
         setSaveStage(percent === 100 ? 'Đang lưu ảnh và món đồ…' : `Đang tải ảnh${percent === null ? '…' : ` ${percent}%…`}`);
@@ -254,6 +257,16 @@ export function AddItemModal({
               label="Thương hiệu (không bắt buộc)"
               value={form.brand}
               onChange={(e) => setForm({ ...form, brand: e.target.value })}
+            />
+
+            <VInput
+              label="Giá mua (VNĐ - không bắt buộc)"
+              type="number"
+              min={0}
+              step={1000}
+              value={form.purchasePrice}
+              onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })}
+              placeholder="Ví dụ: 350000 (để tính chi phí mỗi lần mặc CPW)"
             />
 
             {form.colors.length > 0 && (
