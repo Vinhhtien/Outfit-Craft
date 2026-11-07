@@ -22,14 +22,24 @@ interface GeminiConfig {
 }
 
 /** Goi Gemini, tra ve text. Chua co key hoac loi -> null de noi goi tu xu ly. */
-async function callGemini(prompt: string, config: GeminiConfig, timeoutMs = 12_000): Promise<string | null> {
+export async function callGemini(
+  prompt: string,
+  config: GeminiConfig,
+  timeoutMs = 12_000,
+  image?: { data: Buffer; mimeType: string }
+): Promise<string | null> {
   if (!env.geminiKey) return null;
   try {
     const res = await fetch(`${GEMINI_BASE_URL}/${env.geminiModel}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.geminiKey },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{
+          parts: [
+            ...(image ? [{ inlineData: { mimeType: image.mimeType, data: image.data.toString('base64') } }] : []),
+            { text: prompt },
+          ],
+        }],
         generationConfig: { ...config, maxOutputTokens: MAX_OUTPUT_TOKENS },
       }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -51,7 +61,7 @@ async function callGemini(prompt: string, config: GeminiConfig, timeoutMs = 12_0
   }
 }
 
-const outfitItems = (s: OutfitSuggestion) =>
+export const outfitItems = (s: OutfitSuggestion) =>
   [s.dress, s.set, s.top, s.bottom, s.outerwear, s.shoes, s.bag, s.accessory]
     .filter(Boolean) as IClothingItem[];
 

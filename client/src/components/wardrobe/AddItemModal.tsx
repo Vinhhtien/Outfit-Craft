@@ -47,6 +47,7 @@ export function AddItemModal({
   const [originalFile, setOriginalFile] = useState<Blob | null>(null);
   const [cutoutBlob, setCutoutBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [autoTagState, setAutoTagState] = useState<'idle' | 'loading' | 'done' | 'failed'>('idle');
 
   const [form, setForm] = useState({
     name: '',
@@ -75,6 +76,7 @@ export function AddItemModal({
     setCutoutBlob(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl('');
+    setAutoTagState('idle');
     setForm({
       name: '', category: 'top', colors: [], styles: [], seasons: [], occasions: [], brand: '', purchasePrice: '',
     });
@@ -84,6 +86,24 @@ export function AddItemModal({
     if (savingRef.current) return;
     reset();
     onClose();
+  };
+
+  /** Chay nen, khong chan form. Chi dien nhom user chua chon; loi thi de user chon tay. */
+  const suggestTags = async (image: Blob, current: number) => {
+    setAutoTagState('loading');
+    try {
+      const tags = await itemApi.autoTag(image);
+      if (current !== operation.current) return;
+      setForm((f) => ({
+        ...f,
+        styles: f.styles.length > 0 ? f.styles : tags.styles,
+        seasons: f.seasons.length > 0 ? f.seasons : tags.seasons,
+        occasions: f.occasions.length > 0 ? f.occasions : tags.occasions,
+      }));
+      setAutoTagState('done');
+    } catch {
+      if (current === operation.current) setAutoTagState('failed');
+    }
   };
 
   /** Chon file -> thu nho -> tach nen -> lay mau chu dao. */
@@ -121,6 +141,7 @@ export function AddItemModal({
       }));
 
       setStep('form');
+      void suggestTags(cutout, current);
     } catch (err) {
       if (current !== operation.current) return;
       setError(getErrorMessage(err));
@@ -177,7 +198,7 @@ export function AddItemModal({
           </button>
           <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[#6B7B76]">
             <Wand2 size={13} />
-            Nền ảnh sẽ được tách tự động ngay trên trình duyệt
+            Nền ảnh được tách ngay trên trình duyệt, sau đó ảnh đã tách nền được gửi cho Google Gemini để gợi ý thông tin món đồ
           </p>
 
           <input
@@ -283,6 +304,15 @@ export function AddItemModal({
                   ))}
                 </div>
               </div>
+            )}
+
+            {autoTagState !== 'idle' && (
+              <p role="status" aria-live="polite" className="flex items-center gap-1.5 text-xs text-[#52665F]">
+                <Wand2 size={13} className="shrink-0" />
+                {autoTagState === 'loading' && 'Đang gửi ảnh cho Google Gemini để gợi ý phong cách, mùa và dịp mặc…'}
+                {autoTagState === 'done' && 'AI đã gợi ý phong cách, mùa và dịp mặc. Bạn kiểm tra và sửa lại nếu cần nhé.'}
+                {autoTagState === 'failed' && 'Chưa thể tự gợi ý lúc này, bạn chọn thủ công nhé.'}
+              </p>
             )}
 
             <div>

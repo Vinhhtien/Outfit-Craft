@@ -307,14 +307,30 @@ export interface Suggestion {
   reasons: string[];
 }
 
-/** Ket qua 1 luot chat voi stylist. Hoi dap thuong thi khong co suggestion. */
-export interface StylistChatResult {
-  reply: string;
-  source: 'ai' | 'rule';
-  weather: Weather;
-  suggestion?: Suggestion;
+/** 1 doan chat tren thanh lich su. */
+export interface StylistConversation {
+  _id: string;
+  title: string;
+  lastMessageAt: string;
+}
+
+/** 1 tin trong doan chat. Hoi dap thuong thi khong co items. */
+export interface StylistChatMessage {
+  _id: string;
+  role: 'user' | 'stylist';
+  text: string;
+  items: ClothingItem[];
   occasion?: Occasion;
-  notes?: string[];
+  weather?: Weather;
+  notes: string[];
+  source?: 'ai' | 'rule';
+}
+
+/** AI goi y khi them do moi. */
+export interface ItemTagSuggestion {
+  styles: Style[];
+  seasons: Season[];
+  occasions: Occasion[];
 }
 
 /** Mon dang ghim khi goi y "Phoi voi mon nay". */

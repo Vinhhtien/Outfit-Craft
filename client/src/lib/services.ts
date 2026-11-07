@@ -1,7 +1,8 @@
 import type { AxiosProgressEvent } from 'axios';
 import { api } from './api';
 import type {
-  ApiResponse, ClothingItem, Outfit, Weather, Suggestion, SuggestionAnchor, StylistChatResult,
+  ApiResponse, ClothingItem, Outfit, Weather, Suggestion, SuggestionAnchor,
+  StylistChatMessage, StylistConversation, ItemTagSuggestion,
   ScheduleEntry, User, Category, Occasion,
   BodyProfile, MannequinProfile, // NEW: Body Profile
   ItemFit, // NEW: Ghi nho fit
@@ -103,6 +104,18 @@ export const itemApi = {
       .post<ApiResponse<{ url: string; publicId: string }>>('/items/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 150000,
+      })
+      .then((r) => r.data.data);
+  },
+
+  /** AI goi y phong cach, mua, dip tu anh. Chi tra ve goi y, chua luu gi. */
+  autoTag: (file: Blob) => {
+    const form = new FormData();
+    form.append('image', file, 'item.png');
+    return api
+      .post<ApiResponse<ItemTagSuggestion>>('/items/auto-tag', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000,
       })
       .then((r) => r.data.data);
   },
@@ -297,17 +310,19 @@ export const suggestionApi = {
       options?: Suggestion[]; anchor?: SuggestionAnchor; seasonWarning?: string; missing?: string[];
     }>>('/suggestions', { params, signal, timeout: 45000 }).then((r) => r.data.data),
 
-  chat: (
-    body: {
-      message: string;
-      history: { role: 'user' | 'stylist'; text: string }[];
-      city?: string;
-      occasion?: Occasion;
-      seen: string[];
-    },
-    signal?: AbortSignal
-  ) =>
-    api.post<ApiResponse<StylistChatResult>>('/suggestions/chat', body, { signal, timeout: 45000 }).then((r) => r.data.data),
+  chatList: (signal?: AbortSignal) =>
+    api.get<ApiResponse<StylistConversation[]>>('/suggestions/chats', { signal }).then((r) => r.data.data),
+
+  chatMessages: (id: string, signal?: AbortSignal) =>
+    api.get<ApiResponse<StylistChatMessage[]>>(`/suggestions/chats/${id}`, { signal }).then((r) => r.data.data),
+
+  /** Bo trong conversationId -> server tao doan chat moi. */
+  chat: (body: { message: string; conversationId?: string; city?: string; occasion?: Occasion }, signal?: AbortSignal) =>
+    api.post<ApiResponse<{ conversation: StylistConversation; message: StylistChatMessage }>>(
+      '/suggestions/chat', body, { signal, timeout: 45000 }
+    ).then((r) => r.data.data),
+
+  deleteChat: (id: string) => api.delete(`/suggestions/chats/${id}`),
 
   ranked: (params: { city?: string; occasion?: Occasion; category?: Category } = {}) =>
     api.get<ApiResponse<{

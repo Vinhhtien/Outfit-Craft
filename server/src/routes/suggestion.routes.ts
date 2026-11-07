@@ -20,6 +20,9 @@ router.use(protect);
 router.get('/weather', c.getWeatherInfo);
 router.get('/ranked', c.getRankedItems);
 router.post('/chat', stylistChatLimiter, validate(c.stylistChatSchema), c.chatWithStylist);
+router.get('/chats', c.listStylistChats);
+router.get('/chats/:id', c.getStylistChat);
+router.delete('/chats/:id', c.deleteStylistChat);
 router.get('/', c.getSuggestion);
 
 export default router;

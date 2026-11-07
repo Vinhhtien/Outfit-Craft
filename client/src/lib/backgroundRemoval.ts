@@ -1,7 +1,7 @@
 /**
  * Tach nen anh ngay tren trinh duyet bang @imgly/background-removal.
- * Chay hoan toan client-side (WASM) -> khong ton quota API, anh khong roi may
- * cho den khi user bam luu.
+ * Buoc tach nen chay hoan toan client-side (WASM) -> khong ton quota API.
+ * Sau buoc nay AddItemModal gui anh da tach nen cho Gemini de goi y thong tin (xem /items/auto-tag).
  *
  * Lan dau chay se tai model (~vai chuc MB) nen can hien progress.
  */

@@ -6,6 +6,7 @@ import { Category } from '../models/Category.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { uploadBuffer, destroyImage, saveWithImages, queueImageCleanup } from '../services/upload.service.js';
+import { suggestItemTags } from '../services/autoTag.service.js';
 import { ownsImage, ownedImageIdFromUrl, validateImageBuffer } from '../utils/imageValidation.js';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
@@ -100,6 +101,18 @@ export const uploadImage = asyncHandler(async (req, res) => {
 
   const receipt = jwt.sign({ ...result, owner: req.user!.sub, purpose: 'item-upload' }, env.jwtSecret, { expiresIn: '1h' });
   res.status(201).json({ success: true, data: { ...result, receipt } });
+});
+
+/**
+ * POST /api/items/auto-tag
+ * AI goi y phong cach, mua, dip tu anh. Chi tra ve goi y, khong luu gi va khong day anh len Cloudinary.
+ */
+export const autoTagItem = asyncHandler(async (req, res) => {
+  if (!req.file) throw ApiError.badRequest('Vui lòng chọn ảnh.');
+  const mimeType = validateImageBuffer(req.file.buffer);
+  const tags = await suggestItemTags(req.file.buffer, mimeType);
+  if (!tags) throw new ApiError(503, 'Chưa thể tự gợi ý lúc này, bạn chọn thủ công nhé.');
+  res.json({ success: true, data: tags });
 });
 
 /** GET /api/items?category=top&style=casual&season=summer&q=... */

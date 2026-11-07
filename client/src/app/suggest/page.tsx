@@ -379,6 +379,7 @@ export default function SuggestPage() {
           {/* Luon giu trong cay de doi tab khong mat cuoc tro chuyen. */}
           <div className={viewMode === 'chat' ? '' : 'hidden'}>
             <StylistChat
+              key={user?.id}
               city={city}
               occasion={occasion}
               onOpenItem={(id) => setSelectedItemId(id)}

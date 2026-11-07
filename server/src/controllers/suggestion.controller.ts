@@ -1,18 +1,27 @@
+import { isValidObjectId } from 'mongoose';
 import { z } from 'zod';
 import { ClothingItem } from '../models/ClothingItem.js';
+import {
+  IStylistConversation, MAX_STYLIST_CONVERSATIONS, StylistConversation,
+} from '../models/StylistConversation.js';
+import { IStylistMessage, MAX_STYLIST_MESSAGES, StylistMessage } from '../models/StylistMessage.js';
 import { User } from '../models/User.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { getWeather } from '../services/weather.service.js';
 import { buildOutfitOptions, scoreItem } from '../services/suggestion.service.js';
 import {
-  getRuleAdvice, getStylistAdvice, readStylistIntent, toStylistBodyContext, writeStylistReply,
+  getRuleAdvice, getStylistAdvice, outfitItems, readStylistIntent, toStylistBodyContext, writeStylistReply,
 } from '../services/stylist.service.js';
 import { COLOR_GROUPS, Occasion, OCCASIONS, SEASONS } from '../types/index.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Cung moc voi man Don tu (getDeclutterSuggestions): >= 180 ngay chua mac. */
 const DORMANT_DAYS = 180;
+const CHAT_TITLE_LENGTH = 60;
+const CHAT_HISTORY_TURNS = 6;
+const CHAT_HISTORY_TEXT_LENGTH = 1000;
+const MAX_REPLY_LENGTH = 5000;
 
 /** GET /api/suggestions/weather?city=Hanoi */
 export const getWeatherInfo = asyncHandler(async (req, res) => {
@@ -111,32 +120,105 @@ export const getSuggestion = asyncHandler(async (req, res) => {
 
 export const stylistChatSchema = z.object({
   message: z.string().trim().min(1).max(500),
-  history: z.array(z.object({
-    role: z.enum(['user', 'stylist']),
-    text: z.string().trim().min(1).max(1000),
-  })).max(6).default([]),
+  /** Bo trong -> tao doan chat moi. */
+  conversationId: z.string().regex(/^[0-9a-f]{24}$/i).optional(),
   city: z.string().trim().max(100).optional(),
   occasion: z.enum(OCCASIONS).optional(),
-  seen: z.array(z.string().regex(OUTFIT_KEY)).max(MAX_SEEN_KEYS).default([]),
+});
+
+/** Chi tra ve doan chat cua chinh user; id sai hoac cua nguoi khac deu la 404. */
+async function findConversation(id: string, owner: string) {
+  const conversation = isValidObjectId(id) ? await StylistConversation.findOne({ _id: id, owner }) : null;
+  if (!conversation) throw ApiError.notFound('Không tìm thấy đoạn chat này.');
+  return conversation;
+}
+
+/** Chi luu luot chat thanh cong; AI loi thi khong de lai tin nhan hay doan chat rong. */
+async function saveChatTurn(
+  owner: string,
+  existing: IStylistConversation | null,
+  message: string,
+  reply: Pick<IStylistMessage, 'text' | 'source'> & Partial<IStylistMessage>
+) {
+  const conversation = existing
+    ?? await StylistConversation.create({ owner, title: message.split('\n')[0].slice(0, CHAT_TITLE_LENGTH) });
+  const [, saved] = await StylistMessage.insertMany([
+    { owner, conversation: conversation._id, role: 'user', text: message },
+    { ...reply, owner, conversation: conversation._id, role: 'stylist', text: reply.text.slice(0, MAX_REPLY_LENGTH) },
+  ]);
+  conversation.lastMessageAt = new Date();
+  await conversation.save();
+
+  const oldMessages = await StylistMessage.find({ conversation: conversation._id })
+    .sort({ _id: -1 }).skip(MAX_STYLIST_MESSAGES).select('_id').lean();
+  if (oldMessages.length > 0) await StylistMessage.deleteMany({ _id: { $in: oldMessages.map((m) => m._id) } });
+
+  const oldConversations = await StylistConversation.find({ owner })
+    .sort({ lastMessageAt: -1 }).skip(MAX_STYLIST_CONVERSATIONS).select('_id').lean();
+  if (oldConversations.length > 0) {
+    const ids = oldConversations.map((c) => c._id);
+    await Promise.all([
+      StylistMessage.deleteMany({ conversation: { $in: ids } }),
+      StylistConversation.deleteMany({ _id: { $in: ids } }),
+    ]);
+  }
+
+  return { conversation, message: await saved.populate('items') };
+}
+
+/** GET /api/suggestions/chats - danh sach doan chat, moi nhat truoc. */
+export const listStylistChats = asyncHandler(async (req, res) => {
+  const conversations = await StylistConversation.find({ owner: req.user!.sub })
+    .sort({ lastMessageAt: -1 })
+    .select('title lastMessageAt');
+  res.json({ success: true, data: conversations });
+});
+
+/** GET /api/suggestions/chats/:id - tin nhan cua 1 doan chat, cu truoc moi sau. */
+export const getStylistChat = asyncHandler(async (req, res) => {
+  const conversation = await findConversation(req.params.id, req.user!.sub);
+  const messages = await StylistMessage.find({ conversation: conversation._id })
+    .sort({ _id: 1 })
+    .populate('items');
+  res.json({ success: true, data: messages });
+});
+
+/** DELETE /api/suggestions/chats/:id - xoa 1 doan chat va cac tin cua no. */
+export const deleteStylistChat = asyncHandler(async (req, res) => {
+  const conversation = await findConversation(req.params.id, req.user!.sub);
+  await StylistMessage.deleteMany({ conversation: conversation._id });
+  await conversation.deleteOne();
+  res.json({ success: true, data: null });
 });
 
 /**
  * POST /api/suggestions/chat
  * AI doc yeu cau -> logic goi y chon do that trong tu -> AI giai thich bo do.
+ * Lich su va cac bo da hien lay tu doan chat trong database, client khong can gui.
  */
 export const chatWithStylist = asyncHandler(async (req, res) => {
-  const { message, history, city: cityInput, occasion: currentOccasion, seen } =
+  const { message, conversationId, city: cityInput, occasion: currentOccasion } =
     req.body as z.infer<typeof stylistChatSchema>;
   const owner = req.user!.sub;
+  const conversation = conversationId ? await findConversation(conversationId, owner) : null;
   const user = await User.findById(owner).select('+bodyProfile');
   const weather = await getWeather(cityInput || user?.defaultCity || 'Hanoi');
+
+  const recent = conversation
+    ? await StylistMessage.find({ conversation: conversation._id })
+        .sort({ _id: -1 }).limit(MAX_SEEN_KEYS).select('role text outfitKey').lean()
+    : [];
+  const history = recent.slice(0, CHAT_HISTORY_TURNS).reverse()
+    .map((m) => ({ role: m.role, text: m.text.slice(0, CHAT_HISTORY_TEXT_LENGTH) }));
+  const seen = recent.flatMap((m) => (m.outfitKey ? [m.outfitKey] : []));
 
   const intent = await readStylistIntent(message, history, weather);
   if (!intent) {
     throw new ApiError(503, 'Stylist AI đang tạm nghỉ. Bạn vẫn có thể dùng bộ lọc và nút Xáo trộn ở tab Bộ đồ gợi ý.');
   }
   if (intent.intent === 'question') {
-    res.json({ success: true, data: { reply: intent.reply, source: 'ai', weather } });
+    const saved = await saveChatTurn(owner, conversation, message, { text: intent.reply, source: 'ai' });
+    res.json({ success: true, data: saved });
     return;
   }
 
@@ -160,10 +242,17 @@ export const chatWithStylist = asyncHandler(async (req, res) => {
     notes
   );
 
-  res.json({
-    success: true,
-    data: { reply: advice, source, weather, suggestion: options[0], occasion, notes },
+  const pieces = outfitItems(options[0]);
+  const saved = await saveChatTurn(owner, conversation, message, {
+    text: advice,
+    source,
+    notes,
+    occasion,
+    weather: { ...weather },
+    items: pieces.map((item) => item._id),
+    outfitKey: pieces.length > 0 ? options[0].key : undefined,
   });
+  res.json({ success: true, data: saved });
 });
 
 /**
