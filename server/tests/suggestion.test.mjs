@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isNeutralColor, colorRelation, styleCompat, scoreCombo, buildAnchoredSuggestions,
+  isNeutralColor, isNeutralItem, colorRelation, itemColorRelation, styleCompat, scoreCombo, buildAnchoredSuggestions,
 } from '../src/services/suggestion.service.ts';
 
 const weather = { city: 'Hanoi', temp: 27, feelsLike: 29, humidity: 70, condition: 'Clear', description: 'trời quang', icon: '01d', isRaining: false };
@@ -20,6 +20,29 @@ test('neutral colors and color-wheel relations', () => {
   assert.equal(colorRelation('#ff0000', '#00c0c0'), 'complementary');
   assert.equal(colorRelation('#ff0000', '#2eb82e'), 'clash');
   assert.equal(colorRelation(undefined, '#ff0000'), 'unknown');
+});
+
+test('denim-blue bottoms count as neutral, denim-blue tops do not', () => {
+  for (const hex of ['#5b7db1', '#a6c0de']) {
+    assert.equal(isNeutralItem(item('bottom', hex)), true, hex);
+    assert.equal(isNeutralItem(item('top', hex)), false, hex);
+  }
+  const greenTop = item('top', '#3cb371');
+  assert.equal(colorRelation('#5b7db1', '#3cb371'), 'clash');
+  assert.equal(itemColorRelation(item('bottom', '#5b7db1'), greenTop), 'neutral');
+  assert.equal(itemColorRelation(item('top', '#5b7db1'), greenTop), 'clash');
+});
+
+test('a clashing accessory hurts the score less than a clashing bottom', () => {
+  const s = (it) => ({ item: it, score: 80, reasons: [] });
+  const red = s(item('top', '#ff0000'));
+  const blackBottom = s(item('bottom', '#000000'));
+  const clashingAccessory = scoreCombo([red, blackBottom, s(item('accessory', '#2eb82e'))]);
+  const clashingBottom = scoreCombo([red, s(item('bottom', '#2eb82e')), s(item('accessory', '#000000'))]);
+  assert.ok(clashingAccessory > clashingBottom);
+  // Phu kien la mon dang ghim -> cap cua no tinh du trong so.
+  const accent = s(item('accessory', '#2eb82e'));
+  assert.ok(scoreCombo([red, blackBottom, accent], accent) < scoreCombo([red, blackBottom, accent]));
 });
 
 test('style compatibility is symmetric and tolerates missing styles', () => {

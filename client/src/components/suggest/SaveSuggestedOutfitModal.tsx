@@ -123,6 +123,7 @@ export function SaveSuggestedOutfitModal({
 
         switch (item.category) {
           case 'dress':
+          case 'set':
           case 'top':
             left = 200;
             top = 130;

@@ -251,6 +251,27 @@ export function colorHarmony(a?: string, b?: string): number {
   return COLOR_RELATION_SCORE[colorRelation(a, b)];
 }
 
+/** Xanh denim (xanh lam nhat/vua, it bao hoa) - mau cua quan jeans. */
+function isDenimBlue(hex?: string): boolean {
+  const c = toHsl(hex);
+  return Boolean(c && c.h >= 200 && c.h <= 230 && c.s < 0.5 && c.l >= 0.2 && c.l <= 0.8);
+}
+
+/** Mon co mau trung tinh. Quan jeans cung tinh la trung tinh vi phoi duoc voi hau het moi mau. */
+export function isNeutralItem(item: IClothingItem): boolean {
+  const hex = item.colors[0];
+  return isNeutralColor(hex) || (item.category === 'bottom' && isDenimBlue(hex));
+}
+
+/** Nhu colorRelation nhung xet theo mon (de ap dung luat quan jeans). */
+export function itemColorRelation(a: IClothingItem, b: IClothingItem): ColorRelation {
+  const rel = colorRelation(a.colors[0], b.colors[0]);
+  if (rel === 'unknown' || rel === 'neutral') return rel;
+  return isNeutralItem(a) || isNeutralItem(b) ? 'neutral' : rel;
+}
+
+const isSmallPiece = (item: IClothingItem) => item.category === 'bag' || item.category === 'accessory';
+
 /** Cac phong cach mac chung duoc voi nhau (bang doi xung). */
 const STYLE_COMPAT: Record<Style, Style[]> = {
   casual: ['streetwear', 'minimal', 'vintage', 'sporty'],
@@ -270,12 +291,12 @@ export function styleCompat(a: Style[], b: Style[]): number {
   return 25;
 }
 
-/** So nhom mau ruc khac nhau (cach nhau > 30 do) trong 1 bo. */
+/** So nhom mau ruc khac nhau (cach nhau > 30 do) tren cac mon chinh (bo qua tui, phu kien). */
 function countVividHues(items: IClothingItem[]): number {
   const hues: number[] = [];
   for (const item of items) {
     const c = toHsl(item.colors[0]);
-    if (!c || isNeutralColor(item.colors[0])) continue;
+    if (!c || isSmallPiece(item) || isNeutralItem(item)) continue;
     const near = hues.some((h) => Math.min(Math.abs(h - c.h), 360 - Math.abs(h - c.h)) <= 30);
     if (!near) hues.push(c.h);
   }
@@ -284,23 +305,26 @@ function countVividHues(items: IClothingItem[]): number {
 
 /**
  * Diem ca bo = 0.5 x diem thoi tiet/dip + 0.3 x hop mau + 0.2 x dong bo phong cach.
- * Hop mau va phong cach lay trung binh tren moi cap mon trong bo.
+ * Hop mau va phong cach lay trung binh co trong so tren moi cap mon: cap co tui/phu kien
+ * chi tinh nua trong so, tru khi cap do chua mon dang ghim (anchor).
  */
-export function scoreCombo(picks: ScoredItem[]): number {
+export function scoreCombo(picks: ScoredItem[], anchor?: ScoredItem): number {
   if (picks.length === 0) return 0;
   const avgItem = picks.reduce((s, p) => s + p.score, 0) / picks.length;
   if (picks.length === 1) return Math.round(avgItem);
 
-  let color = 0, style = 0, pairs = 0;
+  let color = 0, style = 0, weights = 0;
   for (let i = 0; i < picks.length; i++) {
     for (let j = i + 1; j < picks.length; j++) {
-      color += colorHarmony(picks[i].item.colors[0], picks[j].item.colors[0]);
-      style += styleCompat(picks[i].item.styles, picks[j].item.styles);
-      pairs++;
+      const a = picks[i], b = picks[j];
+      const weight = a === anchor || b === anchor || (!isSmallPiece(a.item) && !isSmallPiece(b.item)) ? 1 : 0.5;
+      color += weight * COLOR_RELATION_SCORE[itemColorRelation(a.item, b.item)];
+      style += weight * styleCompat(a.item.styles, b.item.styles);
+      weights += weight;
     }
   }
-  color /= pairs;
-  style /= pairs;
+  color /= weights;
+  style /= weights;
   // Tu 3 mau ruc tro len trong 1 bo de bi roi mat.
   if (countVividHues(picks.map((p) => p.item)) >= 3) color -= 15;
 
@@ -328,11 +352,11 @@ function anchorReasons(anchor: ScoredItem, picks: ScoredItem[], weather: Weather
   const reasons: string[] = [];
 
   for (const p of others) {
-    if (p.item.category === 'bag' || p.item.category === 'accessory') continue;
+    if (isSmallPiece(p.item)) continue;
     const name = capitalize(CATEGORY_NAMES_VI[p.item.category]);
-    const rel = colorRelation(p.item.colors[0], anchor.item.colors[0]);
+    const rel = itemColorRelation(p.item, anchor.item);
     if (rel === 'neutral') {
-      reasons.push(isNeutralColor(p.item.colors[0])
+      reasons.push(isNeutralItem(p.item)
         ? `${name} màu trung tính, dễ đi với ${anchorName} của bạn`
         : `${name} nổi bật trên nền ${anchorName} màu trung tính`);
     } else if (rel === 'analogous') {
@@ -418,7 +442,7 @@ export function buildAnchoredSuggestions(
   let combos = mains;
   for (const choices of extraSlots) combos = combos.flatMap((c) => choices.map((x) => [...c, x]));
   const ranked = combos
-    .map((picks) => ({ picks, score: scoreCombo(picks) }))
+    .map((picks) => ({ picks, score: scoreCombo(picks, anchorScored) }))
     .sort((a, b) => b.score - a.score);
 
   // Chon phuong an khac nhau: uu tien khac >= 2 mon, thieu thi chap nhan khac 1 mon.
