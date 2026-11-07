@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isNeutralColor, isNeutralItem, colorRelation, itemColorRelation, styleCompat, scoreCombo, buildAnchoredSuggestions,
+  isNeutralColor, isNeutralItem, colorRelation, itemColorRelation, styleCompat, scoreCombo, buildOutfitOptions,
 } from '../src/services/suggestion.service.ts';
 
 const weather = { city: 'Hanoi', temp: 27, feelsLike: 29, humidity: 70, condition: 'Clear', description: 'trời quang', icon: '01d', isRaining: false };
@@ -11,6 +11,7 @@ const item = (category, color, extra = {}) => ({
   styles: [], seasons: [], occasions: [], tempRange: { min: 15, max: 35 }, wearCount: 1, ...extra,
 });
 const ids = (option) => Object.values(option).filter((v) => v && typeof v === 'object' && v._id).map((v) => v._id);
+const buildAnchoredSuggestions = (anchor, items, w, occasion) => buildOutfitOptions(items, w, occasion, { anchor });
 
 test('neutral colors and color-wheel relations', () => {
   for (const hex of ['#000000', '#ffffff', '#808080', '#f5f5dc', '#d2b48c', '#1a2340']) assert.equal(isNeutralColor(hex), true, hex);

@@ -33,6 +33,11 @@ export const env = {
     }
     return process.env.GEMINI_API_KEY ?? '';
   },
+  /**
+   * Mac dinh dung alias de khong hong khi Google ngung 1 phien ban model.
+   * Chon ban lite vi chat can tra loi trong vai giay; gemini-flash-latest mat hon 30 giay.
+   */
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-flash-lite-latest',
 
   // ===== NEW: Forgot Password =====
   /** URL trang web (dung de tao link dat lai mat khau trong email). */

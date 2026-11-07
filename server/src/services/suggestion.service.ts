@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { IClothingItem } from '../models/ClothingItem.js';
-import { Category, Occasion, Season, Style } from '../types/index.js';
+import { Category, ColorGroup, Occasion, Season, Style } from '../types/index.js';
 import { WeatherInfo } from './weather.service.js';
 
 export interface ScoredItem {
@@ -17,6 +18,8 @@ export interface OutfitSuggestion {
   shoes?: IClothingItem;
   accessory?: IClothingItem;
   bag?: IClothingItem;
+  /** Dinh danh bo do, client gui lai de xao tron khong lap. */
+  key?: string;
   totalScore: number;
   reasons: string[];
 }
@@ -112,63 +115,6 @@ export function isLightColor(hex: string): boolean {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.65;
 }
 
-/**
- * Ghep 1 bo do hoan chinh: chon item diem cao nhat cho tung vi tri.
- * Neu vay lien than thang diem ca top+bottom thi dung vay.
- */
-export function buildSuggestion(
-  items: IClothingItem[],
-  weather: WeatherInfo,
-  occasion?: Occasion
-): OutfitSuggestion {
-  const scored = items.map((i) => scoreItem(i, weather, occasion));
-  const bestOf = (cat: Category): ScoredItem | undefined =>
-    scored
-      .filter((s) => s.item.category === cat)
-      .sort((a, b) => b.score - a.score)[0];
-
-  const top = bestOf('top');
-  const bottom = bestOf('bottom');
-  const dress = bestOf('dress');
-  const setItem = bestOf('set');
-  const shoes = bestOf('shoes');
-  const accessory = bestOf('accessory');
-
-  // Troi lanh (<20C) moi can ao khoac.
-  const outerwear = weather.temp < 20 ? bestOf('outerwear') : undefined;
-
-  const comboScore = (top?.score ?? 0) + (bottom?.score ?? 0);
-  const dressScore = dress ? dress.score * 2 : 0;
-  const setScore = setItem ? setItem.score * 2 : 0;
-
-  const useSet = Boolean(setItem && setScore > comboScore && setScore >= dressScore);
-  const useDress = Boolean(!useSet && dress && dressScore > comboScore);
-
-  const picked = [
-    useSet ? setItem : (useDress ? dress : top),
-    useSet || useDress ? undefined : bottom,
-    outerwear,
-    shoes,
-    accessory,
-  ].filter(Boolean) as ScoredItem[];
-
-  const reasons = weatherReasons(weather);
-
-  return {
-    top: useSet || useDress ? undefined : top?.item,
-    bottom: useSet || useDress ? undefined : bottom?.item,
-    dress: useDress ? dress?.item : undefined,
-    set: useSet ? setItem?.item : undefined,
-    outerwear: outerwear?.item,
-    shoes: shoes?.item,
-    accessory: accessory?.item,
-    totalScore: picked.length
-      ? Math.min(100, Math.max(0, Math.round(picked.reduce((s, p) => s + p.score, 0) / picked.length)))
-      : 0,
-    reasons,
-  };
-}
-
 /** Loi nhac chung theo thoi tiet, dung cho ca goi y thuong va goi y quanh 1 mon. */
 function weatherReasons(weather: WeatherInfo): string[] {
   const reasons: string[] = [];
@@ -180,7 +126,7 @@ function weatherReasons(weather: WeatherInfo): string[] {
 
 /* ================= Phoi quanh 1 mon (anchor) ================= */
 
-const CATEGORY_NAMES_VI: Record<Category, string> = {
+export const CATEGORY_NAMES_VI: Record<Category, string> = {
   top: 'áo',
   bottom: 'quần',
   outerwear: 'áo khoác',
@@ -191,7 +137,7 @@ const CATEGORY_NAMES_VI: Record<Category, string> = {
   accessory: 'phụ kiện',
 };
 
-const STYLE_NAMES_VI: Record<Style, string> = {
+export const STYLE_NAMES_VI: Record<Style, string> = {
   casual: 'thường ngày',
   formal: 'lịch sự',
   sporty: 'thể thao',
@@ -272,6 +218,42 @@ export function itemColorRelation(a: IClothingItem, b: IClothingItem): ColorRela
 
 const isSmallPiece = (item: IClothingItem) => item.category === 'bag' || item.category === 'accessory';
 
+const MAIN_PIECES: readonly Category[] = ['top', 'bottom', 'dress', 'set', 'outerwear'];
+const isMainPiece = (category: Category) => MAIN_PIECES.includes(category);
+
+export const COLOR_NAMES_VI: Record<ColorGroup, string> = {
+  neutral: 'trung tính',
+  red: 'đỏ',
+  orange: 'cam',
+  yellow: 'vàng',
+  green: 'xanh lá',
+  blue: 'xanh dương',
+  purple: 'tím',
+  pink: 'hồng',
+  brown: 'nâu',
+};
+
+/** Xep ma mau vao nhom de loc. Ma mau khong hop le -> null. */
+export function colorGroupOf(hex?: string): ColorGroup | null {
+  const c = toHsl(hex);
+  if (!c) return null;
+  if (isNeutralColor(hex)) return 'neutral';
+  const { h, l } = c;
+  if (h < 15 || h >= 345) return l > 0.75 ? 'pink' : 'red';
+  if (h < 45) return l < 0.4 ? 'brown' : 'orange';
+  if (h < 70) return 'yellow';
+  if (h < 170) return 'green';
+  if (h < 260) return 'blue';
+  if (h < 300) return 'purple';
+  return 'pink';
+}
+
+/** Xet mau chinh cua mon. Quan jeans khop ca nhom xanh duong lan trung tinh. */
+export function itemMatchesColor(item: IClothingItem, groups: ColorGroup[]): boolean {
+  const group = colorGroupOf(item.colors[0]);
+  return (group !== null && groups.includes(group)) || (groups.includes('neutral') && isNeutralItem(item));
+}
+
 /** Cac phong cach mac chung duoc voi nhau (bang doi xung). */
 const STYLE_COMPAT: Record<Style, Style[]> = {
   casual: ['streetwear', 'minimal', 'vintage', 'sporty'],
@@ -333,80 +315,152 @@ export function scoreCombo(picks: ScoredItem[], anchor?: ScoredItem): number {
 
 const CANDIDATES_PER_SLOT = 4;
 const OPTION_COUNT = 3;
+/** Xao tron: moi vi tri lay tu cac mon gan diem mon tot nhat, roi giu cac bo gan diem bo tot nhat. */
+const SHUFFLE_POOL_PER_SLOT = 8;
+const SHUFFLE_ITEM_MARGIN = 20;
+const SHUFFLE_COMBO_MARGIN = 10;
+/** Diem cong cho mon dung phong cach user yeu cau (phong cach la uu tien, khong loai han). */
+const STYLE_PREFERENCE_BONUS = 15;
 
-export interface AnchoredSuggestionResult {
+export interface SuggestionFilters {
+  seasons?: Season[];
+  /** Bo do phai co it nhat 1 mon chinh thuoc 1 trong cac nhom mau nay. */
+  colorGroups?: ColorGroup[];
+  styles?: Style[];
+}
+
+export interface ShuffleOptions {
+  /** key cac bo vua hien, tranh lap lai. */
+  seen?: string[];
+  rng?: () => number;
+}
+
+export interface BuildOutfitOptions {
+  /** Mon co dinh, luon nam trong bo do ke ca khi khong khop bo loc. */
+  anchor?: IClothingItem;
+  filters?: SuggestionFilters;
+  shuffle?: ShuffleOptions;
+}
+
+export interface OutfitOptionsResult {
   /** Toi da 3 phuong an, diem cao nhat truoc. */
   options: OutfitSuggestion[];
   /** Mon dang ghim lech nhiet do hom nay. */
   weatherWarning?: string;
+  /** Mua dang loc lech thoi tiet hom nay. */
+  seasonWarning?: string;
   /** Vi tri tu do chua co mon de ghep. */
   missing: string[];
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** Ly do cho 1 phuong an: mau tung mon so voi mon ghim, phong cach chung, thoi tiet. */
-function anchorReasons(anchor: ScoredItem, picks: ScoredItem[], weather: WeatherInfo): string[] {
-  const anchorName = CATEGORY_NAMES_VI[anchor.item.category];
-  const others = picks.filter((p) => p !== anchor);
+/** Ly do cho 1 phuong an: mau tung mon so voi mon lam moc, phong cach chung, thoi tiet. */
+function comboReasons(base: ScoredItem, picks: ScoredItem[], weather: WeatherInfo): string[] {
+  const baseName = CATEGORY_NAMES_VI[base.item.category];
+  const others = picks.filter((p) => p !== base);
   const reasons: string[] = [];
 
   for (const p of others) {
     if (isSmallPiece(p.item)) continue;
     const name = capitalize(CATEGORY_NAMES_VI[p.item.category]);
-    const rel = itemColorRelation(p.item, anchor.item);
+    const rel = itemColorRelation(p.item, base.item);
     if (rel === 'neutral') {
       reasons.push(isNeutralItem(p.item)
-        ? `${name} màu trung tính, dễ đi với ${anchorName} của bạn`
-        : `${name} nổi bật trên nền ${anchorName} màu trung tính`);
+        ? `${name} màu trung tính, dễ đi với ${baseName} của bạn`
+        : `${name} nổi bật trên nền ${baseName} màu trung tính`);
     } else if (rel === 'analogous') {
-      reasons.push(`${name} cùng tông màu với ${anchorName}, tạo cảm giác hài hoà`);
+      reasons.push(`${name} cùng tông màu với ${baseName}, tạo cảm giác hài hoà`);
     } else if (rel === 'complementary') {
-      reasons.push(`${name} có màu tương phản với ${anchorName}, tạo điểm nhấn`);
+      reasons.push(`${name} có màu tương phản với ${baseName}, tạo điểm nhấn`);
     } else if (rel === 'clash') {
-      reasons.push(`${name} và ${anchorName} hơi chọi màu, có thể đổi sang phương án khác`);
+      reasons.push(`${name} và ${baseName} hơi chọi màu, có thể đổi sang phương án khác`);
     }
   }
 
-  const shared = anchor.item.styles.find((st) =>
+  const shared = base.item.styles.find((st) =>
     others.filter((o) => o.item.styles.includes(st)).length >= Math.max(1, Math.ceil(others.length / 2))
   );
   if (shared) reasons.push(`Cùng phong cách ${STYLE_NAMES_VI[shared]}`);
 
-  const { min, max } = anchor.item.tempRange;
+  const { min, max } = base.item.tempRange;
   if (weather.temp >= min && weather.temp <= max) reasons.push(`Phù hợp nhiệt độ ${weather.temp}°C`);
 
   return [...reasons, ...weatherReasons(weather)];
 }
 
+function shuffled<T>(list: T[], rng: () => number): T[] {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** Dinh danh 1 bo do, khong phu thuoc thu tu mon. */
+function comboKey(picks: ScoredItem[]): string {
+  const ids = picks.map((p) => String(p.item._id)).sort().join(',');
+  return createHash('sha1').update(ids).digest('hex').slice(0, 10);
+}
+
+function seasonMismatch(seasons: Season[], weather: WeatherInfo): string | undefined {
+  const fitting: Season[] = weather.temp < 18 ? ['winter'] : weather.temp <= 25 ? ['spring', 'autumn'] : ['summer'];
+  if (seasons.length === 0 || seasons.some((s) => fitting.includes(s))) return undefined;
+  const names = seasons.map((s) => SEASON_NAMES_VI[s]).join(', ');
+  return `Bạn đang lọc đồ ${names}, nhưng hôm nay ${weather.temp}°C nên có thể chưa hợp thời tiết.`;
+}
+
 /**
- * Ghep bo do quanh 1 mon co dinh (anchor): moi vi tri con lai lay vai ung vien diem cao,
- * thu moi to hop, cham diem ca bo (scoreCombo) roi tra ve cac phuong an khac nhau.
+ * Ghep bo do: moi vi tri lay vai ung vien diem cao, thu moi to hop, cham diem ca bo (scoreCombo)
+ * roi tra ve cac phuong an khac nhau. Co anchor thi moi bo deu chua mon do.
+ * Xao tron: boc ngau nhien ung vien va phuong an, nhung chi trong nhom diem cao.
  */
-export function buildAnchoredSuggestions(
-  anchor: IClothingItem,
+export function buildOutfitOptions(
   items: IClothingItem[],
   weather: WeatherInfo,
-  occasion?: Occasion
-): AnchoredSuggestionResult {
-  const anchorId = String(anchor._id);
-  const anchorScored = scoreItem(anchor, weather, occasion);
-  const scored = items
-    .filter((i) => String(i._id) !== anchorId)
-    .map((i) => scoreItem(i, weather, occasion));
-  const topOf = (cat: Category, n = CANDIDATES_PER_SLOT) =>
-    scored.filter((s) => s.item.category === cat).sort((a, b) => b.score - a.score).slice(0, n);
+  occasion?: Occasion,
+  { anchor, filters = {}, shuffle }: BuildOutfitOptions = {}
+): OutfitOptionsResult {
+  const { seasons = [], colorGroups = [], styles = [] } = filters;
+  const rng = shuffle ? shuffle.rng ?? Math.random : undefined;
+  const scoreOf = (item: IClothingItem): ScoredItem => {
+    const scored = scoreItem(item, weather, occasion);
+    return styles.some((st) => item.styles.includes(st))
+      ? { ...scored, score: Math.min(100, scored.score + STYLE_PREFERENCE_BONUS) }
+      : scored;
+  };
+  const inSeason = (item: IClothingItem) =>
+    seasons.length === 0 || item.seasons.length === 0 || item.seasons.some((s) => seasons.includes(s));
 
-  const cat = anchor.category;
+  const anchorId = anchor && String(anchor._id);
+  const anchorScored = anchor && scoreOf(anchor);
+  const scored = items.filter((i) => String(i._id) !== anchorId && inSeason(i)).map(scoreOf);
+
+  const pickFrom = (list: ScoredItem[], n: number) => (rng ? shuffled(list, rng) : list).slice(0, n);
+  const topOf = (cat: Category, n = CANDIDATES_PER_SLOT) => {
+    const all = scored.filter((s) => s.item.category === cat).sort((a, b) => b.score - a.score);
+    const pool = rng
+      ? all.filter((s) => s.score >= all[0].score - SHUFFLE_ITEM_MARGIN).slice(0, SHUFFLE_POOL_PER_SLOT)
+      : all;
+    if (colorGroups.length === 0 || !isMainPiece(cat)) return pickFrom(pool, n);
+    // Mon dung mau co the diem thap -> giu cho rieng, neu khong se bi loai truoc khi ghep bo.
+    const colored = pickFrom(all.filter((s) => itemMatchesColor(s.item, colorGroups)), n - 1);
+    return [...colored, ...pickFrom(pool.filter((s) => !colored.includes(s)), n - colored.length)];
+  };
+
+  const cat = anchor?.category;
   const missing: string[] = [];
+  const lack = (what: string) =>
+    seasons.length > 0 ? `Không có ${what} hợp mùa đã chọn` : `Tủ chưa có ${what} để phối cùng`;
 
   // Phan chinh: ao + quan, hoac vay / do bo.
   let mains: ScoredItem[][];
-  if (cat === 'dress' || cat === 'set') {
+  if (anchorScored && (cat === 'dress' || cat === 'set')) {
     mains = [[anchorScored]];
-  } else if (cat === 'top' || cat === 'bottom') {
+  } else if (anchorScored && (cat === 'top' || cat === 'bottom')) {
     const partners = topOf(cat === 'top' ? 'bottom' : 'top');
-    if (partners.length === 0) missing.push(`Tủ chưa có ${cat === 'top' ? 'quần' : 'áo'} để phối cùng`);
+    if (partners.length === 0) missing.push(lack(cat === 'top' ? 'quần' : 'áo'));
     mains = partners.length ? partners.map((p) => [anchorScored, p]) : [[anchorScored]];
   } else {
     const tops = topOf('top'), bottoms = topOf('bottom');
@@ -416,7 +470,7 @@ export function buildAnchoredSuggestions(
       ...topOf('set', 3).map((s) => [s]),
     ];
     if (mains.length === 0) {
-      missing.push('Tủ chưa có đủ áo + quần hoặc váy để phối cùng');
+      missing.push(lack('đủ áo + quần hoặc váy'));
       mains = [...tops, ...bottoms].map((p) => [p]);
       if (mains.length === 0) mains = [[]];
     }
@@ -424,26 +478,45 @@ export function buildAnchoredSuggestions(
 
   // Cac vi tri phu. Ao khoac chi can khi lanh/mua, tru khi chinh mon ghim la ao khoac.
   const extraSlots: ScoredItem[][] = [];
-  if (cat === 'outerwear') extraSlots.push([anchorScored]);
+  if (anchorScored && cat === 'outerwear') extraSlots.push([anchorScored]);
   else if (weather.temp < 20 || weather.isRaining) {
     const outer = topOf('outerwear');
     if (outer.length) extraSlots.push(outer);
   }
   for (const slot of ['shoes', 'bag', 'accessory'] as const) {
-    if (cat === slot) {
+    if (anchorScored && cat === slot) {
       extraSlots.push([anchorScored]);
       continue;
     }
     const choices = topOf(slot);
     if (choices.length) extraSlots.push(choices);
-    else if (slot === 'shoes') missing.push('Tủ chưa có giày để phối cùng');
+    else if (slot === 'shoes') missing.push(lack('giày'));
   }
 
   let combos = mains;
   for (const choices of extraSlots) combos = combos.flatMap((c) => choices.map((x) => [...c, x]));
-  const ranked = combos
+  let ranked = combos
     .map((picks) => ({ picks, score: scoreCombo(picks, anchorScored) }))
     .sort((a, b) => b.score - a.score);
+
+  if (colorGroups.length > 0) {
+    const matched = ranked.filter(({ picks }) =>
+      picks.some((p) => isMainPiece(p.item.category) && itemMatchesColor(p.item, colorGroups))
+    );
+    if (matched.length > 0) ranked = matched;
+    else {
+      const names = colorGroups.map((g) => COLOR_NAMES_VI[g]).join(', ');
+      missing.push(`Chưa có món chính màu ${names} để phối, đây là bộ gần nhất`);
+    }
+  }
+
+  if (rng) {
+    const best = ranked[0]?.score ?? 0;
+    const near = ranked.filter((r) => r.score >= best - SHUFFLE_COMBO_MARGIN);
+    const seen = new Set(shuffle?.seen ?? []);
+    const fresh = seen.size > 0 ? near.filter((r) => !seen.has(comboKey(r.picks))) : near;
+    ranked = shuffled(fresh.length > 0 ? fresh : near, rng);
+  }
 
   // Chon phuong an khac nhau: uu tien khac >= 2 mon, thieu thi chap nhan khac 1 mon.
   const ids = (picks: ScoredItem[]) => new Set(picks.map((p) => String(p.item._id)));
@@ -462,16 +535,24 @@ export function buildAnchoredSuggestions(
   const options: OutfitSuggestion[] = chosen.map(({ picks, score }) => {
     const slots: Partial<Record<Category, IClothingItem>> = {};
     for (const p of picks) slots[p.item.category] = p.item;
-    return { ...slots, totalScore: score, reasons: anchorReasons(anchorScored, picks, weather) };
+    const base = anchorScored ?? picks[0];
+    return {
+      ...slots,
+      key: comboKey(picks),
+      totalScore: score,
+      reasons: base ? comboReasons(base, picks, weather) : weatherReasons(weather),
+    };
   });
 
-  const { min, max } = anchor.tempRange;
   let weatherWarning: string | undefined;
-  if (weather.temp > max + 3) {
-    weatherWarning = `Món này hợp ${min}–${max}°C, hôm nay ${weather.temp}°C, nên để dành khi trời mát hơn.`;
-  } else if (weather.temp < min - 3) {
-    weatherWarning = `Món này hợp ${min}–${max}°C, hôm nay chỉ ${weather.temp}°C, nhớ mặc thêm lớp giữ ấm.`;
+  if (anchor) {
+    const { min, max } = anchor.tempRange;
+    if (weather.temp > max + 3) {
+      weatherWarning = `Món này hợp ${min}–${max}°C, hôm nay ${weather.temp}°C, nên để dành khi trời mát hơn.`;
+    } else if (weather.temp < min - 3) {
+      weatherWarning = `Món này hợp ${min}–${max}°C, hôm nay chỉ ${weather.temp}°C, nhớ mặc thêm lớp giữ ấm.`;
+    }
   }
 
-  return { options, weatherWarning, missing };
+  return { options, weatherWarning, seasonWarning: seasonMismatch(seasons, weather), missing };
 }

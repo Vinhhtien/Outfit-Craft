@@ -1,7 +1,7 @@
 import type { AxiosProgressEvent } from 'axios';
 import { api } from './api';
 import type {
-  ApiResponse, ClothingItem, Outfit, Weather, Suggestion, SuggestionAnchor,
+  ApiResponse, ClothingItem, Outfit, Weather, Suggestion, SuggestionAnchor, StylistChatResult,
   ScheduleEntry, User, Category, Occasion,
   BodyProfile, MannequinProfile, // NEW: Body Profile
   ItemFit, // NEW: Ghi nho fit
@@ -281,12 +281,33 @@ export const suggestionApi = {
   weather: (city?: string) =>
     api.get<ApiResponse<Weather>>('/suggestions/weather', { params: { city } }).then((r) => r.data.data),
 
-  /** anchor: id mon co dinh -> tra them `options` (toi da 3 phuong an) va `anchor`. */
-  get: (params: { city?: string; occasion?: Occasion; anchor?: string } = {}, signal?: AbortSignal) =>
+  /**
+   * anchor: id mon co dinh. seasons, colorGroups: danh sach cach nhau boi dau phay.
+   * shuffle: 1 -> boc ngau nhien trong nhom diem cao; seen: key cac bo vua hien.
+   */
+  get: (
+    params: {
+      city?: string; occasion?: Occasion; anchor?: string;
+      seasons?: string; colorGroups?: string; shuffle?: 1; seen?: string;
+    } = {},
+    signal?: AbortSignal
+  ) =>
     api.get<ApiResponse<{
       weather: Weather; suggestion: Suggestion; advice: string; adviceSource: 'ai' | 'rule';
-      options?: Suggestion[]; anchor?: SuggestionAnchor;
+      options?: Suggestion[]; anchor?: SuggestionAnchor; seasonWarning?: string; missing?: string[];
     }>>('/suggestions', { params, signal, timeout: 45000 }).then((r) => r.data.data),
+
+  chat: (
+    body: {
+      message: string;
+      history: { role: 'user' | 'stylist'; text: string }[];
+      city?: string;
+      occasion?: Occasion;
+      seen: string[];
+    },
+    signal?: AbortSignal
+  ) =>
+    api.post<ApiResponse<StylistChatResult>>('/suggestions/chat', body, { signal, timeout: 45000 }).then((r) => r.data.data),
 
   ranked: (params: { city?: string; occasion?: Occasion; category?: Category } = {}) =>
     api.get<ApiResponse<{

@@ -36,6 +36,12 @@ export type Style = (typeof STYLES)[number];
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'] as const;
 export type Season = (typeof SEASONS)[number];
 
+/** Nhom mau de loc goi y, tinh tu ma hex (xem colorGroupOf). */
+export const COLOR_GROUPS = [
+  'neutral', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'brown',
+] as const;
+export type ColorGroup = (typeof COLOR_GROUPS)[number];
+
 /** Dai nhiet do (C) phu hop cho tung item - dung cho goi y theo thoi tiet. */
 export interface TempRange {
   min: number;

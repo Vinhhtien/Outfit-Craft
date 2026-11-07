@@ -95,6 +95,7 @@ cp .env.example .env
 | `CLOUDINARY_*` | ✅ | [cloudinary.com](https://cloudinary.com) → Dashboard (free 25GB) |
 | `OPENWEATHER_API_KEY` | ⬜ | [openweathermap.org/api](https://openweathermap.org/api) (free 1000 req/ngày)<br>*Không có → tính năng Gợi ý báo lỗi* |
 | `GEMINI_API_KEY` | ⬜ | [aistudio.google.com](https://aistudio.google.com/apikey) (free tier)<br>*Không có → tự động dùng gợi ý rule-based* |
+| `GEMINI_MODEL` | ⬜ | Tên model Gemini. Mặc định `gemini-flash-lite-latest` |
 
 **`client/.env.local`**:
 

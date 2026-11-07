@@ -1,11 +1,11 @@
 'use client';
 import { useCategoryLabels } from '@/store/categoryStore';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Sparkles, CloudRain, Thermometer, Droplets, RefreshCw, Bot, ListOrdered, FolderPlus,
-  CalendarCheck, Shirt, Pin, X, ChevronLeft, ChevronRight, Clock, AlertTriangle,
+  CalendarCheck, Shirt, Pin, X, ChevronLeft, ChevronRight, Clock, AlertTriangle, Shuffle,
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
@@ -18,9 +18,19 @@ import { getErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { RankedItemsView } from '@/components/suggest/RankedItemsView';
 import { SaveSuggestedOutfitModal } from '@/components/suggest/SaveSuggestedOutfitModal';
+import { StylistChat, type StylistOutfit } from '@/components/suggest/StylistChat';
 import { ItemDetailModal } from '@/components/wardrobe/ItemDetailModal';
-import { OCCASIONS, OCCASION_LABELS, CATEGORY_Z_INDEX } from '@/types';
-import type { ClothingItem, Occasion, Season } from '@/types';
+import {
+  COLOR_GROUPS, COLOR_GROUP_LABELS, COLOR_GROUP_SWATCHES, OCCASIONS, OCCASION_LABELS, SEASONS, SEASON_LABELS,
+  CATEGORY_Z_INDEX,
+} from '@/types';
+import type { ClothingItem, ColorGroup, Occasion, Season } from '@/types';
+
+/** Gui lai toi da tung nay bo vua hien khi xao tron (khop gioi han o server). */
+const MAX_SEEN_KEYS = 30;
+
+const toggled = <T,>(list: T[], value: T) =>
+  list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 
 function getDefaultSeason(temp?: number): Season[] {
   if (temp === undefined) return ['summer'];
@@ -36,9 +46,12 @@ export default function SuggestPage() {
   /** null = chua go gi -> dung thanh pho mac dinh trong ho so. */
   const [cityInput, setCity] = useState<string | null>(null);
   const [occasion, setOccasion] = useState<Occasion>('daily');
-  const [viewMode, setViewMode] = useState<'outfit' | 'ranked'>('outfit');
+  const [viewMode, setViewMode] = useState<'outfit' | 'ranked' | 'chat'>('outfit');
+  const [seasonFilter, setSeasonFilter] = useState<Season[]>([]);
+  const [colorFilter, setColorFilter] = useState<ColorGroup[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [chatOutfitToSave, setChatOutfitToSave] = useState<StylistOutfit | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastVariant, setToastVariant] = useState<'success' | 'error'>('success');
   const [isScheduling, setIsScheduling] = useState(false);
@@ -64,11 +77,52 @@ export default function SuggestPage() {
   };
 
   const city = cityInput ?? user?.defaultCity ?? '';
+  /** Bat ngay truoc lan tai ke tiep de lan do la xao tron, tu tat sau khi dung. */
+  const shuffleNext = useRef(false);
+  const seenKeys = useRef<string[]>([]);
   const loader = useCallback(
-    (signal: AbortSignal) => suggestionApi.get({ city: city.trim() || undefined, occasion, anchor: anchorId ?? undefined }, signal),
-    [city, occasion, anchorId]
+    async (signal: AbortSignal) => {
+      const shuffle = shuffleNext.current;
+      shuffleNext.current = false;
+      const result = await suggestionApi.get(
+        {
+          city: city.trim() || undefined,
+          occasion,
+          anchor: anchorId ?? undefined,
+          seasons: seasonFilter.join(',') || undefined,
+          colorGroups: colorFilter.join(',') || undefined,
+          shuffle: shuffle ? 1 : undefined,
+          seen: (shuffle && seenKeys.current.join(',')) || undefined,
+        },
+        signal
+      );
+      const keys = (result.options ?? []).flatMap((option) => (option.key ? [option.key] : []));
+      seenKeys.current = [...new Set([...seenKeys.current, ...keys])].slice(-MAX_SEEN_KEYS);
+      return result;
+    },
+    [city, occasion, anchorId, seasonFilter, colorFilter]
   );
   const { data, loading, error, reload: fetchSuggestion } = useResource(loader, 500);
+
+  const handleShuffle = () => {
+    shuffleNext.current = true;
+    setOptionIndex(0);
+    void fetchSuggestion();
+  };
+
+  const toggleSeason = (season: Season) => {
+    setSeasonFilter((list) => toggled(list, season));
+    setOptionIndex(0);
+  };
+  const toggleColor = (group: ColorGroup) => {
+    setColorFilter((list) => toggled(list, group));
+    setOptionIndex(0);
+  };
+  const clearFilters = () => {
+    setSeasonFilter([]);
+    setColorFilter([]);
+    setOptionIndex(0);
+  };
 
   const options = data ? data.options ?? [data.suggestion] : [];
   const currentIndex = Math.min(optionIndex, Math.max(0, options.length - 1));
@@ -189,17 +243,19 @@ export default function SuggestPage() {
         <ScallopBanner compact innerClassName="max-w-6xl items-center justify-between px-6 py-3.5">
           <div>
             <h1 className="font-serif-display text-2xl font-normal uppercase tracking-wider text-[#1F453E] sm:text-3xl">
-              {viewMode === 'ranked' ? 'Bảng điểm món đồ' : 'Gợi ý trang phục'}
+              {viewMode === 'ranked' ? 'Bảng điểm món đồ' : viewMode === 'chat' ? 'Stylist AI' : 'Gợi ý trang phục'}
             </h1>
             <p className="mt-0.5 text-xs font-medium text-[#2C4C45] sm:text-sm">
               {viewMode === 'ranked'
                 ? 'Độ phù hợp từng trang phục theo thời tiết và dịp mặc'
-                : 'Dựa trên thời tiết hiện tại và tủ đồ của bạn.'}
+                : viewMode === 'chat'
+                  ? 'Trò chuyện để chọn đồ từ chính tủ của bạn.'
+                  : 'Dựa trên thời tiết hiện tại và tủ đồ của bạn.'}
             </p>
           </div>
 
           {/* View mode switcher */}
-          <div className="flex items-center rounded-full border border-[#1F453E]/20 bg-white/80 p-1 shadow-2xs backdrop-blur-sm">
+          <div className="flex flex-wrap items-center rounded-2xl border border-[#1F453E]/20 bg-white/80 p-1 shadow-2xs backdrop-blur-sm sm:rounded-full">
             <button
               type="button"
               onClick={() => setViewMode('outfit')}
@@ -221,6 +277,17 @@ export default function SuggestPage() {
               }`}
             >
               <ListOrdered size={13} /> Danh sách chấm điểm
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('chat')}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                viewMode === 'chat'
+                  ? 'bg-[#1F453E] text-white shadow-xs'
+                  : 'text-[#1F453E] hover:bg-[#E2ECC8]/60'
+              }`}
+            >
+              <Bot size={13} /> Hỏi stylist
             </button>
           </div>
         </ScallopBanner>
@@ -250,6 +317,17 @@ export default function SuggestPage() {
                 )}
                 <RefreshCw size={14} /> Làm mới
               </button>
+              {viewMode === 'outfit' && (
+                <button
+                  type="button"
+                  onClick={handleShuffle}
+                  disabled={loading}
+                  title="Đổi sang bộ khác trong các bộ điểm cao"
+                  className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-white px-6 py-2 text-xs font-bold uppercase tracking-wider text-[#1F453E] shadow-xs transition-all hover:bg-[#E2ECC8]/60 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Shuffle size={14} /> Xáo trộn
+                </button>
+              )}
             </div>
 
             <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-[#E2ECC8]/80 pt-3.5">
@@ -259,9 +337,56 @@ export default function SuggestPage() {
                 </OccasionChip>
               ))}
             </div>
+
+            {viewMode === 'outfit' && (
+              <div className="mt-3.5 space-y-2.5 border-t border-[#E2ECC8]/80 pt-3.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-10 text-xs font-semibold text-[#1F453E]">Mùa</span>
+                  {SEASONS.map((s) => (
+                    <OccasionChip key={s} active={seasonFilter.includes(s)} onClick={() => toggleSeason(s)}>
+                      {SEASON_LABELS[s]}
+                    </OccasionChip>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-10 text-xs font-semibold text-[#1F453E]">Màu</span>
+                  {COLOR_GROUPS.map((g) => (
+                    <OccasionChip key={g} active={colorFilter.includes(g)} onClick={() => toggleColor(g)}>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          aria-hidden
+                          className="h-2.5 w-2.5 rounded-full border border-black/10"
+                          style={{ backgroundColor: COLOR_GROUP_SWATCHES[g] }}
+                        />
+                        {COLOR_GROUP_LABELS[g]}
+                      </span>
+                    </OccasionChip>
+                  ))}
+                  {(seasonFilter.length > 0 || colorFilter.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-xs font-semibold text-[#1F453E] underline-offset-2 hover:underline"
+                    >
+                      <X size={12} /> Bỏ lọc
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          {viewMode === 'ranked' ? (
+          {/* Luon giu trong cay de doi tab khong mat cuoc tro chuyen. */}
+          <div className={viewMode === 'chat' ? '' : 'hidden'}>
+            <StylistChat
+              city={city}
+              occasion={occasion}
+              onOpenItem={(id) => setSelectedItemId(id)}
+              onSaveOutfit={setChatOutfitToSave}
+            />
+          </div>
+
+          {viewMode === 'chat' ? null : viewMode === 'ranked' ? (
             <RankedItemsView
               city={city}
               occasion={occasion}
@@ -312,6 +437,18 @@ export default function SuggestPage() {
                   </button>
                 </div>
               )}
+
+              {/* Khi dang ghim mon, viec thieu do da hien trong the mon ghim o tren. */}
+              {data && (data.seasonWarning || (!anchor && data.missing?.length)) ? (
+                <div className="mb-4 space-y-1 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800">
+                  {data.seasonWarning && (
+                    <p className="flex items-start gap-1.5">
+                      <AlertTriangle size={13} className="mt-px shrink-0" /> {data.seasonWarning}
+                    </p>
+                  )}
+                  {!anchor && data.missing?.map((m) => <p key={m}>• {m}</p>)}
+                </div>
+              ) : null}
 
               {error && <ErrorState message={error} onRetry={() => void fetchSuggestion()} busy={loading} />}
               {error && data && <p className="mb-3 text-xs text-[#52665F]">Đang hiển thị dữ liệu của lần tải thành công gần nhất.</p>}
@@ -510,6 +647,20 @@ export default function SuggestPage() {
           weather={data.weather}
           onSaved={(outfitId) => {
             setSavedOutfit({ key: picksKey, id: outfitId });
+            setToastVariant('success');
+            setToastMessage('Đã lưu bộ đồ vào danh sách của bạn!');
+          }}
+        />
+      )}
+
+      {chatOutfitToSave && (
+        <SaveSuggestedOutfitModal
+          open
+          onClose={() => setChatOutfitToSave(null)}
+          items={chatOutfitToSave.items}
+          occasion={chatOutfitToSave.occasion}
+          weather={chatOutfitToSave.weather}
+          onSaved={() => {
             setToastVariant('success');
             setToastMessage('Đã lưu bộ đồ vào danh sách của bạn!');
           }}

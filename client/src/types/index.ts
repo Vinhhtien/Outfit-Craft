@@ -34,6 +34,22 @@ export const SEASON_LABELS: Record<Season, string> = {
   spring: 'Xuân', summer: 'Hè', autumn: 'Thu', winter: 'Đông',
 };
 
+export const COLOR_GROUPS = [
+  'neutral', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'brown',
+] as const;
+export type ColorGroup = (typeof COLOR_GROUPS)[number];
+
+export const COLOR_GROUP_LABELS: Record<ColorGroup, string> = {
+  neutral: 'Trung tính', red: 'Đỏ', orange: 'Cam', yellow: 'Vàng', green: 'Xanh lá',
+  blue: 'Xanh dương', purple: 'Tím', pink: 'Hồng', brown: 'Nâu',
+};
+
+/** Mau cham tron tren nut loc. */
+export const COLOR_GROUP_SWATCHES: Record<ColorGroup, string> = {
+  neutral: '#d6d3cb', red: '#d64545', orange: '#ef8f3a', yellow: '#f2c94c', green: '#4f9d69',
+  blue: '#4a7fc1', purple: '#8e6bbf', pink: '#f2a7c3', brown: '#8b5e3c',
+};
+
 export const OCCASIONS = [
   'daily', 'work', 'school', 'date', 'party', 'sport', 'travel',
 ] as const;
@@ -285,8 +301,20 @@ export interface Suggestion {
   shoes?: ClothingItem;
   bag?: ClothingItem;
   accessory?: ClothingItem;
+  /** Dinh danh bo do, gui lai de xao tron khong lap. */
+  key?: string;
   totalScore: number;
   reasons: string[];
+}
+
+/** Ket qua 1 luot chat voi stylist. Hoi dap thuong thi khong co suggestion. */
+export interface StylistChatResult {
+  reply: string;
+  source: 'ai' | 'rule';
+  weather: Weather;
+  suggestion?: Suggestion;
+  occasion?: Occasion;
+  notes?: string[];
 }
 
 /** Mon dang ghim khi goi y "Phoi voi mon nay". */
