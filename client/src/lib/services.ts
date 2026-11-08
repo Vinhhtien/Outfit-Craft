@@ -80,7 +80,7 @@ export interface ItemFilters {
 export type UpdateItemPayload = Partial<
   Pick<
     ClothingItem,
-    'name' | 'category' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes' | 'purchasePrice'
+    'name' | 'category' | 'kind' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes' | 'purchasePrice'
   >
 >;
 // ===== END NEW =====

@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOutfitOptions, colorGroupOf, itemMatchesColor } from '../src/services/suggestion.service.ts';
-import { colorsFromXanh, parseStylistIntent } from '../src/services/stylist.service.ts';
+import { buildOutfitOptions, colorGroupOf, itemMatchesColor, kindLabel } from '../src/services/suggestion.service.ts';
+import {
+  colorsFromXanh, describeWardrobeItem, mergeStylistRequest, parseStylistIntent, weatherForRequest,
+} from '../src/services/stylist.service.ts';
+import { parseItemKinds } from '../src/services/itemKind.service.ts';
+import { parseItemTags } from '../src/services/autoTag.service.ts';
 
 const weather = { city: 'Hanoi', temp: 27, feelsLike: 29, humidity: 70, condition: 'Clear', description: 'trời quang', icon: '01d', isRaining: false };
 let seq = 0;
@@ -156,19 +160,176 @@ test('shuffle keeps the pinned item and the color filter', () => {
   }
 });
 
+test('an excluded item is never picked and the note says why the slot is empty', () => {
+  const top = item('top', '#ffffff');
+  const skirt = item('bottom', '#808080');
+  const jeans = item('bottom', '#000000');
+  for (let seed = 1; seed <= 10; seed++) {
+    const { options } = buildOutfitOptions([top, skirt, jeans], weather, undefined, {
+      exclude: [skirt._id], shuffle: { rng: seededRng(seed) },
+    });
+    for (const option of options) assert.ok(!ids(option).includes(skirt._id));
+  }
+  const { missing } = buildOutfitOptions([top, skirt], weather, undefined, { exclude: [skirt._id] });
+  assert.ok(missing.some((m) => m.includes('Ngoài món bạn đã bỏ')), missing.join(' | '));
+});
+
+test('requested items are always in the outfit, even when they score low', () => {
+  const tees = Array.from({ length: 5 }, () => item('top', '#ffffff', { occasions: ['work'] }));
+  const sweaters = [
+    item('top', '#ffc0cb', { name: 'Áo len hồng', tempRange: { min: 5, max: 20 } }),
+    item('top', '#808080', { name: 'Áo len xám', tempRange: { min: 5, max: 20 } }),
+  ];
+  const dress = item('dress', '#000000', { occasions: ['work'] });
+  const bottom = item('bottom', '#000000');
+  const wardrobe = [...tees, ...sweaters, dress, bottom];
+  const include = sweaters.map((s) => s._id);
+
+  const plain = buildOutfitOptions(wardrobe, weather, 'work', { include });
+  assert.ok(include.includes(plain.pinned._id));
+  assert.match(plain.weatherWarning, /27°C/);
+  for (const option of plain.options) assert.ok(include.includes(option.top?._id));
+
+  for (let seed = 1; seed <= 10; seed++) {
+    const { options } = buildOutfitOptions(wardrobe, weather, 'work', { include, shuffle: { rng: seededRng(seed) } });
+    for (const option of options) assert.ok(include.includes(option.top?._id));
+  }
+});
+
+test('asking for a different outfit changes the main pieces, not just one of them', () => {
+  const tops = [item('top', '#ffffff'), item('top', '#808080'), item('top', '#000000')];
+  const bottoms = [item('bottom', '#000000'), item('bottom', '#c0c0c0', { tempRange: { min: 15, max: 30 } })];
+  const wardrobe = [...tops, ...bottoms];
+  const shown = buildOutfitOptions(wardrobe, weather).options[0];
+  const avoid = ids(shown);
+  for (let seed = 1; seed <= 20; seed++) {
+    const next = buildOutfitOptions(wardrobe, weather, undefined, {
+      shuffle: { rng: seededRng(seed), seen: [shown.key], avoid },
+    }).options[0];
+    assert.ok(!ids(next).some((id) => avoid.includes(id)), `seed ${seed} van lap mon cu`);
+  }
+});
+
+test('a follow-up keeps the earlier conditions and only overrides what the user changed', () => {
+  const empty = { seasons: [], colorGroups: [], styles: [], includeItems: [] };
+  const winter = { ...empty, seasons: ['winter'], temperature: 18, occasion: 'work' };
+
+  // "con bo nao khac ko": khong noi gi moi -> giu het.
+  const same = mergeStylistRequest(winter, empty, false);
+  assert.deepEqual(same.request, { ...winter });
+  assert.deepEqual(same.kept, ['dịp đi làm', 'mùa đông', 'khoảng 18°C']);
+
+  // Chi doi mau: giu mua + nhiet do, them mau.
+  const red = mergeStylistRequest(winter, { ...empty, colorGroups: ['red'] }, false);
+  assert.deepEqual(red.request.seasons, ['winter']);
+  assert.equal(red.request.temperature, 18);
+  assert.deepEqual(red.request.colorGroups, ['red']);
+
+  // Noi nhiet do moi thi dung nhiet do moi.
+  assert.equal(mergeStylistRequest(winter, { ...empty, temperature: 10 }, false).request.temperature, 10);
+
+  // Yeu cau moi hoan toan hoac chua co yeu cau truoc: khong giu gi.
+  assert.deepEqual(mergeStylistRequest(winter, empty, true), { request: empty, kept: [] });
+  assert.deepEqual(mergeStylistRequest(null, empty, false), { request: empty, kept: [] });
+});
+
+test('a requested temperature replaces today\'s weather without hiding the real one', () => {
+  const asked = weatherForRequest(weather, 18);
+  assert.equal(asked.temp, 18);
+  assert.equal(asked.city, 'Hanoi');
+  assert.match(asked.description, /thực tế hôm nay 27°C/);
+  assert.equal(weatherForRequest(weather, undefined), weather);
+
+  // Ao am thang khi chon do cho 18 do, du hom nay 27 do.
+  const warmTop = item('top', '#808080', { tempRange: { min: 5, max: 20 } });
+  const tee = item('top', '#ffffff', { tempRange: { min: 22, max: 40 } });
+  const bottom = item('bottom', '#000000');
+  assert.equal(buildOutfitOptions([warmTop, tee, bottom], weather).options[0].top._id, tee._id);
+  assert.equal(buildOutfitOptions([warmTop, tee, bottom], asked).options[0].top._id, warmTop._id);
+});
+
+test('at 20°C a sweater and jeans beat a tank top and shorts, even with the same category defaults', () => {
+  const cool = { ...weather, temp: 20 };
+  const defaults = (category) => ({ tempRange: category === 'top' ? { min: 18, max: 35 } : { min: 15, max: 35 } });
+  const tank = item('top', '#ffffff', { ...defaults('top'), kind: 'tank', wearCount: 0 });
+  const tee = item('top', '#5bc0de', { ...defaults('top'), kind: 'tshirt' });
+  const sweater = item('top', '#c0392b', { ...defaults('top'), kind: 'sweater' });
+  const shorts = item('bottom', '#808080', { ...defaults('bottom'), kind: 'shorts', wearCount: 0 });
+  const jeans = item('bottom', '#000000', { ...defaults('bottom'), kind: 'jeans' });
+
+  const { options, weatherFit } = buildOutfitOptions([tank, tee, sweater, shorts, jeans], cool);
+  assert.equal(options[0].top._id, sweater._id);
+  assert.equal(options[0].bottom._id, jeans._id);
+  assert.deepEqual(weatherFit, []);
+
+  // Khong co lua chon am hon thi noi that, khong im lang.
+  const onlySummer = buildOutfitOptions([tank, shorts], cool);
+  assert.ok(onlySummer.weatherFit.some((m) => m.includes('Tủ chưa có áo ấm hơn cho 20°C')), onlySummer.weatherFit.join(' | '));
+  assert.ok(onlySummer.weatherFit.some((m) => m.includes('quần ấm hơn')));
+});
+
+test('seasons tagged on an item are compared with the temperature, not the calendar', () => {
+  const cool = { ...weather, temp: 12 };
+  const summerTop = item('top', '#ffffff', { seasons: ['summer'], tempRange: { min: 0, max: 40 } });
+  const winterTop = item('top', '#ffffff', { seasons: ['winter'], tempRange: { min: 0, max: 40 } });
+  const bottom = item('bottom', '#000000', { tempRange: { min: 0, max: 40 } });
+  assert.equal(buildOutfitOptions([summerTop, winterTop, bottom], cool).options[0].top._id, winterTop._id);
+  assert.equal(buildOutfitOptions([summerTop, winterTop, bottom], { ...weather, temp: 33 }).options[0].top._id, summerTop._id);
+});
+
 test('stylist intent keeps only valid values from the AI response', () => {
   assert.deepEqual(
     parseStylistIntent(JSON.stringify({
       intent: 'outfit', occasion: 'date', seasons: ['summer', 'rainy'], colorGroups: ['blue', 'gold'],
       styles: ['casual', 42], wantsDifferent: true,
+      includeItems: ['m1', 'm1', 'x9', 7, 'm22'], excludeItems: ['m3', '507f1f77bcf86cd799439011'], unavailable: ' áo len ', temperature: 17.6, newRequest: true,
     })),
-    { intent: 'outfit', occasion: 'date', seasons: ['summer'], colorGroups: ['blue'], styles: ['casual'], wantsDifferent: true }
+    {
+      intent: 'outfit', occasion: 'date', seasons: ['summer'], colorGroups: ['blue'], styles: ['casual'], wantsDifferent: true,
+      includeItems: ['m1', 'm22'], excludeItems: ['m3'], unavailable: 'áo len', temperature: 18, newRequest: true,
+    }
   );
   assert.deepEqual(
     parseStylistIntent('{"intent":"outfit","occasion":"beach"}'),
-    { intent: 'outfit', occasion: undefined, seasons: [], colorGroups: [], styles: [], wantsDifferent: false }
+    {
+      intent: 'outfit', occasion: undefined, seasons: [], colorGroups: [], styles: [], wantsDifferent: false,
+      includeItems: [], excludeItems: [], newRequest: false,
+    }
   );
   assert.deepEqual(parseStylistIntent('{"intent":"question","reply":" Chào bạn "}'), { intent: 'question', reply: 'Chào bạn' });
+});
+
+test('item kinds from the AI are checked against the item group', () => {
+  const categories = ['top', 'bottom', 'shoes'];
+  const raw = JSON.stringify({ items: [
+    { index: 1, kind: 'sweater' }, { index: 2, kind: 'sneakers' }, { index: 3, kind: 'boots' },
+    { index: 4, kind: 'jeans' }, { index: 0, kind: 'tshirt' }, { index: 1.5, kind: 'tshirt' }, { index: 3, kind: 'pirate' },
+  ] });
+  assert.deepEqual([...parseItemKinds(raw, categories)], [[0, 'sweater'], [1, 'other'], [2, 'boots']]);
+  for (const broken of [null, '', 'not json', 'null', '{"items":"x"}']) assert.equal(parseItemKinds(broken, categories).size, 0);
+});
+
+test('auto-tag suggests the group, kind and name, and drops a kind from the wrong group', () => {
+  const base = { styles: ['casual'], seasons: ['winter'], occasions: ['daily'] };
+  assert.deepEqual(
+    parseItemTags(JSON.stringify({ ...base, category: 'top', kind: 'sweater', name: '  Áo len đỏ   hình búp bê ' })),
+    { ...base, category: 'top', kind: 'sweater', name: 'Áo len đỏ hình búp bê' }
+  );
+  // Thieu nhom thi suy ra tu loai; loai lech nhom thi bo loai, giu nhom.
+  assert.equal(parseItemTags(JSON.stringify({ ...base, kind: 'skirt' })).category, 'bottom');
+  const wrong = parseItemTags(JSON.stringify({ ...base, category: 'shoes', kind: 'skirt', name: 'x'.repeat(61) }));
+  assert.equal(wrong.category, 'shoes');
+  assert.equal(wrong.kind, undefined);
+  assert.equal(wrong.name, undefined);
+  assert.deepEqual(parseItemTags(JSON.stringify(base)), base);
+});
+
+test('the stylist names pieces by their recognised kind', () => {
+  assert.equal(kindLabel({ category: 'top', kind: 'sweater' }), 'áo len');
+  assert.equal(kindLabel({ category: 'top', kind: 'other' }), 'áo');
+  assert.equal(kindLabel({ category: 'bottom' }), 'quần');
+  assert.equal(describeWardrobeItem(item('top', '#ffc0cb', { name: 'Áo Snoopy', kind: 'sweater' })), 'Áo Snoopy (áo len, màu hồng)');
+  assert.equal(describeWardrobeItem(item('bottom', '#000000', { name: 'Váy xếp ly' })), 'Váy xếp ly (quần/chân váy, màu trung tính)');
 });
 
 test('the ambiguous word "xanh" is understood even when the AI skips it', () => {

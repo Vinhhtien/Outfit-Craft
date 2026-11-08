@@ -16,6 +16,43 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   accessory: 'Phụ kiện',
 };
 
+/** Loại chi tiết (áo len, áo phông...). AI tự nhận diện từ ảnh, người dùng sửa lại được. */
+export const ITEM_KINDS = [
+  'tshirt', 'shirt', 'polo', 'blouse', 'tank', 'sweater', 'cardigan', 'hoodie', 'sweatshirt',
+  'jeans', 'trousers', 'pants', 'shorts', 'skirt', 'joggers', 'leggings',
+  'jacket', 'denim_jacket', 'blazer', 'coat', 'puffer', 'windbreaker',
+  'dress', 'jumpsuit', 'set',
+  'sneakers', 'heels', 'flats', 'sandals', 'boots', 'loafers',
+  'bag', 'accessory', 'other',
+] as const;
+export type ItemKind = (typeof ITEM_KINDS)[number];
+
+export const ITEM_KIND_LABELS: Record<ItemKind, string> = {
+  tshirt: 'Áo phông / áo thun', shirt: 'Áo sơ mi', polo: 'Áo polo', blouse: 'Áo kiểu',
+  tank: 'Áo ba lỗ / hai dây', sweater: 'Áo len', cardigan: 'Áo cardigan', hoodie: 'Áo hoodie',
+  sweatshirt: 'Áo nỉ / sweatshirt',
+  jeans: 'Quần jeans', trousers: 'Quần âu / quần tây', pants: 'Quần dài vải / kaki', shorts: 'Quần short',
+  skirt: 'Chân váy', joggers: 'Quần jogger', leggings: 'Quần legging',
+  jacket: 'Áo khoác', denim_jacket: 'Áo khoác jean', blazer: 'Áo blazer / vest', coat: 'Áo măng tô / áo dạ',
+  puffer: 'Áo phao', windbreaker: 'Áo gió',
+  dress: 'Váy liền', jumpsuit: 'Jumpsuit', set: 'Đồ bộ',
+  sneakers: 'Giày thể thao', heels: 'Giày cao gót', flats: 'Giày bệt / búp bê', sandals: 'Sandal / dép',
+  boots: 'Bốt', loafers: 'Giày lười / giày da',
+  bag: 'Túi', accessory: 'Phụ kiện', other: 'Khác',
+};
+
+/** Các loại hợp lệ cho từng danh mục - giống KINDS_BY_CATEGORY ở server (itemKind.service.ts). */
+export const KINDS_BY_CATEGORY: Record<Category, readonly ItemKind[]> = {
+  top: ['tshirt', 'shirt', 'polo', 'blouse', 'tank', 'sweater', 'cardigan', 'hoodie', 'sweatshirt'],
+  bottom: ['jeans', 'trousers', 'pants', 'shorts', 'skirt', 'joggers', 'leggings'],
+  outerwear: ['jacket', 'denim_jacket', 'blazer', 'coat', 'puffer', 'windbreaker', 'cardigan', 'hoodie'],
+  dress: ['dress', 'jumpsuit'],
+  set: ['set'],
+  shoes: ['sneakers', 'heels', 'flats', 'sandals', 'boots', 'loafers'],
+  bag: ['bag'],
+  accessory: ['accessory'],
+};
+
 /** Layer mặc định trên canvas: số lớn = nằm trên. */
 export const CATEGORY_Z_INDEX: Record<Category, number> = {
   shoes: 5, bottom: 10, dress: 20, set: 25, top: 30,
@@ -152,6 +189,8 @@ export interface ClothingItem {
   owner: string;
   name: string;
   category: Category;
+  /** Chưa có = AI chưa nhận diện xong. */
+  kind?: ItemKind | null;
   originalImageUrl: string;
   imageUrl: string;
   imagePublicId?: string;
@@ -331,6 +370,11 @@ export interface ItemTagSuggestion {
   styles: Style[];
   seasons: Season[];
   occasions: Occasion[];
+  category?: Category;
+  /** Luôn hợp với category nếu có. */
+  kind?: ItemKind;
+  /** Tên ngắn gợi ý, chỉ dùng khi người dùng chưa tự đặt tên. */
+  name?: string;
 }
 
 /** Mon dang ghim khi goi y "Phoi voi mon nay". */

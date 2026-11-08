@@ -17,12 +17,17 @@ const { StylistConversation } = await import('../src/models/StylistConversation.
 
 const pngBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ0YAAAAASUVORK5CYII=', 'base64');
 const owner ='aaaaaaaaaaaaaaaaaaaaaaaa', limited = 'bbbbbbbbbbbbbbbbbbbbbbbb', emptyOwner = 'cccccccccccccccccccccccc';
+/** Tai khoan rieng cho cac test chat nhieu luot, de khong an vao gioi han chat cua owner. */
+const picky = 'eeeeeeeeeeeeeeeeeeeeeeee';
 const token = (sub) => jwt.sign({ sub }, process.env.JWT_SECRET);
 const realFetch = globalThis.fetch;
-let mongo, server, base, redTop, whiteTop, jeans, shoes, bag;
+let mongo, server, base, redTop, whiteTop, jeans, shoes, bag, pickyRed, pickyWhite;
 /** Hang doi cau tra loi Gemini gia lap; null = goi that bai. */
 let geminiReplies = [];
 let geminiCalls = [];
+/** Cac lan AI duoc nho nhan dien loai do (ao len, ao phong...). Mac dinh khong nhan ra mon nao. */
+let kindCalls = [];
+let kindReply = () => '{"items":[]}';
 
 const respond = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -38,7 +43,7 @@ const chat = (body, actor) => request('/suggestions/chat', { method: 'POST', bod
 before(async () => {
   mongo = await createTestMongo();
   await mongoose.connect(mongo.getUri());
-  await User.create([owner, limited, emptyOwner].map((_id, i) => ({
+  await User.create([owner, limited, emptyOwner, picky].map((_id, i) => ({
     _id, email: `user${i}@example.test`, password: 'password123', displayName: `User ${i}`, isVerified: true,
   })));
   const piece = (name, category, color, extra = {}) => ({
@@ -53,6 +58,12 @@ before(async () => {
     piece('Túi đen', 'bag', '#000000'),
   ]);
   await ClothingItem.create(piece('Áo đông', 'top', '#000000', { seasons: ['winter'] }));
+  [pickyRed, pickyWhite] = await ClothingItem.create([
+    piece('Áo đỏ', 'top', '#ff0000', { owner: picky }),
+    piece('Áo trắng', 'top', '#ffffff', { owner: picky }),
+    piece('Quần jeans', 'bottom', '#5b7db1', { owner: picky }),
+    piece('Giày đen', 'shoes', '#000000', { owner: picky }),
+  ]);
 
   globalThis.fetch = async (url, init) => {
     const target = String(url);
@@ -63,7 +74,13 @@ before(async () => {
       });
     }
     if (target.includes('generativelanguage.googleapis.com')) {
-      geminiCalls.push({ url: target, headers: init.headers, body: JSON.parse(init.body) });
+      const body = JSON.parse(init.body);
+      // Luot nhan dien loai do tach rieng, khong lam lech hang doi cau tra loi cua stylist.
+      if (body.contents[0].parts[0].text?.startsWith('Phân loại từng món đồ')) {
+        kindCalls.push(body);
+        return respond(200, { candidates: [{ content: { parts: [{ text: kindReply(body) }] } }] });
+      }
+      geminiCalls.push({ url: target, headers: init.headers, body });
       const reply = geminiReplies.shift();
       if (reply === null || reply === undefined) return respond(503, { error: { message: 'unavailable' } });
       return respond(200, { candidates: [{ content: { parts: [{ text: reply }] } }] });
@@ -86,6 +103,8 @@ after(async () => {
 beforeEach(async () => {
   geminiReplies = [];
   geminiCalls = [];
+  kindCalls = [];
+  kindReply = () => '{"items":[]}';
   await Promise.all([StylistMessage.deleteMany({}), StylistConversation.deleteMany({})]);
 });
 
@@ -203,6 +222,135 @@ test('chat history reaches the AI and a different outfit avoids the shown one', 
   const prompt = geminiCalls[0].body.contents[0].parts[0].text;
   assert.match(prompt, /Người dùng: Chọn giúp mình một bộ/);
   assert.match(prompt, /Stylist: Bộ đầu tiên\./);
+});
+
+test('the AI sees the wardrobe and past outfits by short code, and disliked items stay out', async () => {
+  geminiReplies = [JSON.stringify({ intent: 'outfit', colorGroups: ['red'] }), 'Bộ đầu tiên.'];
+  const first = await chat({ message: 'Chọn giúp mình một bộ màu đỏ' }, picky);
+  const conversationId = first.body.data.conversation._id;
+  assert.ok(first.body.data.message.items.some((i) => i._id === String(pickyRed._id)));
+
+  const firstPrompt = geminiCalls[0].body.contents[0].parts[0].text;
+  const refLine = firstPrompt.split('\n').find((line) => line.includes('Áo đỏ (áo, màu đỏ)'));
+  const redRef = refLine.split(':')[0];
+  assert.match(redRef, /^m\d+$/);
+  assert.match(firstPrompt, /Quần jeans \(quần\/chân váy, màu xanh dương\)/);
+  assert.ok(!firstPrompt.includes(String(pickyRed._id)));
+
+  geminiCalls = [];
+  geminiReplies = [JSON.stringify({ intent: 'outfit', excludeItems: [redRef] }), 'Đã đổi áo.'];
+  const next = await chat({ message: 'Mình không thích cái áo đó', conversationId }, picky);
+  assert.equal(next.status, 200);
+  assert.ok(!next.body.data.message.items.some((i) => i._id === String(pickyRed._id)));
+  const prompt = geminiCalls[0].body.contents[0].parts[0].text;
+  assert.match(prompt, new RegExp(`Stylist: Bộ đầu tiên\\. \\[Bộ đã gợi ý: [^\\]]*${redRef}`));
+
+  // Luot sau AI quen nhac lai, server van nho mon da che.
+  geminiCalls = [];
+  geminiReplies = [JSON.stringify({ intent: 'outfit', colorGroups: ['red'], wantsDifferent: true }), 'Bộ khác.'];
+  const later = await chat({ message: 'Còn bộ nào khác không', conversationId }, picky);
+  assert.ok(!later.body.data.message.items.some((i) => i._id === String(pickyRed._id)));
+  assert.match(geminiCalls[0].body.contents[0].parts[0].text, new RegExp(`${redRef}: Áo đỏ \\(áo, màu đỏ\\) \\[người dùng đã chê\\]`));
+
+  // Muon mac lai chinh mon do thi duoc goi y lai.
+  geminiReplies = [JSON.stringify({ intent: 'outfit', includeItems: [redRef] }), 'Mặc lại áo đỏ.'];
+  const again = await chat({ message: 'Thôi cho mình mặc lại áo đỏ', conversationId }, picky);
+  assert.ok(again.body.data.message.items.some((i) => i._id === String(pickyRed._id)));
+  assert.deepEqual((await StylistConversation.findById(conversationId)).excludedItems, []);
+});
+
+test('a requested item is pinned and a missing kind is reported honestly', async () => {
+  geminiReplies = [JSON.stringify({ intent: 'outfit' }), 'x'];
+  await chat({ message: 'Chọn đồ' }, picky);
+  const prompt = geminiCalls[0].body.contents[0].parts[0].text;
+  const whiteRef = prompt.split('\n').find((line) => line.includes('Áo trắng')).split(':')[0];
+
+  geminiCalls = [];
+  geminiReplies = [JSON.stringify({ intent: 'outfit', includeItems: [whiteRef] }), 'Áo trắng nhé.'];
+  const pinned = await chat({ message: 'Phối với áo trắng' }, picky);
+  assert.ok(pinned.body.data.message.items.some((i) => i._id === String(pickyWhite._id)));
+
+  geminiCalls = [];
+  geminiReplies = [JSON.stringify({ intent: 'outfit', unavailable: 'áo len' }), 'Tủ chưa có áo len.'];
+  const none = await chat({ message: 'Một bộ với áo len' }, picky);
+  assert.ok(none.body.data.message.notes.includes('Tủ chưa có áo len, đây là bộ gần nhất'));
+  assert.match(geminiCalls[1].body.contents[0].parts[0].text, /Tủ chưa có áo len/);
+});
+
+test('"another one" keeps the season and temperature asked for earlier', async (t) => {
+  const sweater = await ClothingItem.create({
+    owner: picky, name: 'Áo len xám', category: 'top', colors: ['#808080'], seasons: ['winter'],
+    tempRange: { min: 5, max: 20 }, imageUrl: 'https://example.test/w.png', originalImageUrl: 'https://example.test/w.png',
+  });
+  t.after(() => sweater.deleteOne());
+  geminiReplies = [JSON.stringify({ intent: 'outfit', seasons: ['winter'], temperature: 18 }), 'Bộ mùa đông.'];
+  const first = await chat({ message: 'Gợi ý 1 bộ mùa đông 18 độ' }, picky);
+  const conversationId = first.body.data.conversation._id;
+  assert.match(geminiCalls[1].body.contents[0].parts[0].text, /18°C, theo yêu cầu của người dùng \(thực tế hôm nay 27°C/);
+  assert.ok(!first.body.data.message.notes.some((n) => n.includes('hôm nay 27°C')));
+
+  // AI quen nhac lai mua va nhiet do: server van giu.
+  geminiCalls = [];
+  geminiReplies = [JSON.stringify({ intent: 'outfit', wantsDifferent: true }), 'Bộ khác.'];
+  const next = await chat({ message: 'Còn bộ nào khác ko', conversationId }, picky);
+  assert.ok(next.body.data.message.notes.includes('Vẫn theo yêu cầu trước: mùa đông, khoảng 18°C'));
+  assert.match(geminiCalls[1].body.contents[0].parts[0].text, /Thời tiết: Hanoi, 18°C/);
+  const saved = await StylistConversation.findById(conversationId);
+  assert.deepEqual([...saved.lastRequest.seasons], ['winter']);
+  assert.equal(saved.lastRequest.temperature, 18);
+
+  // Yeu cau moi hoan toan thi bo dieu kien cu.
+  geminiReplies = [JSON.stringify({ intent: 'outfit', newRequest: true }), 'Bộ mới.'];
+  const fresh = await chat({ message: 'Thôi, chọn bộ bình thường cho hôm nay', conversationId }, picky);
+  assert.ok(!fresh.body.data.message.notes.some((n) => n.startsWith('Vẫn theo yêu cầu trước')));
+  assert.equal((await StylistConversation.findById(conversationId)).lastRequest.temperature, undefined);
+});
+
+test('the AI learns what each piece really is, so a sweater named oddly is still found', async () => {
+  const snoopy = await ClothingItem.create({
+    owner: picky, name: 'Áo Snoopy hồng', category: 'top', colors: ['#f4b6c2'],
+    imageUrl: 'https://example.test/s.png', originalImageUrl: 'https://example.test/s.png',
+  });
+  try {
+    kindReply = (body) => {
+      const lines = body.contents[0].parts.map((p) => p.text ?? '').filter((t) => t.startsWith('Món '));
+      const items = lines.map((line, i) => ({
+        index: i + 1,
+        kind: line.includes('Snoopy') ? 'sweater' : line.includes('jeans') ? 'jeans' : line.includes('Giày') ? 'skirt' : 'tshirt',
+      }));
+      return JSON.stringify({ items });
+    };
+    geminiReplies = [JSON.stringify({ intent: 'question', reply: 'Ok' })];
+    await chat({ message: 'Tủ mình có gì?' }, picky);
+    assert.equal(kindCalls.length, 1);
+    assert.match(kindCalls[0].contents[0].parts[0].text, /sweater = áo len/);
+
+    assert.equal((await ClothingItem.findById(snoopy._id)).kind, 'sweater');
+    assert.equal((await ClothingItem.findById(pickyRed._id)).kind, 'tshirt');
+    // AI tra loai khong hop nhom (giay ma bao chan vay) -> "other", khong luu bua.
+    assert.equal((await ClothingItem.findOne({ owner: picky, category: 'shoes' })).kind, 'other');
+
+    const prompt = geminiCalls[0].body.contents[0].parts[0].text;
+    assert.match(prompt, /m\d+: Áo Snoopy hồng \(áo len, màu hồng\)/);
+    assert.match(prompt, /m\d+: Áo đỏ \(áo phông\/áo thun, màu đỏ\)/);
+
+    // Da nhan dien het thi khong goi AI lai.
+    geminiReplies = [JSON.stringify({ intent: 'question', reply: 'Ok' })];
+    await chat({ message: 'Còn gì nữa?' }, picky);
+    assert.equal(kindCalls.length, 1);
+
+    // User tu sua loai thi giu nguyen; doi nhom ma khong chon loai thi de AI nhan dien lai.
+    const patch = (body) => request(`/items/${pickyWhite._id}`, { method: 'PATCH', body: JSON.stringify(body) }, picky);
+    assert.equal((await patch({ kind: 'shirt' })).body.data.kind, 'shirt');
+    assert.equal((await patch({ kind: 'pirate' })).status, 400);
+    const moved = await patch({ category: 'outerwear' });
+    assert.equal(moved.body.data.kind, undefined);
+  } finally {
+    await snoopy.deleteOne();
+    // Tra nhom ve truoc de luot nhan dien nen (neu con chay) khong ghi vao duoc nua.
+    await ClothingItem.updateOne({ _id: pickyWhite._id }, { $set: { category: 'top' } });
+    await ClothingItem.updateMany({ owner: picky }, { $unset: { kind: 1 } });
+  }
 });
 
 test('each new chat is its own conversation with its own memory', async () => {

@@ -11,8 +11,10 @@ import { ApiError } from '../utils/ApiError.js';
 import { getWeather } from '../services/weather.service.js';
 import { buildOutfitOptions, scoreItem } from '../services/suggestion.service.js';
 import {
-  getRuleAdvice, getStylistAdvice, outfitItems, readStylistIntent, toStylistBodyContext, writeStylistReply,
+  MAX_WARDROBE_FOR_AI, StylistRequestState, describeWardrobeItem, getRuleAdvice, getStylistAdvice, mergeStylistRequest,
+  outfitItems, readStylistIntent, toStylistBodyContext, weatherForRequest, writeStylistReply,
 } from '../services/stylist.service.js';
+import { ensureItemKinds } from '../services/itemKind.service.js';
 import { COLOR_GROUPS, Occasion, OCCASIONS, SEASONS } from '../types/index.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -138,10 +140,16 @@ async function saveChatTurn(
   owner: string,
   existing: IStylistConversation | null,
   message: string,
-  reply: Pick<IStylistMessage, 'text' | 'source'> & Partial<IStylistMessage>
+  reply: Pick<IStylistMessage, 'text' | 'source'> & Partial<IStylistMessage>,
+  /** Chi luot goi y bo do moi cap nhat mon da che va yeu cau dang ap dung. */
+  state?: { excludedItems: string[]; lastRequest: StylistRequestState }
 ) {
   const conversation = existing
     ?? await StylistConversation.create({ owner, title: message.split('\n')[0].slice(0, CHAT_TITLE_LENGTH) });
+  if (state) {
+    conversation.set('excludedItems', state.excludedItems);
+    conversation.set('lastRequest', state.lastRequest);
+  }
   const [, saved] = await StylistMessage.insertMany([
     { owner, conversation: conversation._id, role: 'user', text: message },
     { ...reply, owner, conversation: conversation._id, role: 'stylist', text: reply.text.slice(0, MAX_REPLY_LENGTH) },
@@ -204,15 +212,42 @@ export const chatWithStylist = asyncHandler(async (req, res) => {
   const user = await User.findById(owner).select('+bodyProfile');
   const weather = await getWeather(cityInput || user?.defaultCity || 'Hanoi');
 
-  const recent = conversation
-    ? await StylistMessage.find({ conversation: conversation._id })
-        .sort({ _id: -1 }).limit(MAX_SEEN_KEYS).select('role text outfitKey').lean()
-    : [];
-  const history = recent.slice(0, CHAT_HISTORY_TURNS).reverse()
-    .map((m) => ({ role: m.role, text: m.text.slice(0, CHAT_HISTORY_TEXT_LENGTH) }));
-  const seen = recent.flatMap((m) => (m.outfitKey ? [m.outfitKey] : []));
+  const [recent, items] = await Promise.all([
+    conversation
+      ? StylistMessage.find({ conversation: conversation._id })
+          .sort({ _id: -1 }).limit(MAX_SEEN_KEYS).select('role text outfitKey items').lean()
+      : [],
+    ClothingItem.find({ owner, isArchived: false }),
+  ]);
 
-  const intent = await readStylistIntent(message, history, weather);
+  // Mon cu chua co loai chi tiet (ao len, ao phong...) -> AI nhin anh bo sung, moi luot toi da 1 lan goi.
+  await ensureItemKinds(items.slice(0, MAX_WARDROBE_FOR_AI));
+
+  // AI chi thay ma ngan (m1, m2...) thay cho id that.
+  const refOf = new Map<string, string>();
+  const idOfRef = new Map<string, string>();
+  items.slice(0, MAX_WARDROBE_FOR_AI).forEach((item, i) => {
+    refOf.set(String(item._id), `m${i + 1}`);
+    idOfRef.set(`m${i + 1}`, String(item._id));
+  });
+  const toRefs = (ids: unknown[] = []) => ids.flatMap((id) => refOf.get(String(id)) ?? []);
+  const toIds = (refs: string[]) => refs.flatMap((ref) => idOfRef.get(ref) ?? []);
+
+  const excludedBefore = new Set((conversation?.excludedItems ?? []).map(String));
+  const wardrobe = items.slice(0, MAX_WARDROBE_FOR_AI).map((item) => ({
+    ref: refOf.get(String(item._id))!,
+    text: describeWardrobeItem(item),
+    excluded: excludedBefore.has(String(item._id)),
+  }));
+  const history = recent.slice(0, CHAT_HISTORY_TURNS).reverse().map((m) => ({
+    role: m.role,
+    text: m.text.slice(0, CHAT_HISTORY_TEXT_LENGTH),
+    items: toRefs(m.items),
+  }));
+  const seen = recent.flatMap((m) => (m.outfitKey ? [m.outfitKey] : []));
+  const lastOutfit = (recent.find((m) => m.role === 'stylist' && m.items?.length)?.items ?? []).map(String);
+
+  const intent = await readStylistIntent(message, history, weather, wardrobe);
   if (!intent) {
     throw new ApiError(503, 'Stylist AI đang tạm nghỉ. Bạn vẫn có thể dùng bộ lọc và nút Xáo trộn ở tab Bộ đồ gợi ý.');
   }
@@ -222,21 +257,59 @@ export const chatWithStylist = asyncHandler(async (req, res) => {
     return;
   }
 
-  const items = await ClothingItem.find({ owner, isArchived: false });
   if (items.length === 0) {
     throw ApiError.badRequest('Tủ đồ của bạn đang trống. Hãy thêm vài món đồ trước.');
   }
 
-  const occasion = intent.occasion ?? currentOccasion;
-  const { options, seasonWarning, missing } = buildOutfitOptions(items, weather, occasion, {
-    filters: { seasons: intent.seasons, colorGroups: intent.colorGroups, styles: intent.styles },
-    shuffle: intent.wantsDifferent ? { seen } : undefined,
+  // Giu yeu cau dang ap dung (mua, nhiet do, mau...), chi ghi de phan user vua noi moi.
+  const turnInclude = toIds(intent.includeItems);
+  const turnExclude = toIds(intent.excludeItems);
+  const last = conversation?.lastRequest;
+  const previous: StylistRequestState | null = last
+    ? {
+        occasion: last.occasion ?? undefined,
+        seasons: [...last.seasons],
+        colorGroups: [...last.colorGroups],
+        styles: [...last.styles],
+        includeItems: last.includeItems.map(String),
+        temperature: last.temperature ?? undefined,
+      }
+    : null;
+  const { request, kept } = mergeStylistRequest(previous, {
+    occasion: intent.occasion,
+    seasons: intent.seasons,
+    colorGroups: intent.colorGroups,
+    styles: intent.styles,
+    includeItems: turnInclude,
+    temperature: intent.temperature,
+  }, intent.newRequest);
+
+  // Mon vua che thang mon muon mac duoc giu tu luot truoc; mon user muon mac lai thi bo khoi danh sach da che.
+  const include = request.includeItems.filter((id) => turnInclude.includes(id) || !turnExclude.includes(id));
+  const exclude = [...new Set([...excludedBefore, ...turnExclude])].filter((id) => !turnInclude.includes(id));
+  const { wantsDifferent } = intent;
+
+  const occasion = request.occasion ?? currentOccasion;
+  const outfitWeather = weatherForRequest(weather, request.temperature);
+  const { options, seasonWarning, missing, weatherWarning, pinned, weatherFit } = buildOutfitOptions(items, outfitWeather, occasion, {
+    include,
+    exclude,
+    filters: { seasons: request.seasons, colorGroups: request.colorGroups, styles: request.styles },
+    shuffle: wantsDifferent ? { seen, avoid: lastOutfit } : undefined,
   });
-  const notes = [...missing, ...(seasonWarning ? [seasonWarning] : [])];
+  const notes = [
+    ...(kept.length > 0 ? [`Vẫn theo yêu cầu trước: ${kept.join(', ')}`] : []),
+    ...(intent.unavailable ? [`Tủ chưa có ${intent.unavailable}, đây là bộ gần nhất`] : []),
+    ...missing,
+    ...weatherFit,
+    // Canh bao "mua da chon lech thoi tiet hom nay" thua khi user tu neu nhiet do muon mac.
+    ...(seasonWarning && request.temperature === undefined ? [seasonWarning] : []),
+    ...(weatherWarning && pinned ? [`${pinned.name}: ${weatherWarning}`] : []),
+  ];
   const { advice, source } = await writeStylistReply(
     message,
     options[0],
-    weather,
+    outfitWeather,
     occasion,
     toStylistBodyContext(user?.bodyProfile),
     notes
@@ -251,7 +324,7 @@ export const chatWithStylist = asyncHandler(async (req, res) => {
     weather: { ...weather },
     items: pieces.map((item) => item._id),
     outfitKey: pieces.length > 0 ? options[0].key : undefined,
-  });
+  }, { excludedItems: exclude, lastRequest: { ...request, includeItems: include } });
   res.json({ success: true, data: saved });
 });
 

@@ -13,7 +13,8 @@
     "lint": "tsc --noEmit",
     "test": "node --import tsx --test --test-concurrency=1 tests/*.test.mjs",
     "test:cloudinary": "node --import tsx scripts/verify-cloudinary.mjs",
-    "seed": "tsx src/scripts/seed-data.ts"
+    "seed": "tsx src/scripts/seed-data.ts",
+    "classify:kinds": "tsx src/scripts/classify-kinds.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

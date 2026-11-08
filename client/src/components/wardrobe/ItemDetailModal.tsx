@@ -14,15 +14,17 @@ import type { UpdateItemPayload } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import {
   CATEGORIES, STYLES, SEASONS, SEASON_LABELS,
-  OCCASIONS, OCCASION_LABELS,
+  OCCASIONS, OCCASION_LABELS, ITEM_KIND_LABELS, KINDS_BY_CATEGORY,
 } from '@/types';
-import type { Category, ClothingItem, Style, Season, Occasion } from '@/types';
+import type { Category, ClothingItem, Style, Season, Occasion, ItemKind } from '@/types';
 
 const MAX_COLORS = 5;
 
 type FormState = {
   name: string;
   category: Category;
+  /** '' = để AI tự nhận diện từ ảnh. */
+  kind: ItemKind | '';
   colors: string[];
   styles: Style[];
   seasons: Season[];
@@ -38,6 +40,7 @@ function toForm(item: ClothingItem): FormState {
   return {
     name: item.name,
     category: item.category,
+    kind: item.kind ?? '',
     colors: [...item.colors],
     styles: [...item.styles],
     seasons: [...item.seasons],
@@ -142,6 +145,7 @@ export function ItemDetailModal({
     const payload: UpdateItemPayload = {
       name,
       category: form.category,
+      kind: form.kind || null,
       colors: form.colors,
       styles: form.styles,
       seasons: form.seasons,
@@ -228,7 +232,15 @@ export function ItemDetailModal({
                 </div>
 
                 <ViewRow label="Danh mục">
-                  <Tag>{CATEGORY_LABELS[item.category]}</Tag>
+                  <div className="flex flex-wrap gap-2">
+                    <Tag>{CATEGORY_LABELS[item.category]}</Tag>
+                    {item.kind && item.kind !== 'other' && item.kind !== item.category && (
+                      <Tag>{ITEM_KIND_LABELS[item.kind]}</Tag>
+                    )}
+                    {!item.kind && KINDS_BY_CATEGORY[item.category].length > 1 && (
+                      <span className="self-center text-xs text-[#6B7B76]">Chưa nhận diện loại đồ</span>
+                    )}
+                  </div>
                 </ViewRow>
 
                 <ViewRow label="Thương hiệu">
@@ -312,12 +324,31 @@ export function ItemDetailModal({
                   <VSelect
                     label="Danh mục"
                     value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value as Category })}
+                    onChange={(e) => {
+                      const category = e.target.value as Category;
+                      // Loại cũ không thuộc danh mục mới -> để AI nhận diện lại.
+                      const kind = form.kind && KINDS_BY_CATEGORY[category].includes(form.kind) ? form.kind : '';
+                      setForm({ ...form, category, kind });
+                    }}
                   >
                     {CATEGORIES.map((c) => (
                       <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
                     ))}
                   </VSelect>
+
+                  {KINDS_BY_CATEGORY[form.category].length > 1 && (
+                    <VSelect
+                      label="Loại (AI tự nhận diện từ ảnh, sửa nếu chưa đúng)"
+                      value={form.kind}
+                      onChange={(e) => setForm({ ...form, kind: e.target.value as ItemKind | '' })}
+                    >
+                      <option value="">Để AI tự nhận diện</option>
+                      {KINDS_BY_CATEGORY[form.category].map((k) => (
+                        <option key={k} value={k}>{ITEM_KIND_LABELS[k]}</option>
+                      ))}
+                      <option value="other">{ITEM_KIND_LABELS.other}</option>
+                    </VSelect>
+                  )}
 
                   <VInput
                     label="Thương hiệu (không bắt buộc)"
