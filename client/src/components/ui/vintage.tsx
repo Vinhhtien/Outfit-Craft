@@ -115,6 +115,7 @@ export function VModal({
   title,
   children,
   wide,
+  extraWide,
   serifTitle,
   busy = false,
 }: {
@@ -123,6 +124,8 @@ export function VModal({
   title: string;
   children: React.ReactNode;
   wide?: boolean;
+  /** Rong hon wide, cho noi dung video. */
+  extraWide?: boolean;
   /** Tieu de font Serif (Playfair) thay vi Sans dam. */
   serifTitle?: boolean;
   busy?: boolean;
@@ -160,7 +163,7 @@ export function VModal({
     >
       <div
         className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-[#1F453E]/20 bg-white p-6 font-jakarta text-[#1F453E] shadow-2xl ${
-          wide ? 'max-w-2xl' : 'max-w-md'
+          extraWide ? 'max-w-4xl' : wide ? 'max-w-2xl' : 'max-w-md'
         }`}
         ref={dialogRef}
         tabIndex={-1}

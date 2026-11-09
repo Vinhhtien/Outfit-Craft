@@ -95,6 +95,9 @@ cp .env.example .env
 | `CLOUDINARY_*` | ✅ | [cloudinary.com](https://cloudinary.com) → Dashboard (free 25GB) |
 | `OPENWEATHER_API_KEY` | ⬜ | [openweathermap.org/api](https://openweathermap.org/api) (free 1000 req/ngày)<br>*Không có → tính năng Gợi ý báo lỗi* |
 | `GEMINI_API_KEY` | ⬜ | [aistudio.google.com](https://aistudio.google.com/apikey) (free tier)<br>*Không có → tự động dùng gợi ý rule-based* |
+| `DECART_API_KEY` | ⬜ | [platform.decart.ai](https://platform.decart.ai)<br>*Không có → tính năng Thử đồ trực tiếp báo chưa sẵn sàng* |
+| `TRYON_MAX_SESSION_SECONDS` | ⬜ | Tối đa mỗi phiên thử đồ trực tiếp (giây, mặc định 120) |
+| `TRYON_DAILY_SECONDS` | ⬜ | Tổng thời lượng mỗi user mỗi ngày (giây, mặc định 600) |
 | `GEMINI_MODEL` | ⬜ | Tên model Gemini. Mặc định `gemini-flash-lite-latest` |
 
 **`client/.env.local`**:

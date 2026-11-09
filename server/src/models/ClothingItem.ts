@@ -55,6 +55,10 @@ export interface IClothingItem extends Document {
   lastWornAt?: Date;
   isArchived: boolean;
   fit?: IItemFit | null; // NEW: Ghi nho fit
+  // ===== NEW: Thu do truc tiep =====
+  /** Mo ta mon do do Gemini viet. Chi dung lai khi imageUrl van khop anh da mo ta. */
+  tryOnPrompt?: { description: string; imageUrl: string; generatedAt: Date };
+  // ===== END NEW =====
   createdAt: Date;
   updatedAt: Date;
 }
@@ -105,6 +109,19 @@ const clothingItemSchema = new Schema<IClothingItem>(
         { _id: false }
       ),
       default: null,
+    },
+    // ===== END NEW =====
+    // ===== NEW: Thu do truc tiep =====
+    tryOnPrompt: {
+      type: new Schema(
+        {
+          description: { type: String, required: true },
+          imageUrl: { type: String, required: true },
+          generatedAt: { type: Date, required: true },
+        },
+        { _id: false }
+      ),
+      select: false,
     },
     // ===== END NEW =====
   },

@@ -1,7 +1,7 @@
 'use client';
 import { useCategoryLabels } from '@/store/categoryStore';
 
-import { Trash2, Plus } from 'lucide-react';
+import { Trash2, Plus, Video } from 'lucide-react';
 import { CloudImage } from '@/components/ui/CloudImage';
 import type { ClothingItem } from '@/types';
 
@@ -10,6 +10,7 @@ export function ItemCard({
   onDelete,
   onAdd,
   onClick,
+  onTryOn,
 }: {
   item: ClothingItem;
   onDelete?: (item: ClothingItem) => void;
@@ -18,6 +19,8 @@ export function ItemCard({
   /** Bam vao the -> mo ItemDetailModal. */
   onClick?: (item: ClothingItem) => void;
   // ===== END NEW =====
+  /** Mo panel thu do truc tiep. */
+  onTryOn?: (item: ClothingItem) => void;
 }) {
   const CATEGORY_LABELS = useCategoryLabels();
   return (
@@ -95,6 +98,18 @@ export function ItemCard({
             </span>
           )}
         </div>
+        {onTryOn && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTryOn(item);
+            }}
+            className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-[#1F453E] bg-white px-3 py-1.5 text-[11px] font-bold text-[#1F453E] transition-colors hover:bg-[#1F453E] hover:text-white"
+          >
+            <Video size={13} /> Thử trực tiếp
+          </button>
+        )}
       </div>
 
       {/* Nut hanh dong chi hien khi hover */}

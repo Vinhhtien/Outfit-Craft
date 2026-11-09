@@ -7,6 +7,12 @@ function required(key: string, fallback?: string): string {
   return v;
 }
 
+/** So giay tu env; sai dinh dang -> fallback. Decart yeu cau phien toi thieu 10 giay. */
+function secondsFromEnv(key: string, fallback: number): number {
+  const value = Number(process.env[key]);
+  return Number.isFinite(value) && value >= 10 ? Math.floor(value) : fallback;
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   seedDemoAdmin: process.env.SEED_DEMO_ADMIN !== 'false',
@@ -38,6 +44,20 @@ export const env = {
    * Chon ban lite vi chat can tra loi trong vai giay; gemini-flash-latest mat hon 30 giay.
    */
   geminiModel: process.env.GEMINI_MODEL || 'gemini-flash-lite-latest',
+
+  // ===== NEW: Thu do truc tiep =====
+  /** Key vinh vien cua Decart, chi duoc dung o backend de phat client token ngan han. */
+  get decartKey(): string {
+    if (!process.env.DECART_API_KEY) {
+      dotenv.config({ override: true });
+    }
+    return process.env.DECART_API_KEY ?? '';
+  },
+  tryOn: {
+    maxSessionSeconds: secondsFromEnv('TRYON_MAX_SESSION_SECONDS', 120),
+    dailySeconds: secondsFromEnv('TRYON_DAILY_SECONDS', 600),
+  },
+  // ===== END NEW =====
 
   // ===== NEW: Forgot Password =====
   /** URL trang web (dung de tao link dat lai mat khau trong email). */

@@ -402,3 +402,33 @@ export interface ApiResponse<T> {
   message?: string;
   pagination?: { page: number; limit: number; total: number; pages: number };
 }
+
+// ===== NEW: Thu do truc tiep =====
+export interface TryOnQuota {
+  /** false = backend chưa đặt DECART_API_KEY. */
+  configured: boolean;
+  dailySeconds: number;
+  usedSeconds: number;
+  remainingSeconds: number;
+  maxSessionSeconds: number;
+}
+
+export interface TryOnSessionInfo {
+  sessionId: string;
+  maxSeconds: number;
+}
+
+export interface TryOnHeartbeat {
+  active: boolean;
+  usedSeconds: number;
+  remainingSeconds: number;
+}
+
+export interface TryOnSnapshot {
+  _id: string;
+  item?: string;
+  itemName?: string;
+  imageUrl: string;
+  createdAt: string;
+}
+// ===== END NEW =====

@@ -1,5 +1,5 @@
 import type { AxiosProgressEvent } from 'axios';
-import { api } from './api';
+import { api, tokenStore } from './api';
 import type {
   ApiResponse, ClothingItem, Outfit, Weather, Suggestion, SuggestionAnchor,
   StylistChatMessage, StylistConversation, ItemTagSuggestion,
@@ -11,6 +11,7 @@ import type {
   WishlistItem,
   WishlistResponseData,
   DuplicateCheckResult,
+  TryOnQuota, TryOnSessionInfo, TryOnHeartbeat, TryOnSnapshot, // NEW: Thu do truc tiep
 } from '@/types';
 
 /* ---------------- Auth ---------------- */
@@ -344,3 +345,67 @@ export const scheduleApi = {
 
   remove: (id: string) => api.delete<ApiResponse<null>>(`/schedule/${id}`).then((r) => r.data),
 };
+
+// ===== NEW: Thu do truc tiep =====
+/* ---------------- Thu do truc tiep ---------------- */
+export const tryOnApi = {
+  quota: (signal?: AbortSignal) =>
+    api.get<ApiResponse<TryOnQuota>>('/try-on/quota', { signal }).then((r) => r.data.data),
+
+  startSession: () =>
+    api.post<ApiResponse<TryOnSessionInfo>>('/try-on/sessions').then((r) => r.data.data),
+
+  /** Client token Decart ngan han, SDK goi lai moi lan connect/reconnect. */
+  token: (sessionId: string) =>
+    api
+      .post<ApiResponse<{ apiKey: string; expiresAt: string }>>(`/try-on/sessions/${sessionId}/token`)
+      .then((r) => r.data.data),
+
+  heartbeat: (sessionId: string, live: boolean) =>
+    api
+      .post<ApiResponse<TryOnHeartbeat>>(`/try-on/sessions/${sessionId}/heartbeat`, { live })
+      .then((r) => r.data.data),
+
+  end: (sessionId: string) =>
+    api.post<ApiResponse<TryOnQuota>>(`/try-on/sessions/${sessionId}/end`).then((r) => r.data.data),
+
+  /** Dung khi trang dang dong: axios (XHR) bi huy theo trang, fetch keepalive thi khong. */
+  endOnPageHide: (sessionId: string) => {
+    void fetch(`${api.defaults.baseURL}/try-on/sessions/${sessionId}/end`, {
+      method: 'POST',
+      keepalive: true,
+      headers: { Authorization: `Bearer ${tokenStore.get()}` },
+    }).catch(() => undefined);
+  },
+
+  /** frame: anh camera tuy chon, chi co tac dung o lan dau mo ta mon do. */
+  prompt: (itemId: string, frame?: Blob | null) => {
+    const url = `/try-on/items/${itemId}/prompt`;
+    type Result = ApiResponse<{ prompt: string; source: 'cache' | 'ai' | 'rule' }>;
+    if (!frame) return api.post<Result>(url, undefined, { timeout: 45000 }).then((r) => r.data.data);
+    const form = new FormData();
+    form.append('frame', frame, 'frame.jpg');
+    return api
+      .post<Result>(url, form, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 45000 })
+      .then((r) => r.data.data);
+  },
+
+  snapshots: (signal?: AbortSignal) =>
+    api.get<ApiResponse<TryOnSnapshot[]>>('/try-on/snapshots', { signal }).then((r) => r.data.data),
+
+  saveSnapshot: (image: Blob, itemId?: string) => {
+    const form = new FormData();
+    form.append('image', image, 'tryon.jpg');
+    if (itemId) form.append('itemId', itemId);
+    return api
+      .post<ApiResponse<TryOnSnapshot>>('/try-on/snapshots', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 150000,
+      })
+      .then((r) => r.data.data);
+  },
+
+  removeSnapshot: (id: string) =>
+    api.delete<ApiResponse<null>>(`/try-on/snapshots/${id}`).then((r) => r.data),
+};
+// ===== END NEW =====
