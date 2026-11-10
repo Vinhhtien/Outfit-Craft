@@ -13,6 +13,7 @@ import {
   type ItemObject, type PresetPlacement,
   // ===== END NEW =====
   itemFitOf, // NEW: Ghi nho fit
+  getItemObjects,
 } from '@/lib/fabricCanvas';
 // ===== NEW: Body Profile =====
 import { buildMannequin, type MannequinAnchors } from '@/lib/mannequin';
@@ -22,7 +23,8 @@ import type { ClothingItem, ItemFit, MannequinProfile, OutfitItem } from '@/type
 
 /** API mà trang Studio dùng để điều khiển canvas. */
 export interface OutfitCanvasHandle {
-  addItem: (item: ClothingItem) => Promise<void>;
+  /** false = mon nay da co tren canvas (moi mon chi duoc them 1 lan) -> chon lai mon do. */
+  addItem: (item: ClothingItem) => Promise<boolean>;
   /** Them nhieu mon vao vi tri da tinh san, theo dung thu tu (trong -> ngoai). */
   addPlacedItems: (list: { item: ClothingItem; placement: PresetPlacement }[]) => Promise<void>;
   serialize: () => {
@@ -245,13 +247,21 @@ export const OutfitCanvas = forwardRef<
     ref,
     (): OutfitCanvasHandle => ({
       addItem: async (item) => {
-        if (!canvasRef.current) return;
+        if (!canvasRef.current) return false;
+        const existing = getItemObjects(canvasRef.current).find((o) => o.itemData?.itemId === item._id);
+        if (existing) {
+          canvasRef.current.setActiveObject(existing);
+          canvasRef.current.requestRenderAll();
+          onSelectionChange?.(true);
+          return false;
+        }
         const obj = await addItemToCanvas(canvasRef.current, item, anchorsRef.current);
         // NEW: Ghi nho fit - chua co fit dung duoc -> lan dau thu, theo doi de ghi nho khi user can.
         if (!item.fit || !placeFromFit(item.fit, item.category, anchorsRef.current)) {
           calibratingRef.current.add(obj);
         }
         onDirty?.();
+        return true;
       },
       addPlacedItems: async (list) => {
         for (const { item, placement } of list) {

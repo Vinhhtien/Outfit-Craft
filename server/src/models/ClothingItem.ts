@@ -1,7 +1,7 @@
 import { Schema, model, Document, Types } from 'mongoose';
 import {
-  CATEGORIES, STYLES, SEASONS, OCCASIONS,
-  Category, Style, Season, Occasion,
+  CATEGORIES, STYLES, SEASONS, OCCASIONS, ITEM_KINDS,
+  Category, Style, Season, Occasion, ItemKind,
 } from '../types/index.js';
 
 // ===== NEW: Ghi nho fit =====
@@ -27,6 +27,8 @@ export interface IClothingItem extends Document {
   owner: Types.ObjectId;
   name: string;
   category: Category;
+  /** Loai chi tiet (ao len, ao phong...). Chua co -> AI se tu nhan tu anh (itemKind.service). */
+  kind?: ItemKind;
   /** Anh goc user upload - giu lai de co the tach nen lai neu ket qua xau. */
   originalImageUrl: string;
   /** PNG da tach nen - day moi la anh dung tren canvas. */
@@ -53,6 +55,10 @@ export interface IClothingItem extends Document {
   lastWornAt?: Date;
   isArchived: boolean;
   fit?: IItemFit | null; // NEW: Ghi nho fit
+  // ===== NEW: Thu do truc tiep =====
+  /** Mo ta mon do do Gemini viet. Chi dung lai khi imageUrl van khop anh da mo ta. */
+  tryOnPrompt?: { description: string; imageUrl: string; generatedAt: Date };
+  // ===== END NEW =====
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +68,7 @@ const clothingItemSchema = new Schema<IClothingItem>(
     owner: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     name: { type: String, required: true, trim: true, maxlength: 100 },
     category: { type: String, enum: CATEGORIES, required: true },
+    kind: { type: String, enum: ITEM_KINDS },
     originalImageUrl: { type: String, required: true },
     imageUrl: { type: String, required: true },
     imagePublicId: { type: String },
@@ -102,6 +109,19 @@ const clothingItemSchema = new Schema<IClothingItem>(
         { _id: false }
       ),
       default: null,
+    },
+    // ===== END NEW =====
+    // ===== NEW: Thu do truc tiep =====
+    tryOnPrompt: {
+      type: new Schema(
+        {
+          description: { type: String, required: true },
+          imageUrl: { type: String, required: true },
+          generatedAt: { type: Date, required: true },
+        },
+        { _id: false }
+      ),
+      select: false,
     },
     // ===== END NEW =====
   },

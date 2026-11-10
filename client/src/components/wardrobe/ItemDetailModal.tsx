@@ -3,7 +3,8 @@ import { useCategoryLabels } from '@/store/categoryStore';
 
 // ===== NEW: Xem/Sua Item =====
 import { useCallback, useRef, useState } from 'react';
-import { Pencil, Plus, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Pencil, Plus, Sparkles, X } from 'lucide-react';
 import { VButton, VInput, VSelect, VChip, VModal, VLabel, VSpinner } from '@/components/ui/vintage';
 import { CloudImage } from '@/components/ui/CloudImage';
 import { useResource } from '@/hooks/useResource';
@@ -13,15 +14,17 @@ import type { UpdateItemPayload } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import {
   CATEGORIES, STYLES, SEASONS, SEASON_LABELS,
-  OCCASIONS, OCCASION_LABELS,
+  OCCASIONS, OCCASION_LABELS, ITEM_KIND_LABELS, KINDS_BY_CATEGORY,
 } from '@/types';
-import type { Category, ClothingItem, Style, Season, Occasion } from '@/types';
+import type { Category, ClothingItem, Style, Season, Occasion, ItemKind } from '@/types';
 
 const MAX_COLORS = 5;
 
 type FormState = {
   name: string;
   category: Category;
+  /** '' = để AI tự nhận diện từ ảnh. */
+  kind: ItemKind | '';
   colors: string[];
   styles: Style[];
   seasons: Season[];
@@ -37,6 +40,7 @@ function toForm(item: ClothingItem): FormState {
   return {
     name: item.name,
     category: item.category,
+    kind: item.kind ?? '',
     colors: [...item.colors],
     styles: [...item.styles],
     seasons: [...item.seasons],
@@ -86,14 +90,18 @@ export function ItemDetailModal({
   itemId,
   onClose,
   onUpdated,
+  onMixWith,
 }: {
   /** Trang cha render kem key={itemId} -> doi item la mount lai, state tu reset. */
   itemId: string;
   onClose: () => void;
   /** Goi sau khi luu thanh cong de trang cha cap nhat luoi ngay. */
   onUpdated: (item: ClothingItem) => void;
+  /** "Phoi voi mon nay". Bo trong -> chuyen sang trang Goi y, ghim mon nay. */
+  onMixWith?: (item: ClothingItem) => void;
 }) {
   const CATEGORY_LABELS = useCategoryLabels();
+  const router = useRouter();
   const loader = useCallback((signal: AbortSignal) => itemApi.get(itemId, signal), [itemId]);
   const { data: item, setData: setItem, loading, error: loadError, reload } = useResource(loader);
   const savingRef = useRef(false);
@@ -137,6 +145,7 @@ export function ItemDetailModal({
     const payload: UpdateItemPayload = {
       name,
       category: form.category,
+      kind: form.kind || null,
       colors: form.colors,
       styles: form.styles,
       seasons: form.seasons,
@@ -200,18 +209,38 @@ export function ItemDetailModal({
                   <h3 className="font-serif-display text-2xl font-semibold leading-tight text-[#1F453E]">
                     {item.name}
                   </h3>
-                  <button
-                    type="button"
-                    onClick={startEdit}
-                    title="Chỉnh sửa"
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#1F453E] px-3 py-1.5 text-xs font-semibold text-[#1F453E] transition-colors hover:bg-[#E2ECC8]/50"
-                  >
-                    <Pencil size={12} /> Chỉnh sửa
-                  </button>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                    {!item.isArchived && (
+                      <button
+                        type="button"
+                        onClick={() => (onMixWith ? onMixWith(item) : router.push(`/suggest?anchor=${item._id}`))}
+                        title="Gợi ý bộ đồ phối cùng món này"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-[#1F453E] bg-[#1F453E] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#16352F]"
+                      >
+                        <Sparkles size={12} /> Phối với món này
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={startEdit}
+                      title="Chỉnh sửa"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#1F453E] px-3 py-1.5 text-xs font-semibold text-[#1F453E] transition-colors hover:bg-[#E2ECC8]/50"
+                    >
+                      <Pencil size={12} /> Chỉnh sửa
+                    </button>
+                  </div>
                 </div>
 
                 <ViewRow label="Danh mục">
-                  <Tag>{CATEGORY_LABELS[item.category]}</Tag>
+                  <div className="flex flex-wrap gap-2">
+                    <Tag>{CATEGORY_LABELS[item.category]}</Tag>
+                    {item.kind && item.kind !== 'other' && item.kind !== item.category && (
+                      <Tag>{ITEM_KIND_LABELS[item.kind]}</Tag>
+                    )}
+                    {!item.kind && KINDS_BY_CATEGORY[item.category].length > 1 && (
+                      <span className="self-center text-xs text-[#6B7B76]">Chưa nhận diện loại đồ</span>
+                    )}
+                  </div>
                 </ViewRow>
 
                 <ViewRow label="Thương hiệu">
@@ -295,12 +324,31 @@ export function ItemDetailModal({
                   <VSelect
                     label="Danh mục"
                     value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value as Category })}
+                    onChange={(e) => {
+                      const category = e.target.value as Category;
+                      // Loại cũ không thuộc danh mục mới -> để AI nhận diện lại.
+                      const kind = form.kind && KINDS_BY_CATEGORY[category].includes(form.kind) ? form.kind : '';
+                      setForm({ ...form, category, kind });
+                    }}
                   >
                     {CATEGORIES.map((c) => (
                       <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
                     ))}
                   </VSelect>
+
+                  {KINDS_BY_CATEGORY[form.category].length > 1 && (
+                    <VSelect
+                      label="Loại (AI tự nhận diện từ ảnh, sửa nếu chưa đúng)"
+                      value={form.kind}
+                      onChange={(e) => setForm({ ...form, kind: e.target.value as ItemKind | '' })}
+                    >
+                      <option value="">Để AI tự nhận diện</option>
+                      {KINDS_BY_CATEGORY[form.category].map((k) => (
+                        <option key={k} value={k}>{ITEM_KIND_LABELS[k]}</option>
+                      ))}
+                      <option value="other">{ITEM_KIND_LABELS.other}</option>
+                    </VSelect>
+                  )}
 
                   <VInput
                     label="Thương hiệu (không bắt buộc)"

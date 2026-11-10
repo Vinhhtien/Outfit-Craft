@@ -15,6 +15,7 @@ import { ItemDetailModal } from '@/components/wardrobe/ItemDetailModal';
 // ===== NEW: Delete Confirmation Popup =====
 import { DeleteConfirmModal } from '@/components/wardrobe/DeleteConfirmModal';
 // ===== END NEW =====
+import { LazyLiveTryOnModal } from '@/components/tryon/LazyLiveTryOnModal'; // NEW: Thu do truc tiep
 import { VButton, VChip, VToast } from '@/components/ui/vintage';
 import { useResource } from '@/hooks/useResource';
 import { CardSkeletons, LoadingState, ErrorState } from '@/components/ui/AsyncState';
@@ -30,6 +31,7 @@ export default function WardrobePage() {
   // ===== NEW: Xem/Sua Item =====
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   // ===== END NEW =====
+  const [tryOnItem, setTryOnItem] = useState<ClothingItem | null>(null); // NEW: Thu do truc tiep
   // ===== NEW: Delete Confirmation Popup =====
   const [itemToDelete, setItemToDelete] = useState<ClothingItem | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -235,6 +237,7 @@ export default function WardrobePage() {
                       onDelete={setItemToDelete}
                       // ===== NEW: Xem/Sua Item =====
                       onClick={(it) => setSelectedItemId(it._id)}
+                      onTryOn={setTryOnItem} // NEW: Thu do truc tiep
                     />
                   ))}
                 </div>
@@ -259,6 +262,9 @@ export default function WardrobePage() {
           onUpdated={handleItemUpdated}
         />
       )}
+
+      {/* ===== NEW: Thu do truc tiep ===== */}
+      {tryOnItem && <LazyLiveTryOnModal item={tryOnItem} onClose={() => setTryOnItem(null)} />}
 
       {/* ===== NEW: Delete Confirmation Popup ===== */}
       <DeleteConfirmModal

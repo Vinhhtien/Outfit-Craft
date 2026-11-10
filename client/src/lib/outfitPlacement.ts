@@ -164,10 +164,20 @@ export function autoPlace(category: string, aspect: number, anchors: MannequinAn
   }
 
   const rule = GROUP_RULES[group];
-  const width = rule.width(anchors);
   const anchorRef = rule.anchors[0];
+  let width = rule.width(anchors);
+  let height = width * aspect;
+  // Anh dai (vd quan ong rong) scale theo be ngang co the de vuot qua ban chan, tran khoi khung
+  // -> thu nho (giu ti le) cho mep duoi cham toi da ban chan.
+  if (rule.ref === 'top') {
+    const maxHeight = anchors.footBottom.y - anchors[anchorRef].y;
+    if (maxHeight > 0 && height > maxHeight) {
+      height = maxHeight;
+      width = height / aspect;
+    }
+  }
   return {
-    box: boxFromRef(anchors[anchorRef], rule.ref, width, width * aspect),
+    box: boxFromRef(anchors[anchorRef], rule.ref, width, height),
     anchorRef,
     offset: ZERO,
   };

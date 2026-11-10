@@ -10,9 +10,9 @@ import { itemApi } from '@/lib/services';
 import { getErrorMessage, getFieldErrors } from '@/lib/api';
 import {
   CATEGORIES, STYLES, SEASONS, SEASON_LABELS,
-  OCCASIONS, OCCASION_LABELS,
+  OCCASIONS, OCCASION_LABELS, ITEM_KIND_LABELS, KINDS_BY_CATEGORY,
 } from '@/types';
-import type { Category, Style, Season, Occasion } from '@/types';
+import type { Category, Style, Season, Occasion, ItemKind } from '@/types';
 
 type Step = 'pick' | 'processing' | 'form';
 
@@ -47,10 +47,17 @@ export function AddItemModal({
   const [originalFile, setOriginalFile] = useState<Blob | null>(null);
   const [cutoutBlob, setCutoutBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [autoTagState, setAutoTagState] = useState<'idle' | 'loading' | 'done' | 'failed'>('idle');
+  /** Người dùng đã tự chọn danh mục/loại hoặc tự đặt tên -> AI không ghi đè. */
+  const touched = useRef({ category: false, name: false });
+  /** Tên lấy từ tên file, AI được phép thay nếu người dùng chưa sửa. */
+  const fileName = useRef('');
 
   const [form, setForm] = useState({
     name: '',
     category: 'top' as Category,
+    /** '' = để AI tự nhận diện sau khi lưu. */
+    kind: '' as ItemKind | '',
     colors: [] as string[],
     styles: [] as Style[],
     seasons: [] as Season[],
@@ -75,8 +82,11 @@ export function AddItemModal({
     setCutoutBlob(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl('');
+    setAutoTagState('idle');
+    touched.current = { category: false, name: false };
+    fileName.current = '';
     setForm({
-      name: '', category: 'top', colors: [], styles: [], seasons: [], occasions: [], brand: '', purchasePrice: '',
+      name: '', category: 'top', kind: '', colors: [], styles: [], seasons: [], occasions: [], brand: '', purchasePrice: '',
     });
   };
 
@@ -84,6 +94,34 @@ export function AddItemModal({
     if (savingRef.current) return;
     reset();
     onClose();
+  };
+
+  /** Chay nen, khong chan form. Chi dien nhom user chua chon; loi thi de user chon tay. */
+  const suggestTags = async (image: Blob, current: number) => {
+    setAutoTagState('loading');
+    try {
+      const tags = await itemApi.autoTag(image);
+      if (current !== operation.current) return;
+      setForm((f) => {
+        const pickCategory = !touched.current.category && tags.category;
+        const category = pickCategory ? tags.category! : f.category;
+        const kind = !touched.current.category && tags.kind && KINDS_BY_CATEGORY[category].includes(tags.kind)
+          ? tags.kind : f.kind;
+        const useName = !touched.current.name && tags.name && (!f.name || f.name === fileName.current);
+        return {
+          ...f,
+          category,
+          kind,
+          name: useName ? tags.name! : f.name,
+          styles: f.styles.length > 0 ? f.styles : tags.styles,
+        seasons: f.seasons.length > 0 ? f.seasons : tags.seasons,
+          occasions: f.occasions.length > 0 ? f.occasions : tags.occasions,
+        };
+      });
+      setAutoTagState('done');
+    } catch {
+      if (current === operation.current) setAutoTagState('failed');
+    }
   };
 
   /** Chon file -> thu nho -> tach nen -> lay mau chu dao. */
@@ -114,13 +152,15 @@ export function AddItemModal({
       // Tu dong dien mau chu dao va ten goi y.
       const colors = await extractColors(cutout, 3);
       if (current !== operation.current) return;
+      fileName.current = file.name.replace(/\.[^.]+$/, '').slice(0, 100);
       setForm((f) => ({
         ...f,
         colors,
-        name: f.name || file.name.replace(/\.[^.]+$/, ''),
+        name: f.name || fileName.current,
       }));
 
       setStep('form');
+      void suggestTags(cutout, current);
     } catch (err) {
       if (current !== operation.current) return;
       setError(getErrorMessage(err));
@@ -140,7 +180,7 @@ export function AddItemModal({
     try {
       const parsedPrice = form.purchasePrice ? Number(form.purchasePrice) : undefined;
       await itemApi.createWithImages({
-        name: form.name.trim(), category: form.category, colors: form.colors,
+        name: form.name.trim(), category: form.category, kind: form.kind || undefined, colors: form.colors,
         styles: form.styles, seasons: form.seasons, occasions: form.occasions,
         brand: form.brand.trim() || undefined,
         purchasePrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : undefined,
@@ -177,7 +217,7 @@ export function AddItemModal({
           </button>
           <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[#6B7B76]">
             <Wand2 size={13} />
-            Nền ảnh sẽ được tách tự động ngay trên trình duyệt
+            Nền ảnh được tách ngay trên trình duyệt, sau đó ảnh đã tách nền được gửi cho Google Gemini để gợi ý thông tin món đồ
           </p>
 
           <input
@@ -238,7 +278,10 @@ export function AddItemModal({
               aria-invalid={Boolean(fieldErrors.name)}
               aria-describedby={fieldErrors.name ? 'item-name-error' : undefined}
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => {
+                touched.current.name = true;
+                setForm({ ...form, name: e.target.value });
+              }}
               placeholder="Áo sơ mi trắng"
             />
 
@@ -246,12 +289,37 @@ export function AddItemModal({
             <VSelect
               label="Danh mục"
               value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value as Category })}
+              onChange={(e) => {
+                touched.current.category = true;
+                const category = e.target.value as Category;
+                // Loại cũ không thuộc danh mục mới -> để AI nhận diện lại sau khi lưu.
+                const kind = form.kind && KINDS_BY_CATEGORY[category].includes(form.kind) ? form.kind : '';
+                setForm({ ...form, category, kind });
+              }}
             >
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
               ))}
             </VSelect>
+
+            {KINDS_BY_CATEGORY[form.category].length > 1 && (
+              <VSelect
+                label="Loại (AI tự nhận diện từ ảnh, sửa nếu chưa đúng)"
+                value={form.kind}
+                onChange={(e) => {
+                  touched.current.category = true;
+                  setForm({ ...form, kind: e.target.value as ItemKind | '' });
+                }}
+              >
+                <option value="">
+                  {autoTagState === 'loading' ? 'AI đang nhận diện…' : 'Để AI tự nhận diện sau khi lưu'}
+                </option>
+                {KINDS_BY_CATEGORY[form.category].map((k) => (
+                  <option key={k} value={k}>{ITEM_KIND_LABELS[k]}</option>
+                ))}
+                <option value="other">{ITEM_KIND_LABELS.other}</option>
+              </VSelect>
+            )}
 
             <VInput
               label="Thương hiệu (không bắt buộc)"
@@ -283,6 +351,15 @@ export function AddItemModal({
                   ))}
                 </div>
               </div>
+            )}
+
+            {autoTagState !== 'idle' && (
+              <p role="status" aria-live="polite" className="flex items-center gap-1.5 text-xs text-[#52665F]">
+                <Wand2 size={13} className="shrink-0" />
+                {autoTagState === 'loading' && 'Đang gửi ảnh cho Google Gemini để gợi ý loại đồ, phong cách, mùa và dịp mặc…'}
+                {autoTagState === 'done' && 'AI đã gợi ý loại đồ, phong cách, mùa và dịp mặc. Bạn kiểm tra và sửa lại nếu cần nhé.'}
+                {autoTagState === 'failed' && 'Chưa thể tự gợi ý lúc này, bạn chọn thủ công nhé.'}
+              </p>
             )}
 
             <div>

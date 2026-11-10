@@ -7,6 +7,7 @@ import { ImageCleanup } from '../models/ImageCleanup.js';
 import { ClothingItem } from '../models/ClothingItem.js';
 import { Outfit } from '../models/Outfit.js';
 import { User } from '../models/User.js';
+import { TryOnSnapshot } from '../models/TryOnSnapshot.js'; // NEW: Thu do truc tiep
 
 export interface UploadResult { url: string; publicId: string }
 
@@ -48,6 +49,7 @@ async function isReferenced(publicId: string) {
   const references = await Promise.all([
     ClothingItem.exists({ $or: [{ imagePublicId: publicId }, { originalImagePublicId: publicId }, { originalImageUrl: legacyUrl }] }),
     Outfit.exists({ thumbnailPublicId: publicId }), User.exists({ avatarPublicId: publicId }),
+    TryOnSnapshot.exists({ imagePublicId: publicId }), // NEW: Thu do truc tiep
   ]);
   return references.some(Boolean);
 }

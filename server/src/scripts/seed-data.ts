@@ -7,6 +7,8 @@ import { Outfit } from '../models/Outfit.js';
 import { Comment } from '../models/Comment.js';
 import { Like } from '../models/Like.js';
 import { WishlistItem } from '../models/WishlistItem.js';
+import { StylistMessage } from '../models/StylistMessage.js';
+import { StylistConversation } from '../models/StylistConversation.js';
 
 dotenv.config();
 
@@ -24,6 +26,8 @@ async function seed() {
     Comment.deleteMany({}),
     Like.deleteMany({}),
     WishlistItem.deleteMany({}),
+    StylistMessage.deleteMany({}),
+    StylistConversation.deleteMany({}),
   ]);
 
   console.log('Cleared existing data.');

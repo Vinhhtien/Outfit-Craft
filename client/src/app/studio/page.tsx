@@ -10,10 +10,12 @@ import {
   PersonStanding, Magnet, FolderOpen, FilePlus, RotateCcw, SlidersHorizontal, X,
   // ===== END NEW =====
   BookmarkCheck, // NEW: Ghi nho fit
+  Video, // NEW: Thu do truc tiep
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { OutfitCanvas, type OutfitCanvasHandle } from '@/components/canvas/OutfitCanvas';
+import { LazyLiveTryOnModal } from '@/components/tryon/LazyLiveTryOnModal'; // NEW: Thu do truc tiep
 import { VButton, VChip, VInput, VLabel, VModal, VSpinner, VToast } from '@/components/ui/vintage';
 import { itemApi, outfitApi, bodyProfileApi } from '@/lib/services';
 import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
@@ -69,6 +71,7 @@ export default function StudioPage() {
   const [error, setError] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [tryOnItem, setTryOnItem] = useState<ClothingItem | null>(null); // NEW: Thu do truc tiep
 
   // ===== NEW: Body Profile =====
   /** Số đo trong hồ sơ của user (mặc định rectangle/neutral). */
@@ -175,8 +178,28 @@ export default function StudioPage() {
     });
   }, []);
 
+  /** Mon do mang tu trang Goi y (?items=id1,id2) -> dat len canvas de thu ngay. */
+  const pendingTryOnRef = useRef<ClothingItem[] | null>(null);
+
   /** Nap outfit dang cho khi canvas da san sang. */
   const flushPending = useCallback(() => {
+    const tryOn = pendingTryOnRef.current;
+    if (tryOn && readyRef.current) {
+      pendingTryOnRef.current = null;
+      setCanvasBusy(true);
+      busyRef.current = true;
+      void (async () => {
+        try {
+          for (const item of tryOn) await canvasRef.current?.addItem(item);
+        } catch (err) {
+          setError(getErrorMessage(err));
+        } finally {
+          busyRef.current = false;
+          setCanvasBusy(false);
+        }
+      })();
+      return;
+    }
     const outfit = pendingRef.current;
     if (!outfit || !readyRef.current) return;
     pendingRef.current = null;
@@ -206,8 +229,18 @@ export default function StudioPage() {
         const mine = bodyStateFromProfile(raw);
         userBodyRef.current = mine;
         setUserBody(mine);
-        const outfitId = new URLSearchParams(window.location.search).get('outfit');
-        if (!outfitId) setBody(mine);
+        const params = new URLSearchParams(window.location.search);
+        const outfitId = params.get('outfit');
+        const tryOnIds = [...new Set((params.get('items') ?? '').split(',').filter(Boolean))];
+        if (!outfitId && tryOnIds.length > 0) {
+          setBody(mine);
+          const byId = new Map(response.data.map((it) => [it._id, it]));
+          const tryOn = await Promise.all(tryOnIds.map((id) => byId.get(id) ?? itemApi.get(id, controller.signal)));
+          if (controller.signal.aborted) return;
+          window.history.replaceState(null, '', '/studio');
+          pendingTryOnRef.current = tryOn;
+          flushPending();
+        } else if (!outfitId) setBody(mine);
         else {
           const outfit = await outfitApi.get(outfitId, controller.signal);
           if (controller.signal.aborted) return;
@@ -220,13 +253,16 @@ export default function StudioPage() {
         if (!controller.signal.aborted) { setLoadingItems(false); setInitializing(false); }
       }
     })();
-    return () => { controller.abort(); pendingRef.current = null; };
+    return () => { controller.abort(); pendingRef.current = null; pendingTryOnRef.current = null; };
   }, [flushPending, userId, reloadVersion]);
 
   const addCanvasItem = async (item: ClothingItem) => {
     if (addRef.current || busyRef.current || initializing || initialError) return;
     addRef.current = true; setAddingItem(true); setError('');
-    try { await canvasRef.current?.addItem(item); }
+    try {
+      const added = await canvasRef.current?.addItem(item);
+      if (added === false) setToast(`"${item.name}" đã có trên canvas - mỗi món chỉ thêm được 1 lần.`);
+    }
     catch (err) { setError(getErrorMessage(err)); }
     finally { addRef.current = false; setAddingItem(false); }
   };
@@ -486,6 +522,7 @@ export default function StudioPage() {
               loading={loadingItems}
               items={filtered}
               onPick={(item) => void addCanvasItem(item)}
+              onTryOn={setTryOnItem} // NEW: Thu do truc tiep
             />
           </aside>
 
@@ -762,6 +799,9 @@ export default function StudioPage() {
 
       <VToast message={fitError} variant="error" duration={4000} onClose={closeFitError} /> {/* NEW: Ghi nho fit */}
       <VToast message={toast} onClose={closeToast} />
+
+      {/* ===== NEW: Thu do truc tiep ===== */}
+      {tryOnItem && <LazyLiveTryOnModal item={tryOnItem} onClose={() => setTryOnItem(null)} />}
     </ProtectedLayout>
   );
 }
@@ -773,12 +813,14 @@ function WardrobePicker({
   loading,
   items,
   onPick,
+  onTryOn,
 }: {
   category: Category | 'all';
   onCategory: (c: Category | 'all') => void;
   loading: boolean;
   items: ClothingItem[];
   onPick: (item: ClothingItem) => void;
+  onTryOn: (item: ClothingItem) => void; // NEW: Thu do truc tiep
 }) {
   const CATEGORY_LABELS = useCategoryLabels();
   return (
@@ -817,21 +859,31 @@ function WardrobePicker({
         ) : (
           <div className="grid grid-cols-2 gap-3 pr-1">
             {items.map((item) => (
-              <button
-                key={item._id}
-                onClick={() => onPick(item)}
-                title={`Thêm "${item.name}" lên canvas`}
-                className="grid aspect-square cursor-pointer place-items-center rounded-xl border border-[#E2E8F0] bg-[#FAF9F5] p-2 transition-all hover:border-[#1F453E] hover:bg-[#E2ECC8]/30"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={item.imageUrl}
-                  alt={item.name}
-                  loading="lazy"
-                  draggable={false}
-                  className="max-h-full max-w-full object-contain"
-                />
-              </button>
+              // NEW: Thu do truc tiep - boc div de dat nut thu canh nut chon (khong long button).
+              <div key={item._id} className="group relative">
+                <button
+                  onClick={() => onPick(item)}
+                  title={`Thêm "${item.name}" lên canvas`}
+                  className="grid aspect-square w-full cursor-pointer place-items-center rounded-xl border border-[#E2E8F0] bg-[#FAF9F5] p-2 transition-all hover:border-[#1F453E] hover:bg-[#E2ECC8]/30"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    loading="lazy"
+                    draggable={false}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onTryOn(item)}
+                  aria-label={`Thử trực tiếp ${item.name}`}
+                  className="absolute inset-x-1 bottom-1 inline-flex items-center justify-center gap-1 rounded-full bg-[#1F453E] px-1 py-1 text-[10px] font-bold text-white opacity-100 shadow transition-opacity hover:bg-[#16352F] lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+                >
+                  <Video size={11} /> Thử trực tiếp
+                </button>
+              </div>
             ))}
           </div>
         )}
