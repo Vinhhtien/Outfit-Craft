@@ -61,6 +61,19 @@ export interface OutfitCanvasHandle {
    */
   getSelectedFit: () => { itemId: string; fit: ItemFit | null } | null;
   // ===== END NEW =====
+  // ===== NEW: O mon do =====
+  /**
+   * Thay 1 mon tren canvas bang mon khac (thuong cung loai), giu thu tu lop cua mon cu.
+   * false = mon cu khong con tren canvas hoac mon moi da co san.
+   */
+  replaceItem: (oldItemId: string, item: ClothingItem) => Promise<boolean>;
+  /** Bo 1 mon khoi canvas theo id. */
+  removeItem: (itemId: string) => void;
+  /** Chup trang thai mon do hien tai (de hoan tac). Bo chon truoc de toa do khong bi tuong doi. */
+  snapshot: () => Record<string, unknown>;
+  /** Tra canvas ve 1 snapshot, giu nguyen dang nguoi mau dang hien. */
+  restore: (snapshot: Record<string, unknown>) => Promise<void>;
+  // ===== END NEW =====
 }
 
 const sameProfile = (a: MannequinProfile, b: MannequinProfile) =>
@@ -89,9 +102,11 @@ export const OutfitCanvas = forwardRef<
      */
     onItemFit?: (itemId: string, fit: ItemFit) => void;
     // ===== END NEW =====
+    /** NEW: O mon do - id cac mon dang co tren canvas (theo thu tu lop), goi moi khi them/bot/thay/nap. */
+    onItemsChange?: (itemIds: string[]) => void;
   }
 >(function OutfitCanvas(
-  { onSelectionChange, onDirty, scale = 1, mannequin, showMannequin = true, autoSnap = true, onReady, onItemFit },
+  { onSelectionChange, onDirty, scale = 1, mannequin, showMannequin = true, autoSnap = true, onReady, onItemFit, onItemsChange },
   ref
 ) {
   const elRef = useRef<HTMLCanvasElement>(null);
@@ -117,6 +132,16 @@ export const OutfitCanvas = forwardRef<
 
   useEffect(() => { autoSnapRef.current = autoSnap; }, [autoSnap]);
   useEffect(() => { scaleRef.current = scale; }, [scale]);
+  // ===== END NEW =====
+
+  // ===== NEW: O mon do =====
+  const onItemsChangeRef = useRef(onItemsChange);
+  useEffect(() => { onItemsChangeRef.current = onItemsChange; }, [onItemsChange]);
+  /** Bao danh sach mon hien tai cho Studio (doc trong ref nen goi duoc tu event handler). */
+  const emitItemsRef = useRef(() => {
+    const canvas = canvasRef.current;
+    onItemsChangeRef.current?.(canvas ? getItemObjects(canvas).map((o) => o.itemData!.itemId) : []);
+  });
   // ===== END NEW =====
 
   // ===== NEW: Ghi nho fit =====
@@ -236,6 +261,7 @@ export const OutfitCanvas = forwardRef<
           removeActive(canvasRef.current);
           onSelectionChange?.(false);
           onDirty?.();
+          emitItemsRef.current(); // NEW: O mon do
         }
       }
     };
@@ -261,6 +287,7 @@ export const OutfitCanvas = forwardRef<
           calibratingRef.current.add(obj);
         }
         onDirty?.();
+        emitItemsRef.current(); // NEW: O mon do
         return true;
       },
       addPlacedItems: async (list) => {
@@ -270,6 +297,7 @@ export const OutfitCanvas = forwardRef<
         }
         canvasRef.current?.discardActiveObject();
         onSelectionChange?.(false);
+        emitItemsRef.current(); // NEW: O mon do
       },
       serialize: () => {
         const canvas = canvasRef.current;
@@ -298,6 +326,7 @@ export const OutfitCanvas = forwardRef<
           // loadFromJSON xoa sach canvas (ke ca mannequin) -> ve lai o lop duoi cung.
           await setMannequin(canvas, profile, showRef.current);
           onSelectionChange?.(false);
+          emitItemsRef.current(); // NEW: O mon do
         };
         const done = loadChainRef.current.then(run).finally(() => { loadingRef.current--; });
         loadChainRef.current = done.catch(() => undefined);
@@ -308,6 +337,7 @@ export const OutfitCanvas = forwardRef<
         clearItems(canvasRef.current);
         onSelectionChange?.(false);
         onDirty?.();
+        emitItemsRef.current(); // NEW: O mon do
       },
       bringForward: () => {
         const canvas = canvasRef.current;
@@ -324,6 +354,7 @@ export const OutfitCanvas = forwardRef<
           removeActive(canvasRef.current);
           onSelectionChange?.(false);
           onDirty?.();
+          emitItemsRef.current(); // NEW: O mon do
         }
       },
       flipSelected: () => {
@@ -337,6 +368,67 @@ export const OutfitCanvas = forwardRef<
         const obj = canvasRef.current?.getActiveObject() as ItemObject | undefined;
         if (!obj?.itemData?.itemId) return null;
         return { itemId: obj.itemData.itemId, fit: itemFitOf(obj, anchorsRef.current) };
+      },
+      // ===== END NEW =====
+      // ===== NEW: O mon do =====
+      replaceItem: async (oldItemId, item) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return false;
+        const objects = getItemObjects(canvas);
+        const old = objects.find((o) => o.itemData?.itemId === oldItemId);
+        if (!old || objects.some((o) => o.itemData?.itemId === item._id)) return false;
+        // Tai anh moi truoc, loi mang thi mon cu van nguyen tren canvas.
+        const index = canvas.getObjects().indexOf(old);
+        const obj = await addItemToCanvas(canvas, item, anchorsRef.current);
+        // Mon cu co the da bi xoa trong luc tai anh -> khi do giu mon moi o lop mac dinh.
+        if (canvas.getObjects().includes(old)) {
+          canvas.remove(old);
+          canvas.moveObjectTo(obj, Math.min(index, canvas.getObjects().length - 1));
+        }
+        if (!item.fit || !placeFromFit(item.fit, item.category, anchorsRef.current)) {
+          calibratingRef.current.add(obj);
+        }
+        canvas.setActiveObject(obj);
+        canvas.requestRenderAll();
+        onSelectionChange?.(true);
+        onDirty?.();
+        emitItemsRef.current();
+        return true;
+      },
+      removeItem: (itemId) => {
+        const canvas = canvasRef.current;
+        const obj = canvas && getItemObjects(canvas).find((o) => o.itemData?.itemId === itemId);
+        if (!canvas || !obj) return;
+        if (canvas.getActiveObjects().includes(obj)) {
+          canvas.discardActiveObject();
+          onSelectionChange?.(false);
+        }
+        canvas.remove(obj);
+        canvas.requestRenderAll();
+        onDirty?.();
+        emitItemsRef.current();
+      },
+      snapshot: () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return {};
+        canvas.discardActiveObject();
+        onSelectionChange?.(false);
+        return serializeCanvasJSON(canvas);
+      },
+      restore: async (snapshot) => {
+        if (!canvasRef.current) return;
+        // Snapshot luon co it nhat 1 mon; loadCanvasJSON se nap lai dung vi tri, lop, lat ngang.
+        loadingRef.current++;
+        try {
+          const canvas = canvasRef.current;
+          await loadCanvasJSON(canvas, snapshot, [], anchorsRef.current);
+          await setMannequin(canvas, profileRef.current, showRef.current);
+          onSelectionChange?.(false);
+          onDirty?.();
+          emitItemsRef.current();
+        } finally {
+          loadingRef.current--;
+        }
       },
       // ===== END NEW =====
     }),
