@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Camera } from 'lucide-react';
 import { authApi } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
+import { resizeImage } from '@/lib/backgroundRemoval';
 import { PASSWORD_MIN_LENGTH, getErrorStatus, validateNewPassword } from '@/lib/passwordPolicy';
 import { useAuthStore } from '@/store/authStore';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
@@ -20,6 +21,8 @@ import { BodyProfileSection } from '@/components/profile/BodyProfileSection';
 /** Giu dong bo voi server/src/middlewares/upload.ts */
 const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const AVATAR_MAX_BYTES = 10 * 1024 * 1024;
+/** Canh dai nhat cua anh dai dien sau khi thu nho (truoc khi upload). */
+const AVATAR_MAX_SIZE = 512;
 const DISPLAY_NAME_MAX = 50;
 const CITY_MAX = 100;
 
@@ -123,13 +126,16 @@ function ProfileForm({ onSuccess }: { onSuccess: (msg: string) => void }) {
     }
     if (!defaultCity) return setError('Vui lòng nhập thành phố.');
 
-    const data = new FormData();
-    data.append('displayName', displayName);
-    data.append('defaultCity', defaultCity);
-    if (avatarFile) data.append('avatar', avatarFile);
-
     setSaving(true);
     try {
+      const data = new FormData();
+      data.append('displayName', displayName);
+      data.append('defaultCity', defaultCity);
+      if (avatarFile) {
+        // Anh dai dien chi hien nho: thu ve 512px de upload nhanh va vua gioi han request khi deploy.
+        const avatar = await resizeImage(avatarFile, AVATAR_MAX_SIZE);
+        data.append('avatar', avatar, avatar.type === 'image/png' ? 'avatar.png' : 'avatar.jpg');
+      }
       const updated = await updateProfile(data);
       setForm({ displayName: updated.displayName, defaultCity: updated.defaultCity });
       clearPickedFile();

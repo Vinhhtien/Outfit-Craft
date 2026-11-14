@@ -3,6 +3,7 @@ import multer from 'multer';
 import { ZodError } from 'zod';
 import { ApiError } from '../utils/ApiError.js';
 import { validationDetails } from './validate.js';
+import { MAX_UPLOAD_MB } from './upload.js';
 
 export function notFound(_req: Request, _res: Response, next: NextFunction) {
   next(ApiError.notFound('Đường dẫn yêu cầu không tồn tại.'));
@@ -26,7 +27,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, next: N
   } else if (err instanceof multer.MulterError) {
     status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     message = err.code === 'LIMIT_FILE_SIZE'
-      ? 'Mỗi ảnh được phép tối đa 10 MB.'
+      ? `Mỗi ảnh được phép tối đa ${MAX_UPLOAD_MB} MB.`
       : 'Số lượng ảnh hoặc dữ liệu tải lên không hợp lệ.';
   } else if (err instanceof Error) {
     const error = err as Error & { code?: number; type?: string };

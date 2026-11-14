@@ -8,6 +8,8 @@ import { notFound, errorHandler } from './middlewares/errorHandler.js';
 import { env } from './config/env.js';
 
 const app = express();
+// Vercel dat app sau 1 proxy: can de rate limit doc dung IP nguoi dung (X-Forwarded-For).
+if (process.env.VERCEL) app.set('trust proxy', 1);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: env.clientOrigin, credentials: true }));
