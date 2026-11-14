@@ -8,6 +8,7 @@ dist/
 build/
 .next/
 out/
+.vercel/
 
 # Bien moi truong - TUYET DOI khong commit (chua secret key)
 .env

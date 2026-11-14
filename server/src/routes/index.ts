@@ -9,6 +9,7 @@ import userRoutes from './user.routes.js';
 import adminRoutes from './admin.routes.js';
 import wishlistRoutes from './wishlist.routes.js';
 import tryOnRoutes from './tryOn.routes.js'; // NEW: Thu do truc tiep
+import cronRoutes from './cron.routes.js'; // NEW: Deploy Vercel
 import { categoryConfig } from '../controllers/admin.controller.js';
 // ===== END NEW =====
 
@@ -21,6 +22,7 @@ router.use('/suggestions', suggestionRoutes);
 router.use('/schedule', scheduleRoutes);
 router.use('/wishlist', wishlistRoutes);
 router.use('/try-on', tryOnRoutes); // NEW: Thu do truc tiep
+router.use('/cron', cronRoutes); // NEW: Deploy Vercel
 // ===== NEW: Body Profile =====
 router.use('/users', userRoutes);
 router.use('/admin', adminRoutes);
