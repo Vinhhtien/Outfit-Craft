@@ -2,7 +2,7 @@
 import { useCategoryLabels } from '@/store/categoryStore';
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Wand2, X } from 'lucide-react';
+import { Camera, Check, Upload, Wand2, X } from 'lucide-react';
 import { VButton, VInput, VSelect, VChip, VModal, VLabel } from '@/components/ui/vintage';
 import { removeBackground, resizeImage } from '@/lib/backgroundRemoval';
 import { extractColors } from '@/lib/colorExtract';
@@ -19,6 +19,53 @@ type Step = 'pick' | 'processing' | 'form';
 
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+/** Model tach nen giu lai moi thu no coi la "vat the chinh": moc treo, tay nguoi, mon do khac. */
+const PHOTO_DO = [
+  'Trải phẳng món đồ trên nền trơn (sàn, giường, mặt bàn), màu nền khác màu món đồ',
+  'Vuốt phẳng nếp nhăn, chỉnh tay áo, ống quần cho ngay ngắn',
+  'Chụp thẳng từ trên xuống, đủ sáng, lấy trọn món đồ trong khung hình',
+];
+const PHOTO_AVOID = [
+  'Móc treo, kẹp, giá treo hoặc ma-nơ-canh',
+  'Tay, chân hoặc người đang mặc món đồ',
+  'Nhiều món đồ trong cùng một ảnh',
+];
+
+function PhotoTips() {
+  return (
+    <div className="mt-4 rounded-xl border border-[#E2ECC8] bg-[#FAF9F5] p-4">
+      <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-[#1F453E]">
+        <Camera size={15} />
+        Mẹo chụp ảnh để tách nền chuẩn hơn
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#1F453E]">Nên</p>
+          <ul className="space-y-1.5">
+            {PHOTO_DO.map((tip) => (
+              <li key={tip} className="flex gap-1.5 text-xs leading-relaxed text-[#6B7B76]">
+                <Check size={14} className="mt-0.5 shrink-0 text-[#1F453E]" />
+                {tip}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-red-600">Tránh để lọt vào ảnh</p>
+          <ul className="space-y-1.5">
+            {PHOTO_AVOID.map((tip) => (
+              <li key={tip} className="flex gap-1.5 text-xs leading-relaxed text-[#6B7B76]">
+                <X size={14} className="mt-0.5 shrink-0 text-red-500" />
+                {tip}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function AddItemModal({
@@ -215,6 +262,7 @@ export function AddItemModal({
               JPG, PNG hoặc WebP · tối đa 10MB
             </span>
           </button>
+          <PhotoTips />
           <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[#6B7B76]">
             <Wand2 size={13} />
             Nền ảnh được tách ngay trên trình duyệt, sau đó ảnh đã tách nền được gửi cho Google Gemini để gợi ý thông tin món đồ

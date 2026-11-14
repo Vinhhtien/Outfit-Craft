@@ -11,7 +11,12 @@ import {
   // ===== END NEW =====
   BookmarkCheck, // NEW: Ghi nho fit
   Video, // NEW: Thu do truc tiep
+  Palette, // NEW: Cong thuc phoi mau
+  SquareStack, Undo2, // NEW: Thay mon cung vi tri
 } from 'lucide-react';
+import { ColorFormulaChart } from '@/components/canvas/ColorFormulaChart'; // NEW: Cong thuc phoi mau
+import { formulaRowOf, goesWith, itemColorGroup, type FormulaRow } from '@/lib/colorFormula'; // NEW: Cong thuc phoi mau
+import { planAdd } from '@/lib/outfitRules'; // NEW: Thay mon cung vi tri
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
 import { OutfitCanvas, type OutfitCanvasHandle } from '@/components/canvas/OutfitCanvas';
@@ -34,7 +39,7 @@ import {
 } from '@/lib/bodyMetrics';
 // ===== END NEW =====
 import { CATEGORIES, OCCASIONS, OCCASION_LABELS } from '@/types';
-import type { Category, ClothingItem, ItemFit, MannequinProfile, Occasion, Outfit } from '@/types';
+import type { Category, ClothingItem, ColorGroup, ItemFit, MannequinProfile, Occasion, Outfit } from '@/types';
 
 const EMPTY_FORM = {
   name: '',
@@ -65,6 +70,25 @@ export default function StudioPage() {
   const [loadingItems, setLoadingItems] = useState(true);
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [hasSelection, setHasSelection] = useState(false);
+  // ===== NEW: Cong thuc phoi mau =====
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [formulaOpen, setFormulaOpen] = useState(false);
+  const [onlyMatching, setOnlyMatching] = useState(false);
+  // ===== END NEW =====
+  // ===== NEW: O mon do ===== mon dang co tren canvas + o dang mo de doi mon
+  const [canvasItemIds, setCanvasItemIds] = useState<string[]>([]);
+  const [slotPicker, setSlotPicker] = useState<{ category: Category; replaceId: string | null } | null>(null);
+  const handleItemsChange = useCallback((ids: string[]) => setCanvasItemIds(ids), []);
+  // ===== END NEW =====
+  // ===== NEW: Thay mon cung vi tri =====
+  const [layering, setLayering] = useState(false);
+  const [undo, setUndo] = useState<{ message: string; snapshot: Record<string, unknown> } | null>(null);
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), 8000);
+    return () => clearTimeout(timer);
+  }, [undo]);
+  // ===== END NEW =====
 
   const [saveOpen, setSaveOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -256,21 +280,91 @@ export default function StudioPage() {
     return () => { controller.abort(); pendingRef.current = null; pendingTryOnRef.current = null; };
   }, [flushPending, userId, reloadVersion]);
 
-  const addCanvasItem = async (item: ClothingItem) => {
+  /**
+   * Them mon len canvas. NEW: Thay mon cung vi tri - mon moi thay mon dang chiem cho (ao thay ao,
+   * vay thay ao + quan...), tru khi dang phoi lop (giu Shift hoac bat nut Phoi lop).
+   */
+  const addCanvasItem = async (item: ClothingItem, layer = false) => {
     if (addRef.current || busyRef.current || initializing || initialError) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     addRef.current = true; setAddingItem(true); setError('');
+    setUndo(null); // Hoan tac chi ap dung cho lan thay gan nhat.
     try {
-      const added = await canvasRef.current?.addItem(item);
-      if (added === false) setToast(`"${item.name}" đã có trên canvas - mỗi món chỉ thêm được 1 lần.`);
+      const plan = canvasItemIds.includes(item._id)
+        ? { replace: null, remove: [] }
+        : planAdd(canvasItems, item.category, layer || layering);
+      const replaced = [plan.replace, ...plan.remove].filter((id): id is string => Boolean(id));
+      const before = replaced.length > 0 ? canvas.snapshot() : null;
+
+      const added = plan.replace ? await canvas.replaceItem(plan.replace, item) : await canvas.addItem(item);
+      if (added === false) {
+        setToast(`"${item.name}" đã có trên canvas - mỗi món chỉ thêm được 1 lần.`);
+        return;
+      }
+      plan.remove.forEach((id) => canvas.removeItem(id));
+      if (before) {
+        const names = replaced.map((id) => canvasItems.find((i) => i._id === id)?.name).filter(Boolean);
+        setUndo({ message: `Đã thay ${names.map((n) => `"${n}"`).join(', ')} bằng "${item.name}"`, snapshot: before });
+      }
     }
     catch (err) { setError(getErrorMessage(err)); }
     finally { addRef.current = false; setAddingItem(false); }
   };
 
-  const filtered =
-    category === 'all' ? items : items.filter((i) => i.category === category);
+  // ===== NEW: Thay mon cung vi tri =====
+  const undoReplace = async () => {
+    const current = undo;
+    if (!current || addRef.current || busyRef.current) return;
+    setUndo(null);
+    addRef.current = true; setAddingItem(true); setError('');
+    try { await canvasRef.current?.restore(current.snapshot); }
+    catch (err) { setError(getErrorMessage(err)); }
+    finally { addRef.current = false; setAddingItem(false); }
+  };
+  // ===== END NEW =====
 
-  const handleSelectionChange = useCallback((v: boolean) => setHasSelection(v), []);
+  // ===== NEW: O mon do =====
+  /** Doi mon trong 1 o; o trong (replaceId null) thi them moi. */
+  const swapCanvasItem = async (replaceId: string | null, item: ClothingItem) => {
+    if (addRef.current || busyRef.current || initializing || initialError) return;
+    setSlotPicker(null);
+    if (!replaceId) return addCanvasItem(item);
+    addRef.current = true; setAddingItem(true); setError('');
+    setUndo(null);
+    try {
+      const swapped = await canvasRef.current?.replaceItem(replaceId, item);
+      if (swapped === false) setToast(`Không đổi được sang "${item.name}" - món này đã có trên canvas.`);
+    }
+    catch (err) { setError(getErrorMessage(err)); }
+    finally { addRef.current = false; setAddingItem(false); }
+  };
+  const removeCanvasItem = (itemId: string) => {
+    setSlotPicker(null);
+    setUndo(null);
+    canvasRef.current?.removeItem(itemId);
+  };
+  const canvasItems = canvasItemIds
+    .map((id) => items.find((i) => i._id === id))
+    .filter((i): i is ClothingItem => Boolean(i));
+  // ===== END NEW =====
+
+  // ===== NEW: Cong thuc phoi mau ===== mau cua mon dang chon (1 mon) tren canvas
+  const selectedItem = selectedItemId ? items.find((i) => i._id === selectedItemId) ?? null : null;
+  const formulaRow = selectedItem ? formulaRowOf(itemColorGroup(selectedItem)) : null;
+  const colorFiltering = onlyMatching && formulaRow !== null;
+  // ===== END NEW =====
+
+  const filtered = items.filter((i) =>
+    (category === 'all' || i.category === category) &&
+    (!colorFiltering || (i._id !== selectedItemId && goesWith(formulaRow.group, i)))
+  );
+
+  const handleSelectionChange = useCallback((v: boolean) => {
+    setHasSelection(v);
+    // Chon nhieu mon (Ctrl + bam) thi khong co 1 mau chinh de goi y.
+    setSelectedItemId(v ? canvasRef.current?.getSelectedFit()?.itemId ?? null : null);
+  }, []);
   const closeToast = useCallback(() => setToast(null), []);
 
   // ===== NEW: Body Profile =====
@@ -476,7 +570,7 @@ export default function StudioPage() {
             <p className="mt-0.5 text-xs font-medium text-[#2C4C45]">
               {editing
                 ? `Đang sửa: ${editing.name}`
-                : 'Bấm vào món đồ bên trái để thêm lên canvas, rồi kéo-thả để sắp xếp.'}
+                : 'Bấm vào món đồ bên trái để thêm lên canvas, món cùng vị trí sẽ được thay. Giữ Shift khi bấm (hoặc bật Phối lớp) để mặc chồng.'}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -489,6 +583,13 @@ export default function StudioPage() {
                 <FilePlus size={14} /> Phối mới
               </button>
             )}
+            {/* NEW: Cong thuc phoi mau */}
+            <button
+              onClick={() => setFormulaOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#1F453E] transition-all hover:bg-[#E2ECC8]/50"
+            >
+              <Palette size={14} /> Bảng phối màu
+            </button>
             <button
               onClick={() => void openPicker()}
               className="inline-flex items-center gap-2 rounded-full border border-[#1F453E] bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#1F453E] transition-all hover:bg-[#E2ECC8]/50"
@@ -521,8 +622,19 @@ export default function StudioPage() {
               onCategory={setCategory}
               loading={loadingItems}
               items={filtered}
-              onPick={(item) => void addCanvasItem(item)}
+              onPick={(item, layer) => void addCanvasItem(item, layer)}
               onTryOn={setTryOnItem} // NEW: Thu do truc tiep
+              // NEW: Cong thuc phoi mau
+              colorHint={selectedItem && formulaRow && (
+                <ColorHint
+                  itemName={selectedItem.name}
+                  row={formulaRow}
+                  onlyMatching={onlyMatching}
+                  onToggle={setOnlyMatching}
+                  onOpenChart={() => setFormulaOpen(true)}
+                />
+              )}
+              emptyText={colorFiltering ? `Chưa có món nào hợp màu ${formulaRow.name.toLowerCase()} ở mục này.` : undefined}
             />
           </aside>
 
@@ -568,6 +680,14 @@ export default function StudioPage() {
                 >
                   <Magnet size={13} />
                 </ToggleButton>
+                {/* NEW: Thay mon cung vi tri - cach mac chong tren mobile (khong co phim Shift) */}
+                <ToggleButton
+                  active={layering}
+                  onClick={() => setLayering((v) => !v)}
+                  label={layering ? 'Tắt phối lớp (món mới sẽ thay món cùng vị trí)' : 'Bật phối lớp (mặc chồng, không thay món)'}
+                >
+                  <SquareStack size={13} />
+                </ToggleButton>
               </div>
               {/* Bang so do tren mobile (desktop luon hien o cot phai) */}
               <button
@@ -580,20 +700,42 @@ export default function StudioPage() {
               {/* ===== END NEW ===== */}
             </div>
 
-            {/* Vung con lai giua toolbar va dong meo: canvas tu scale cho vua */}
-            <div ref={setFitEl} className="flex min-h-0 w-full flex-1 items-center justify-center">
-              <div className="rounded-2xl border-2 border-[#1F453E]/15 bg-white p-2 shadow-[0_8px_30px_rgba(31,69,62,0.06)]">
-                <OutfitCanvas
-                  ref={canvasRef}
-                  onSelectionChange={handleSelectionChange}
-                  scale={canvasScale}
-                  mannequin={mannequin}
-                  showMannequin={showMannequin}
-                  autoSnap={autoSnap}
-                  onReady={handleCanvasReady}
-                  onItemFit={handleItemFit}
-                />
+            {/* Vung con lai giua toolbar va dong meo: canvas tu scale cho vua, cot o mon do ben canh */}
+            <div className="relative flex min-h-0 w-full flex-1 items-center justify-center gap-3">
+              {/* NEW: Thay mon cung vi tri - noi tren canvas de khong lam canvas co gian */}
+              {undo && (
+                <div role="status" className="absolute left-1/2 top-2 z-10 flex max-w-[90%] -translate-x-1/2 items-center gap-2 rounded-full border border-[#1F453E]/20 bg-white py-1.5 pl-4 pr-1.5 text-xs text-[#2C4C45] shadow-lg">
+                  <span className="min-w-0 truncate">{undo.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => void undoReplace()}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#1F453E] px-3 py-1 text-[11px] font-bold text-white hover:bg-[#16352F]"
+                  >
+                    <Undo2 size={12} /> Hoàn tác
+                  </button>
+                </div>
+              )}
+              <div ref={setFitEl} className="flex h-full min-h-0 min-w-0 flex-1 items-center justify-center">
+                <div className="rounded-2xl border-2 border-[#1F453E]/15 bg-white p-2 shadow-[0_8px_30px_rgba(31,69,62,0.06)]">
+                  <OutfitCanvas
+                    ref={canvasRef}
+                    onSelectionChange={handleSelectionChange}
+                    scale={canvasScale}
+                    mannequin={mannequin}
+                    showMannequin={showMannequin}
+                    autoSnap={autoSnap}
+                    onReady={handleCanvasReady}
+                    onItemFit={handleItemFit}
+                    onItemsChange={handleItemsChange} // NEW: O mon do
+                  />
+                </div>
               </div>
+              {/* NEW: O mon do */}
+              <OutfitSlots
+                items={canvasItems}
+                selectedId={selectedItemId}
+                onOpen={(category, replaceId) => setSlotPicker({ category, replaceId })}
+              />
             </div>
 
             <p className="mt-2 shrink-0 rounded-full border border-[#1F453E]/10 bg-[#E2ECC8]/50 px-3 py-1 text-center text-[11px] font-medium text-[#1F453E]">
@@ -611,6 +753,25 @@ export default function StudioPage() {
           {/* ===== END NEW ===== */}
         </div>
       </div>
+
+      {/* NEW: O mon do */}
+      {slotPicker && (
+        <SlotPickerModal
+          category={slotPicker.category}
+          current={canvasItems.find((i) => i._id === slotPicker.replaceId) ?? null}
+          wardrobe={items}
+          onCanvas={canvasItems}
+          busy={addingItem}
+          onPick={(item) => void swapCanvasItem(slotPicker.replaceId, item)}
+          onRemove={removeCanvasItem}
+          onClose={() => setSlotPicker(null)}
+        />
+      )}
+
+      {/* NEW: Cong thuc phoi mau */}
+      <VModal open={formulaOpen} onClose={() => setFormulaOpen(false)} title="Công thức phối màu" wide>
+        <ColorFormulaChart highlight={formulaRow?.group ?? null} />
+      </VModal>
 
       {/* ===== NEW: Body Profile ===== bang so do (mobile) + xac nhan luu vao ho so */}
       <BottomSheet open={bodySheetOpen} title="Số đo người mẫu" onClose={() => setBodySheetOpen(false)}>
@@ -814,13 +975,18 @@ function WardrobePicker({
   items,
   onPick,
   onTryOn,
+  colorHint,
+  emptyText = 'Chưa có món đồ nào ở mục này.',
 }: {
   category: Category | 'all';
   onCategory: (c: Category | 'all') => void;
   loading: boolean;
   items: ClothingItem[];
-  onPick: (item: ClothingItem) => void;
+  /** layer: giu Shift khi bam -> mac chong, khong thay mon cung vi tri. */
+  onPick: (item: ClothingItem, layer: boolean) => void;
   onTryOn: (item: ClothingItem) => void; // NEW: Thu do truc tiep
+  colorHint?: React.ReactNode; // NEW: Cong thuc phoi mau
+  emptyText?: string;
 }) {
   const CATEGORY_LABELS = useCategoryLabels();
   return (
@@ -840,6 +1006,8 @@ function WardrobePicker({
         ))}
       </div>
 
+      {colorHint}
+
       {/* Chi cuon ben trong khung nay, khong lam dai trang */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
@@ -848,7 +1016,7 @@ function WardrobePicker({
           </div>
         ) : items.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#869BB2]/50 bg-[#FAF9F5]/60 p-6 text-center">
-            <p className="mb-3 text-xs text-[#6B7B76]">Chưa có món đồ nào ở mục này.</p>
+            <p className="mb-3 text-xs text-[#6B7B76]">{emptyText}</p>
             <Link
               href="/wardrobe"
               className="inline-flex items-center gap-1.5 rounded-full border border-[#1F453E] bg-white px-5 py-2 text-xs font-bold uppercase tracking-wider text-[#1F453E] transition-colors hover:bg-[#1F453E] hover:text-white"
@@ -862,7 +1030,7 @@ function WardrobePicker({
               // NEW: Thu do truc tiep - boc div de dat nut thu canh nut chon (khong long button).
               <div key={item._id} className="group relative">
                 <button
-                  onClick={() => onPick(item)}
+                  onClick={(e) => onPick(item, e.shiftKey)}
                   title={`Thêm "${item.name}" lên canvas`}
                   className="grid aspect-square w-full cursor-pointer place-items-center rounded-xl border border-[#E2E8F0] bg-[#FAF9F5] p-2 transition-all hover:border-[#1F453E] hover:bg-[#E2ECC8]/30"
                 >
@@ -889,6 +1057,213 @@ function WardrobePicker({
         )}
       </div>
     </>
+  );
+}
+
+/* ===== NEW: O mon do ===== */
+
+/** Thu tu o tu ngoai vao trong, tren xuong duoi (giong cach xep anh outfit). */
+const SLOT_ORDER: Category[] = ['outerwear', 'top', 'dress', 'set', 'bottom', 'shoes', 'bag', 'accessory'];
+
+/** O cho mon dang tren canvas; ao, quan (khi khong mac vay/do bo), giay luon co o de them nhanh. */
+type Slot = { category: Category; item: ClothingItem | null };
+
+function slotsOf(items: ClothingItem[]): Slot[] {
+  const onePiece = items.some((i) => i.category === 'dress' || i.category === 'set');
+  return SLOT_ORDER.flatMap((category): Slot[] => {
+    const placed = items.filter((i) => i.category === category);
+    if (placed.length > 0) return placed.map((item) => ({ category, item }));
+    const keepEmpty = category === 'shoes' || ((category === 'top' || category === 'bottom') && !onePiece);
+    return keepEmpty ? [{ category, item: null }] : [];
+  });
+}
+
+function OutfitSlots({
+  items,
+  selectedId,
+  onOpen,
+}: {
+  items: ClothingItem[];
+  selectedId: string | null;
+  onOpen: (category: Category, replaceId: string | null) => void;
+}) {
+  const labels = useCategoryLabels();
+  return (
+    <div className="flex max-h-full w-16 shrink-0 flex-col gap-2 overflow-y-auto py-1 sm:w-20" aria-label="Các món trong bộ">
+      {slotsOf(items).map(({ category, item }) => {
+        const label = labels[category];
+        return (
+          <button
+            key={item?._id ?? `empty-${category}`}
+            type="button"
+            onClick={() => onOpen(category, item?._id ?? null)}
+            title={item ? `Đổi ${label.toLowerCase()}: ${item.name}` : `Thêm ${label.toLowerCase()}`}
+            className="group flex flex-col items-center gap-1"
+          >
+            <span
+              className={`grid aspect-square w-full place-items-center overflow-hidden rounded-xl border bg-white p-1.5 shadow-xs transition-colors group-hover:border-[#1F453E] ${
+                item
+                  ? selectedId === item._id ? 'border-[#1F453E] ring-2 ring-[#1F453E]/30' : 'border-[#1F453E]/20'
+                  : 'border-dashed border-[#869BB2] bg-[#FAF9F5]'
+              }`}
+            >
+              {item ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.imageUrl} alt={item.name} draggable={false} className="max-h-full max-w-full object-contain" />
+              ) : (
+                <Plus size={18} className="text-[#869BB2]" />
+              )}
+            </span>
+            <span className="w-full truncate text-center text-[10px] font-semibold text-[#2C4C45]">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Chon mon de dat vao 1 o: liet ke mon cung loai, mon hop mau voi phan con lai cua bo len truoc. */
+function SlotPickerModal({
+  category,
+  current,
+  wardrobe,
+  onCanvas,
+  busy,
+  onPick,
+  onRemove,
+  onClose,
+}: {
+  category: Category;
+  current: ClothingItem | null;
+  wardrobe: ClothingItem[];
+  onCanvas: ClothingItem[];
+  busy: boolean;
+  onPick: (item: ClothingItem) => void;
+  onRemove: (itemId: string) => void;
+  onClose: () => void;
+}) {
+  const label = useCategoryLabels()[category].toLowerCase();
+  // Mau ruc cua cac mon con lai trong bo; mon moi phai di duoc voi tat ca cac mau nay.
+  const otherColors = onCanvas
+    .filter((i) => i._id !== current?._id)
+    .map(itemColorGroup)
+    .filter((g): g is Exclude<ColorGroup, 'neutral'> => g !== null && g !== 'neutral');
+  const onCanvasIds = new Set(onCanvas.map((i) => i._id));
+  const candidates = wardrobe
+    .filter((i) => i.category === category && !onCanvasIds.has(i._id))
+    .map((item) => ({ item, matches: otherColors.length > 0 && otherColors.every((g) => goesWith(g, item)) }))
+    .sort((a, b) => Number(b.matches) - Number(a.matches));
+
+  return (
+    <VModal open onClose={onClose} title={current ? `Đổi ${label}` : `Thêm ${label}`} wide busy={busy}>
+      {current && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#E2ECC8] bg-[#FAF9F5] p-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={current.imageUrl} alt="" className="h-12 w-12 rounded-lg bg-white object-contain p-1" />
+          <p className="min-w-0 flex-1 truncate text-sm text-[#2C4C45]">
+            Đang mặc: <span className="font-semibold">{current.name}</span>
+          </p>
+          <VButton variant="outline" disabled={busy} onClick={() => onRemove(current._id)} className="shrink-0">
+            <Trash2 size={14} /> Bỏ khỏi bộ
+          </VButton>
+        </div>
+      )}
+
+      {candidates.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#869BB2]/50 bg-[#FAF9F5]/60 p-6 text-center">
+          <p className="mb-3 text-sm text-[#6B7B76]">
+            Tủ đồ chưa có {label} {current ? 'nào khác ' : ''}để {current ? 'đổi' : 'thêm'}.
+          </p>
+          <Link href="/wardrobe" className="inline-flex items-center gap-1.5 rounded-full border border-[#1F453E] bg-white px-5 py-2 text-xs font-bold uppercase tracking-wider text-[#1F453E] transition-colors hover:bg-[#1F453E] hover:text-white">
+            <Plus size={14} /> Thêm vào tủ đồ
+          </Link>
+        </div>
+      ) : (
+        <>
+          {otherColors.length > 0 && (
+            <p className="mb-3 flex items-center gap-1.5 text-xs text-[#6B7B76]">
+              <Palette size={13} /> Món có nhãn &ldquo;Hợp màu&rdquo; phối được với các món còn lại theo công thức phối màu.
+            </p>
+          )}
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+            {candidates.map(({ item, matches }) => (
+              <button
+                key={item._id}
+                type="button"
+                disabled={busy}
+                onClick={() => onPick(item)}
+                title={item.name}
+                className="group relative flex flex-col gap-1 text-left disabled:opacity-50"
+              >
+                <span className="grid aspect-square w-full place-items-center rounded-xl border border-[#E2E8F0] bg-[#FAF9F5] p-2 transition-colors group-hover:border-[#1F453E] group-hover:bg-[#E2ECC8]/30">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={item.imageUrl} alt={item.name} loading="lazy" className="max-h-full max-w-full object-contain" />
+                </span>
+                {matches && (
+                  <span className="absolute left-1.5 top-1.5 rounded-full bg-[#1F453E] px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    Hợp màu
+                  </span>
+                )}
+                <span className="truncate text-[11px] font-medium text-[#2C4C45]">{item.name}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </VModal>
+  );
+}
+/* ===== END NEW ===== */
+
+/** NEW: Cong thuc phoi mau - goi y mau di kem mon dang chon tren canvas. */
+function ColorHint({
+  itemName,
+  row,
+  onlyMatching,
+  onToggle,
+  onOpenChart,
+}: {
+  itemName: string;
+  row: FormulaRow;
+  onlyMatching: boolean;
+  onToggle: (value: boolean) => void;
+  onOpenChart: () => void;
+}) {
+  return (
+    <div className="mb-3 shrink-0 rounded-xl border border-[#E2ECC8] bg-[#FAF9F5] p-2.5">
+      <p className="flex items-center gap-1.5 text-[11px] leading-snug text-[#2C4C45]">
+        <span className="h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ backgroundColor: row.base.hex }} />
+        <span className="min-w-0">
+          <span className="font-semibold">{itemName}</span> ({row.name.toLowerCase()}) hợp với:
+        </span>
+      </p>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {row.partners.map((p) => (
+          <span
+            key={p.label}
+            title={p.label}
+            className="h-4 w-4 rounded-full border border-black/15"
+            style={{ backgroundColor: p.hex }}
+          >
+            <span className="sr-only">{p.label}</span>
+          </span>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#1F453E]">
+          <input
+            type="checkbox"
+            checked={onlyMatching}
+            onChange={(e) => onToggle(e.target.checked)}
+            className="h-3.5 w-3.5 accent-[#1F453E]"
+          />
+          Chỉ món hợp màu
+        </label>
+        <button type="button" onClick={onOpenChart} className="text-[11px] font-semibold text-[#1F453E] underline underline-offset-2">
+          Xem bảng
+        </button>
+      </div>
+    </div>
   );
 }
 

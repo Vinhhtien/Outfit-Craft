@@ -224,7 +224,7 @@ export function isNeutralColor(hex?: string): boolean {
   return false;
 }
 
-export type ColorRelation = 'neutral' | 'analogous' | 'complementary' | 'clash' | 'other' | 'unknown';
+export type ColorRelation = 'neutral' | 'analogous' | 'formula' | 'complementary' | 'clash' | 'other' | 'unknown';
 
 /** Quan he 2 mau tren vong mau: cung tong (<=30 do), bo tuc (>=150 do), choi nhau (60-120 do). */
 export function colorRelation(a?: string, b?: string): ColorRelation {
@@ -240,7 +240,7 @@ export function colorRelation(a?: string, b?: string): ColorRelation {
 }
 
 const COLOR_RELATION_SCORE: Record<ColorRelation, number> = {
-  neutral: 90, analogous: 85, complementary: 75, other: 55, clash: 30, unknown: 60,
+  neutral: 90, analogous: 85, formula: 80, complementary: 75, other: 55, clash: 30, unknown: 60,
 };
 
 /** Diem hop mau 0-100 giua 2 mau chinh. Thieu mau -> diem trung binh. */
@@ -260,11 +260,35 @@ export function isNeutralItem(item: IClothingItem): boolean {
   return isNeutralColor(hex) || (item.category === 'bottom' && isDenimBlue(hex));
 }
 
-/** Nhu colorRelation nhung xet theo mon (de ap dung luat quan jeans). */
+/**
+ * "Cong thuc phoi do da nang": moi mau chinh di kem cac nhom mau trong bang (mau trung tinh
+ * den, trang, xam, navy trong bang da duoc tinh la 'neutral' nen khong liet ke). Cap mau
+ * co hieu luc ca hai chieu. Client giu ban hien thi day du o client/src/lib/colorFormula.ts.
+ */
+export const COLOR_FORMULA: Record<Exclude<ColorGroup, 'neutral'>, ColorGroup[]> = {
+  red: ['yellow', 'pink', 'green', 'blue', 'brown'],
+  orange: ['green', 'blue', 'yellow', 'brown'],
+  yellow: ['green', 'blue', 'pink', 'red', 'orange'],
+  green: ['blue', 'orange', 'purple', 'brown', 'pink', 'yellow'],
+  blue: ['pink', 'green', 'purple', 'yellow', 'red'],
+  purple: ['pink', 'blue', 'brown', 'green', 'yellow'],
+  pink: ['brown', 'blue', 'green', 'purple', 'yellow'],
+  brown: ['yellow', 'green', 'blue', 'pink', 'purple', 'red'],
+};
+
+/** 2 nhom mau ruc (khac nhau) co nam trong bang cong thuc khong. */
+export function isFormulaPair(a: ColorGroup | null, b: ColorGroup | null): boolean {
+  if (!a || !b || a === b || a === 'neutral' || b === 'neutral') return false;
+  return COLOR_FORMULA[a].includes(b) || COLOR_FORMULA[b].includes(a);
+}
+
+/** Nhu colorRelation nhung xet theo mon (luat quan jeans, cong thuc phoi mau). */
 export function itemColorRelation(a: IClothingItem, b: IClothingItem): ColorRelation {
   const rel = colorRelation(a.colors[0], b.colors[0]);
   if (rel === 'unknown' || rel === 'neutral') return rel;
-  return isNeutralItem(a) || isNeutralItem(b) ? 'neutral' : rel;
+  if (isNeutralItem(a) || isNeutralItem(b)) return 'neutral';
+  if (rel === 'analogous') return rel;
+  return isFormulaPair(colorGroupOf(a.colors[0]), colorGroupOf(b.colors[0])) ? 'formula' : rel;
 }
 
 const isSmallPiece = (item: IClothingItem) => item.category === 'bag' || item.category === 'accessory';
@@ -438,6 +462,11 @@ function comboReasons(base: ScoredItem, picks: ScoredItem[], weather: WeatherInf
         : `${name} nổi bật trên nền ${baseName} màu trung tính`);
     } else if (rel === 'analogous') {
       reasons.push(`${name} cùng tông màu với ${baseName}, tạo cảm giác hài hoà`);
+    } else if (rel === 'formula') {
+      const own = colorGroupOf(p.item.colors[0]), other = colorGroupOf(base.item.colors[0]);
+      reasons.push(own && other
+        ? `${name} ${COLOR_NAMES_VI[own]} đi với ${baseName} ${COLOR_NAMES_VI[other]} theo công thức phối màu`
+        : `${name} và ${baseName} hợp màu theo công thức phối màu`);
     } else if (rel === 'complementary') {
       reasons.push(`${name} có màu tương phản với ${baseName}, tạo điểm nhấn`);
     } else if (rel === 'clash') {

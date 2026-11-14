@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isNeutralColor, isNeutralItem, colorRelation, itemColorRelation, styleCompat, scoreCombo, buildOutfitOptions,
+  isNeutralColor, isNeutralItem, colorRelation, itemColorRelation, isFormulaPair, styleCompat, scoreCombo, buildOutfitOptions,
 } from '../src/services/suggestion.service.ts';
 
 const weather = { city: 'Hanoi', temp: 27, feelsLike: 29, humidity: 70, condition: 'Clear', description: 'trời quang', icon: '01d', isRaining: false };
@@ -31,18 +31,53 @@ test('denim-blue bottoms count as neutral, denim-blue tops do not', () => {
   const greenTop = item('top', '#3cb371');
   assert.equal(colorRelation('#5b7db1', '#3cb371'), 'clash');
   assert.equal(itemColorRelation(item('bottom', '#5b7db1'), greenTop), 'neutral');
-  assert.equal(itemColorRelation(item('top', '#5b7db1'), greenTop), 'clash');
+  // Ao xanh denim khong phai trung tinh; xanh duong + xanh la nam trong cong thuc phoi mau.
+  assert.equal(itemColorRelation(item('top', '#5b7db1'), greenTop), 'formula');
+});
+
+test('color formula pairs work both ways and only for listed chromatic pairs', () => {
+  assert.equal(isFormulaPair('red', 'green'), true);
+  assert.equal(isFormulaPair('green', 'red'), true);
+  assert.equal(isFormulaPair('orange', 'blue'), true); // chi liet ke o hang Cam
+  assert.equal(isFormulaPair('red', 'purple'), false);
+  assert.equal(isFormulaPair('orange', 'pink'), false);
+  assert.equal(isFormulaPair('red', 'red'), false);
+  assert.equal(isFormulaPair('red', 'neutral'), false);
+  assert.equal(isFormulaPair(null, 'red'), false);
+
+  // Do + xanh la: tren vong mau la choi nhau, nhung hop theo cong thuc.
+  assert.equal(colorRelation('#ff0000', '#2eb82e'), 'clash');
+  assert.equal(itemColorRelation(item('top', '#ff0000'), item('bottom', '#2eb82e')), 'formula');
+  // Do + tim: khong co trong bang -> giu quan he tren vong mau.
+  assert.equal(itemColorRelation(item('top', '#ff0000'), item('bottom', '#8e44ad')), 'clash');
+  // Cung tong van uu tien analogous.
+  assert.equal(itemColorRelation(item('top', '#ff0000'), item('bottom', '#ff4500')), 'analogous');
+});
+
+test('formula pairs score between neutral and clashing pairs and explain why', () => {
+  const s = (it) => ({ item: it, score: 80, reasons: [] });
+  const red = s(item('top', '#ff0000'));
+  const withBlack = scoreCombo([red, s(item('bottom', '#000000'))]);
+  const withGreen = scoreCombo([red, s(item('bottom', '#2eb82e'))]);
+  const withPurple = scoreCombo([red, s(item('bottom', '#8e44ad'))]);
+  assert.ok(withBlack > withGreen && withGreen > withPurple, `${withBlack} > ${withGreen} > ${withPurple}`);
+
+  const anchor = item('top', '#ff0000');
+  const { options } = buildAnchoredSuggestions(anchor, [anchor, item('bottom', '#2eb82e')], weather);
+  assert.ok(options[0].reasons.some((r) => r.includes('xanh lá') && r.includes('đỏ') && r.includes('công thức phối màu')),
+    options[0].reasons.join(' | '));
 });
 
 test('a clashing accessory hurts the score less than a clashing bottom', () => {
   const s = (it) => ({ item: it, score: 80, reasons: [] });
   const red = s(item('top', '#ff0000'));
   const blackBottom = s(item('bottom', '#000000'));
-  const clashingAccessory = scoreCombo([red, blackBottom, s(item('accessory', '#2eb82e'))]);
-  const clashingBottom = scoreCombo([red, s(item('bottom', '#2eb82e')), s(item('accessory', '#000000'))]);
+  // Do + tim: choi mau va khong co trong cong thuc phoi mau.
+  const clashingAccessory = scoreCombo([red, blackBottom, s(item('accessory', '#8e44ad'))]);
+  const clashingBottom = scoreCombo([red, s(item('bottom', '#8e44ad')), s(item('accessory', '#000000'))]);
   assert.ok(clashingAccessory > clashingBottom);
   // Phu kien la mon dang ghim -> cap cua no tinh du trong so.
-  const accent = s(item('accessory', '#2eb82e'));
+  const accent = s(item('accessory', '#8e44ad'));
   assert.ok(scoreCombo([red, blackBottom, accent], accent) < scoreCombo([red, blackBottom, accent]));
 });
 
@@ -56,7 +91,7 @@ test('style compatibility is symmetric and tolerates missing styles', () => {
 test('combo score prefers harmonious colors over clashing ones', () => {
   const s = (it) => ({ item: it, score: 80, reasons: [] });
   const red = item('top', '#ff0000');
-  assert.ok(scoreCombo([s(red), s(item('bottom', '#000000'))]) > scoreCombo([s(red), s(item('bottom', '#2eb82e'))]));
+  assert.ok(scoreCombo([s(red), s(item('bottom', '#000000'))]) > scoreCombo([s(red), s(item('bottom', '#8e44ad'))]));
 });
 
 test('anchored top keeps the anchor and picks a matching bottom', () => {
