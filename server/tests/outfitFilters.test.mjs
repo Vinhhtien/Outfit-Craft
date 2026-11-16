@@ -338,6 +338,8 @@ test('visual traits from the AI are checked one by one', () => {
   });
   assert.deepEqual(parseVisualTraits({ formality: 7, sportswear: 'yes', pattern: 'leopard', distressed: 1 }), {});
   assert.deepEqual(parseVisualTraits({ formality: 2.5 }), {});
+  assert.deepEqual(parseVisualTraits({ sleeve: 'short' }), { sleeve: 'short' });
+  assert.deepEqual(parseVisualTraits({ sleeve: 'kimono' }), {});
   const raw = JSON.stringify({ items: [{ index: 1, kind: 'tshirt', gender: 'unisex', formality: 0, sportswear: true, pattern: 'graphic', distressed: false }] });
   assert.deepEqual(parseItemKinds(raw, ['top']).get(0).visual, { formality: 0, sportswear: true, pattern: 'graphic', distressed: false });
 });

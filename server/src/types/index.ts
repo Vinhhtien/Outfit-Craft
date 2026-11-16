@@ -93,6 +93,10 @@ export const ITEM_GENDER_NAMES_VI: Record<ItemGender, string> = {
   unisex: 'unisex',
 };
 
+/** Tay ao AI nhin thay: dai, ngan, khong tay (hoac khong phai ao). */
+export const ITEM_SLEEVES = ['long', 'short', 'none'] as const;
+export type ItemSleeve = (typeof ITEM_SLEEVES)[number];
+
 /** Hoa tiet AI nhin thay tren mon. */
 export const ITEM_PATTERNS = ['plain', 'striped', 'checked', 'floral', 'graphic', 'other'] as const;
 export type ItemPattern = (typeof ITEM_PATTERNS)[number];
@@ -109,6 +113,8 @@ export interface VisualTraits {
   pattern?: ItemPattern;
   /** Rach, mai, wash bac ro. */
   distressed?: boolean;
+  /** Tay ao (de khong khuyen "xan tay ao" cho ao ngan tay). */
+  sleeve?: ItemSleeve;
   analyzedAt?: Date;
 }
 

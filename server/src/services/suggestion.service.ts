@@ -164,13 +164,22 @@ const KIND_OCCASION_FIT: Partial<Record<Occasion, Partial<Record<ItemKind, numbe
 };
 
 /** Mon co the kem dac diem AI nhin tu anh. */
-type VisualSource = KindSource & Partial<Pick<IClothingItem, 'visual'>>;
+type VisualSource = KindSource & Partial<Pick<IClothingItem, 'visual' | 'styles'>>;
 
 /** Dac diem nhin tu anh lam lech dip, cong don voi diem theo loai (ao dau bong da di tiec, jeans rach di lam). */
 const SPORTSWEAR_FIT: Partial<Record<Occasion, number>> = { party: -40, work: -40, date: -40, school: -10, sport: 15 };
 const DISTRESSED_FIT: Partial<Record<Occasion, number>> = { work: -35, party: -20, date: -10, school: -10 };
 /** Dip can an mac chin chu: mon qua thoai mai (trang trong 0) bi tru. */
 const DRESSY_OCCASIONS: readonly Occasion[] = ['party', 'work', 'date'];
+/**
+ * Mon gan phong cach the thao (sporty) nhung AI chua xem anh: van coi la do the thao o dip trang trong
+ * (giay cau long, giay chay bo di tiec). AI da xem anh thi theo ket qua xem anh.
+ */
+const SPORTY_STYLE_FIT: Partial<Record<Occasion, number>> = { party: -30, work: -30, date: -20 };
+
+/** Do the thao: AI nhin anh thay, hoac (chua xem anh) mon gan phong cach sporty. */
+const isSporty = (item: VisualSource) =>
+  Boolean(item.visual?.sportswear || (!item.visual && item.styles?.includes('sporty')));
 
 function kindFitOf(item: KindSource, occasion: Occasion): number {
   const kind = effectiveKind(item);
@@ -179,7 +188,7 @@ function kindFitOf(item: KindSource, occasion: Occasion): number {
 
 function visualFitOf(item: VisualSource, occasion: Occasion): number {
   const v = item.visual;
-  if (!v) return 0;
+  if (!v) return isSporty(item) ? SPORTY_STYLE_FIT[occasion] ?? 0 : 0;
   let fit = 0;
   if (v.sportswear) fit += SPORTSWEAR_FIT[occasion] ?? 0;
   if (v.distressed) fit += DISTRESSED_FIT[occasion] ?? 0;
@@ -203,7 +212,7 @@ function mismatchLabel(item: VisualSource, occasion: Occasion): string {
   const kind = effectiveKind(item);
   const kindName = kind ? capitalize(ITEM_KIND_NAMES_VI[kind]) : '';
   if (kind && kindFitOf(item, occasion) <= UNSUITABLE_FIT) return kindName;
-  if (item.visual?.sportswear) return 'Đồ thể thao';
+  if (isSporty(item)) return 'Đồ thể thao';
   if (item.visual?.distressed) return 'Đồ rách, wash bạc';
   if (item.visual?.formality === 0) return 'Món quá thoải mái';
   return kindName || 'Món này';
@@ -1212,7 +1221,10 @@ function styleTips(slots: OutfitSlots, weather: WeatherInfo): string[] {
     if (kindIn(top, ['shirt', 'blouse'])) tips.push(`Sơ vin áo vào ${bottomName} để gọn dáng và tôn eo`);
     else if (kindIn(top, ['tshirt', 'polo', 'sweater'])) tips.push('Sơ vin hờ vạt trước (half-tuck) cho dáng tự nhiên, không bị nuốt chân');
   }
-  if (kindIn(top, ['shirt']) && weather.temp >= 28) tips.push('Xắn tay áo sơ mi 2 gấp cho mát và trẻ trung');
+  // Chi khuyen xan tay khi AI da thay ao dai tay (ao ngan tay ma bao xan tay la sai).
+  if (kindIn(top, ['shirt']) && top?.visual?.sleeve === 'long' && weather.temp >= 28) {
+    tips.push('Xắn tay áo sơ mi 2 gấp cho mát và trẻ trung');
+  }
   if (outerwear) {
     if (weather.temp >= 24) tips.push('Khoác hờ áo khoác, không cài khuy; vào phòng máy lạnh thì mặc vào');
     else if (weather.temp < 18) tips.push('Cài khuy áo khoác và dựng cổ áo cho ấm');

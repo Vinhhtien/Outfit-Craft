@@ -1,7 +1,8 @@
 import { env } from '../config/env.js';
 import { ClothingItem, IClothingItem } from '../models/ClothingItem.js';
 import {
-  Category, ITEM_GENDERS, ITEM_KINDS, ITEM_KIND_NAMES_VI, ITEM_PATTERNS, ItemGender, ItemKind, ItemPattern,
+  Category, ITEM_GENDERS, ITEM_KINDS, ITEM_KIND_NAMES_VI, ITEM_PATTERNS, ITEM_SLEEVES, ItemGender, ItemKind, ItemPattern,
+  ItemSleeve,
   KINDS_BY_CATEGORY, VisualTraits, kindFits,
 } from '../types/index.js';
 import { ownedImageIdFromUrl, validateImageBuffer } from '../utils/imageValidation.js';
@@ -46,8 +47,9 @@ const KIND_SCHEMA = {
           sportswear: { type: 'BOOLEAN' },
           pattern: { type: 'STRING', enum: [...ITEM_PATTERNS] },
           distressed: { type: 'BOOLEAN' },
+          sleeve: { type: 'STRING', enum: [...ITEM_SLEEVES] },
         },
-        required: ['index', 'kind', 'gender', 'formality', 'sportswear', 'pattern', 'distressed'],
+        required: ['index', 'kind', 'gender', 'formality', 'sportswear', 'pattern', 'distressed', 'sleeve'],
       },
     },
   },
@@ -63,7 +65,8 @@ export const GENDER_RULE = 'gender: "female" nếu kiểu dáng rõ ràng là đ
 export const VISUAL_RULE = `- formality: độ trang trọng nhìn từ ảnh. 0 = rất thoải mái hoặc đồ thể thao (áo đấu, đồ tập, dép lê); 1 = thường ngày (áo phông trơn, jeans, sneaker); 2 = lịch sự vừa (sơ mi, quần âu, chân váy, giày da trơn); 3 = sang trọng, dự tiệc (váy dạ hội, đồ ánh kim, vest, giày cao gót).
 - sportswear: true nếu là đồ thể thao, áo đấu bóng đá, đồ tập, đồng phục thể thao.
 - pattern: plain (trơn), striped (kẻ sọc), checked (kẻ ô, caro), floral (hoa), graphic (in hình, chữ, logo lớn), other.
-- distressed: true nếu rách, mài, wash bạc rõ.`;
+- distressed: true nếu rách, mài, wash bạc rõ.
+- sleeve: long nếu áo tay dài, short nếu tay ngắn, none nếu không tay hoặc món không phải áo.`;
 
 /** Kiem tra dac diem AI tra ve: chi giu gia tri hop le. */
 export function parseVisualTraits(data: Record<string, unknown>): VisualTraits {
@@ -75,6 +78,7 @@ export function parseVisualTraits(data: Record<string, unknown>): VisualTraits {
   if (typeof data.sportswear === 'boolean') traits.sportswear = data.sportswear;
   if (ITEM_PATTERNS.includes(data.pattern as ItemPattern)) traits.pattern = data.pattern as ItemPattern;
   if (typeof data.distressed === 'boolean') traits.distressed = data.distressed;
+  if (ITEM_SLEEVES.includes(data.sleeve as ItemSleeve)) traits.sleeve = data.sleeve as ItemSleeve;
   return traits;
 }
 

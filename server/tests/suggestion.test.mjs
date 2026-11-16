@@ -360,7 +360,7 @@ test('formality seen in the photo wins over the guess by kind; two patterns cost
 
 /* ---------- Cach mac ---------- */
 test('every outfit comes styled: a name and concrete how-to-wear tips', () => {
-  const shirt = item('top', '#ffffff', { kind: 'shirt' });
+  const shirt = item('top', '#ffffff', { kind: 'shirt', visual: { sleeve: 'long' } });
   const trousers = item('bottom', '#222222', { kind: 'trousers' });
   const loafers = item('shoes', '#111111', { kind: 'loafers' });
   const blazer = item('outerwear', '#333333', { kind: 'blazer' });
@@ -373,6 +373,13 @@ test('every outfit comes styled: a name and concrete how-to-wear tips', () => {
     'Xắn tay áo sơ mi 2 gấp cho mát và trẻ trung',
     'Khoác hờ áo khoác, không cài khuy; vào phòng máy lạnh thì mặc vào',
   ]);
+
+  // Ao ngan tay (hoac chua biet tay ao) thi khong khuyen xan tay.
+  const shortSleeve = item('top', '#1a2340', { kind: 'shirt', visual: { sleeve: 'short' } });
+  for (const top of [shortSleeve, item('top', '#fff', { kind: 'shirt' })]) {
+    const tips = styleOutfit({ top, bottom: trousers }, { ...daNang, temp: 30 }, 'party').tips;
+    assert.ok(!tips.some((t) => t.startsWith('Xắn tay áo')), JSON.stringify(tips));
+  }
 
   const cold = styleOutfit({ dress: partyDress() }, { ...daNang, temp: 16 }, 'party');
   assert.equal(cold.title, 'Thanh lịch dự tiệc');
@@ -401,4 +408,29 @@ test('pinning a piece made for the other gender gives a clear message instead of
   const free = buildOutfitOptions(wardrobe, daNang, undefined, { anchor: dress });
   assert.equal(free.blocked, undefined);
   assert.equal(free.options[0].dress._id, dress._id);
+});
+
+test('sporty shoes are not party shoes even before the AI has seen the photo', () => {
+  const badminton = item('shoes', '#0e7c86', {
+    kind: 'sneakers', name: 'Giày thể thao xanh', styles: ['sporty', 'casual'], occasions: ['sport', 'daily'],
+  });
+  const loafers = item('shoes', '#111111', { kind: 'loafers', name: 'Giày da' });
+  const shirt = item('top', '#1a2340', { kind: 'shirt' });
+  const jeans = item('bottom', '#5b7db1', { kind: 'jeans' });
+
+  assert.equal(scoreItem(badminton, daNang, 'party').unsuitable, true);
+  assert.ok(scoreItem(badminton, daNang, 'party').reasons.includes('Đồ thể thao thường không hợp dịp tiệc tùng'));
+  assert.equal(scoreItem(badminton, daNang, 'sport').unsuitable, undefined, 'still fine for sport');
+  assert.equal(occasionFitOf(item('shoes', '#fff', { kind: 'sneakers', styles: ['casual'] }), 'party'), -10, 'plain sneakers only lose a little');
+
+  const party = buildOutfitOptions([shirt, jeans, badminton, loafers], daNang, 'party');
+  for (const option of party.options) assert.equal(option.shoes?._id, loafers._id);
+
+  const only = buildOutfitOptions([shirt, jeans, badminton], daNang, 'party');
+  assert.equal(only.options[0].shoes, undefined);
+  assert.ok(only.missing.some((m) => m.startsWith('Tủ chưa có giày hợp dịp tiệc tùng')), JSON.stringify(only.missing));
+
+  // AI da xem anh va thay khong phai do the thao -> tin ket qua xem anh.
+  const fashion = { ...badminton, visual: { formality: 1, sportswear: false } };
+  assert.equal(scoreItem(fashion, daNang, 'party').unsuitable, undefined);
 });

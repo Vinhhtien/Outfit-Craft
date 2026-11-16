@@ -30,12 +30,13 @@ const TAG_SCHEMA = {
     sportswear: { type: 'BOOLEAN' },
     pattern: { type: 'STRING', enum: [...ITEM_PATTERNS] },
     distressed: { type: 'BOOLEAN' },
+    sleeve: { type: 'STRING', enum: ['long', 'short', 'none'] },
     name: { type: 'STRING' },
     styles: { type: 'ARRAY', items: { type: 'STRING', enum: [...STYLES] } },
     seasons: { type: 'ARRAY', items: { type: 'STRING', enum: [...SEASONS] } },
     occasions: { type: 'ARRAY', items: { type: 'STRING', enum: [...OCCASIONS] } },
   },
-  required: ['category', 'kind', 'gender', 'formality', 'sportswear', 'pattern', 'distressed', 'styles', 'seasons', 'occasions'],
+  required: ['category', 'kind', 'gender', 'formality', 'sportswear', 'pattern', 'distressed', 'sleeve', 'styles', 'seasons', 'occasions'],
 };
 
 const KIND_LIST = ITEM_KINDS.filter((k) => k !== 'other').map((k) => `${k} = ${ITEM_KIND_NAMES_VI[k]}`).join('; ');
