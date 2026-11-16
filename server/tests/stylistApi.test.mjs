@@ -327,8 +327,11 @@ test('the AI learns what each piece really is, so a sweater named oddly is still
 
     assert.equal((await ClothingItem.findById(snoopy._id)).kind, 'sweater');
     assert.equal((await ClothingItem.findById(pickyRed._id)).kind, 'tshirt');
-    // AI tra loai khong hop nhom (giay ma bao chan vay) -> "other", khong luu bua.
-    assert.equal((await ClothingItem.findOne({ owner: picky, category: 'shoes' })).kind, 'other');
+    // AI tra loai khong hop nhom (giay ma bao chan vay) -> "other", khong luu bua; loai AI thay van giu o detectedKind.
+    const shoes = await ClothingItem.findOne({ owner: picky, category: 'shoes' });
+    assert.equal(shoes.kind, 'other');
+    assert.equal(shoes.detectedKind, 'skirt');
+    assert.equal((await ClothingItem.findById(snoopy._id)).detectedKind, 'sweater');
 
     const prompt = geminiCalls[0].body.contents[0].parts[0].text;
     assert.match(prompt, /m\d+: Áo Snoopy hồng \(áo len, màu hồng\)/);
@@ -339,12 +342,15 @@ test('the AI learns what each piece really is, so a sweater named oddly is still
     await chat({ message: 'Còn gì nữa?' }, picky);
     assert.equal(kindCalls.length, 1);
 
-    // User tu sua loai thi giu nguyen; doi nhom ma khong chon loai thi de AI nhan dien lai.
+    // User tu sua loai thi giu nguyen; doi nhom ma khong chon loai thi suy ra tu anh da biet (ao phong khong
+    // thuoc nhom ao khoac -> "other", mon bi coi la xep nham nhom), khong goi AI lai.
     const patch = (body) => request(`/items/${pickyWhite._id}`, { method: 'PATCH', body: JSON.stringify(body) }, picky);
     assert.equal((await patch({ kind: 'shirt' })).body.data.kind, 'shirt');
     assert.equal((await patch({ kind: 'pirate' })).status, 400);
     const moved = await patch({ category: 'outerwear' });
-    assert.equal(moved.body.data.kind, undefined);
+    assert.equal(moved.body.data.kind, 'other');
+    assert.equal(moved.body.data.detectedKind, 'tshirt');
+    assert.equal(kindCalls.length, 1);
   } finally {
     await snoopy.deleteOne();
     // Tra nhom ve truoc de luot nhan dien nen (neu con chay) khong ghi vao duoc nua.

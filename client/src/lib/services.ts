@@ -81,7 +81,7 @@ export interface ItemFilters {
 export type UpdateItemPayload = Partial<
   Pick<
     ClothingItem,
-    'name' | 'category' | 'kind' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes' | 'purchasePrice'
+    'name' | 'category' | 'kind' | 'gender' | 'colors' | 'styles' | 'seasons' | 'occasions' | 'brand' | 'notes' | 'purchasePrice'
   >
 >;
 // ===== END NEW =====
@@ -309,6 +309,16 @@ export const suggestionApi = {
     api.get<ApiResponse<{
       weather: Weather; suggestion: Suggestion; advice: string; adviceSource: 'ai' | 'rule';
       options?: Suggestion[]; anchor?: SuggestionAnchor; seasonWarning?: string; missing?: string[];
+      /** Món chưa hợp dịp / nhiệt độ vì tủ chưa có lựa chọn tốt hơn. */
+      occasionFit?: string[]; weatherFit?: string[]; genderFit?: string[];
+      /** Món xếp nhầm nhóm nên không được dùng để phối. */
+      misfiled?: string[];
+      /** Stylist AI đã xem ảnh các bộ ứng viên và chọn lại. */
+      lookChecked?: boolean;
+      /** Món ghim / món muốn mặc không hợp giới tính người mặc: không phối, hiện thông báo này. */
+      blocked?: string;
+      /** Stylist tự duyệt: bộ gần nhất chưa đủ đẹp (lý do). Vẫn trả về options để người dùng tự xem. */
+      notGood?: string;
     }>>('/suggestions', { params, signal, timeout: 45000 }).then((r) => r.data.data),
 
   chatList: (signal?: AbortSignal) =>

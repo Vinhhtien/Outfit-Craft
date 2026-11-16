@@ -89,7 +89,7 @@ const KIND_NAMES_EN: Partial<Record<ItemKind, string>> = {
 /** Danh tu so nhieu, phai dung "a pair of". */
 const PAIR_NAMES_EN: Partial<Record<ItemKind, string>> = {
   jeans: 'jeans', trousers: 'trousers', pants: 'pants', shorts: 'shorts', joggers: 'joggers', leggings: 'leggings',
-  sneakers: 'sneakers', heels: 'heels', flats: 'flats', sandals: 'sandals', boots: 'boots', loafers: 'loafers',
+  sneakers: 'sneakers', heels: 'heels', flats: 'flats', sandals: 'sandals', slippers: 'slippers', boots: 'boots', loafers: 'loafers',
 };
 const CATEGORY_NAMES_EN: Record<Category, string> = {
   top: 'top', bottom: 'skirt or pants', outerwear: 'jacket', dress: 'dress', set: 'matching set',

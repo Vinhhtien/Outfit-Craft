@@ -24,7 +24,7 @@ export const ITEM_KINDS = [
   'jeans', 'trousers', 'pants', 'shorts', 'skirt', 'joggers', 'leggings',
   'jacket', 'denim_jacket', 'blazer', 'coat', 'puffer', 'windbreaker',
   'dress', 'jumpsuit', 'set',
-  'sneakers', 'heels', 'flats', 'sandals', 'boots', 'loafers',
+  'sneakers', 'heels', 'flats', 'sandals', 'slippers', 'boots', 'loafers',
   'bag', 'accessory', 'other',
 ] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
@@ -58,12 +58,63 @@ export const ITEM_KIND_NAMES_VI: Record<ItemKind, string> = {
   sneakers: 'giày thể thao',
   heels: 'giày cao gót',
   flats: 'giày bệt/búp bê',
-  sandals: 'sandal/dép',
+  sandals: 'sandal có quai',
+  slippers: 'dép lê/dép sục/dép tổ ong',
   boots: 'bốt',
   loafers: 'giày lười/giày da',
   bag: 'túi',
   accessory: 'phụ kiện',
   other: 'khác',
+};
+
+/** Cac loai hop le cho tung nhom; AI tra loai khong hop nhom -> "other". */
+export const KINDS_BY_CATEGORY: Record<Category, readonly ItemKind[]> = {
+  top: ['tshirt', 'shirt', 'polo', 'blouse', 'tank', 'sweater', 'cardigan', 'hoodie', 'sweatshirt'],
+  bottom: ['jeans', 'trousers', 'pants', 'shorts', 'skirt', 'joggers', 'leggings'],
+  outerwear: ['jacket', 'denim_jacket', 'blazer', 'coat', 'puffer', 'windbreaker', 'cardigan', 'hoodie'],
+  dress: ['dress', 'jumpsuit'],
+  set: ['set'],
+  shoes: ['sneakers', 'heels', 'flats', 'sandals', 'slippers', 'boots', 'loafers'],
+  bag: ['bag'],
+  accessory: ['accessory'],
+};
+
+/** Loai co thuoc nhom nay khong ("other" hop moi nhom). */
+export const kindFits = (category: Category, kind: ItemKind) =>
+  kind === 'other' || KINDS_BY_CATEGORY[category].includes(kind);
+
+/** Mon danh cho nu, nam hay ca hai. Khong ro -> coi nhu unisex. */
+export const ITEM_GENDERS = ['female', 'male', 'unisex'] as const;
+export type ItemGender = (typeof ITEM_GENDERS)[number];
+
+export const ITEM_GENDER_NAMES_VI: Record<ItemGender, string> = {
+  female: 'đồ nữ',
+  male: 'đồ nam',
+  unisex: 'unisex',
+};
+
+/** Hoa tiet AI nhin thay tren mon. */
+export const ITEM_PATTERNS = ['plain', 'striped', 'checked', 'floral', 'graphic', 'other'] as const;
+export type ItemPattern = (typeof ITEM_PATTERNS)[number];
+
+/**
+ * Dac diem chi nhin anh moi biet (AI xem 1 lan luc them / nhan dien mon, luu lai de goi y dung mai).
+ * Co object nay = da phan tich, du AI khong noi duoc het tung truong.
+ */
+export interface VisualTraits {
+  /** Do trang trong nhin tu anh: 0 = rat thoai mai / do the thao ... 3 = du tiec, sang trong. */
+  formality?: number;
+  /** Do the thao, ao dau bong da, do tap, dong phuc the thao. */
+  sportswear?: boolean;
+  pattern?: ItemPattern;
+  /** Rach, mai, wash bac ro. */
+  distressed?: boolean;
+  analyzedAt?: Date;
+}
+
+/** Loai ma ban than la do nu (vay, chan vay...). Dung khi AI chua noi gioi tinh cua mon. */
+export const KIND_GENDER: Partial<Record<ItemKind, ItemGender>> = {
+  dress: 'female', skirt: 'female', blouse: 'female', heels: 'female',
 };
 
 /** Layer mac dinh tren canvas: so lon = nam tren. */

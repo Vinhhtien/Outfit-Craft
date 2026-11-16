@@ -9,7 +9,8 @@ import { useResource } from '@/hooks/useResource';
 import { suggestionApi } from '@/lib/services';
 import { getErrorMessage, isCancelled } from '@/lib/api';
 import { useCategoryLabels } from '@/store/categoryStore';
-import type { ClothingItem, Occasion, StylistChatMessage, Weather } from '@/types';
+import { OutfitLook } from '@/components/suggest/OutfitLook';
+import type { ClothingItem, MannequinProfile, Occasion, StylistChatMessage, Weather } from '@/types';
 
 const MAX_MESSAGE_LENGTH = 500;
 const SLOT_ORDER = ['dress', 'set', 'top', 'bottom', 'outerwear', 'shoes', 'bag', 'accessory'];
@@ -33,11 +34,14 @@ export function StylistChat({
   occasion,
   onOpenItem,
   onSaveOutfit,
+  mannequinProfile,
 }: {
   city: string;
   occasion: Occasion;
   onOpenItem: (itemId: string) => void;
   onSaveOutfit: (outfit: StylistOutfit) => void;
+  /** Dáng người dùng để mặc thử bộ Stylist gợi ý. */
+  mannequinProfile?: MannequinProfile;
 }) {
   const CATEGORY_LABELS = useCategoryLabels();
   const listLoader = useCallback((signal: AbortSignal) => suggestionApi.chatList(signal), []);
@@ -326,6 +330,35 @@ export function StylistChat({
 
                   {outfit && (
                     <div className="mt-3">
+                      {/* Bo do Stylist phoi: mac tren nguoi mau + ten phong cach + cach mac. */}
+                      <div className="mb-3 grid gap-3 rounded-xl border border-[#E2ECC8] bg-white p-3 sm:grid-cols-[150px_1fr]">
+                        <OutfitLook
+                          items={outfit.items.map(({ item }) => item)}
+                          profile={mannequinProfile}
+                          title={m.styling?.title}
+                          className="mx-auto h-56 w-full"
+                        />
+                        {m.styling && (
+                          <div className="min-w-0">
+                            {m.styling.title && (
+                              <p className="font-serif-display text-base font-semibold text-[#1F453E]">{m.styling.title}</p>
+                            )}
+                            {m.styling.tips.length > 0 && (
+                              <>
+                                <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wider text-[#1F453E]">Cách mặc</p>
+                                <ol className="mt-1 space-y-1 text-xs text-[#2C4C45]">
+                                  {m.styling.tips.map((tip, idx) => (
+                                    <li key={`${tip}-${idx}`} className="flex gap-1.5">
+                                      <span className="font-semibold text-[#1F453E]">{idx + 1}.</span>
+                                      {tip}
+                                    </li>
+                                  ))}
+                                </ol>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                         {outfit.items.map(({ label, item }) => (
                           <button

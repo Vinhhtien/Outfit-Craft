@@ -22,6 +22,8 @@ export interface IStylistMessage extends Document {
   weather?: Record<string, unknown>;
   notes: string[];
   source?: 'ai' | 'rule';
+  /** Ten phong cach + cach mac cua bo do trong tin tra loi. */
+  styling?: { title: string; tips: string[]; source: 'ai' | 'rule' };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +40,17 @@ const stylistMessageSchema = new Schema<IStylistMessage>(
     weather: { type: Schema.Types.Mixed },
     notes: { type: [String], default: [] },
     source: { type: String, enum: ['ai', 'rule'] },
+    styling: {
+      type: new Schema(
+        {
+          title: { type: String, maxlength: 100 },
+          tips: { type: [String], default: [] },
+          source: { type: String, enum: ['ai', 'rule'] },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
   },
   { timestamps: true }
 );

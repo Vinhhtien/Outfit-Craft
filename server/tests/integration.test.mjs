@@ -61,10 +61,10 @@ async function request(path, options = {}) {
   const response = await fetch(base + path, { ...options, headers: { Authorization: `Bearer ${token}`, ...options.headers } });
   return { status: response.status, body: await response.json() };
 }
-function form(key = randomUUID(), bytes = png) {
+function form(key = randomUUID(), bytes = png, extra = {}) {
   const body = new FormData();
   body.append('creationKey', key);
-  body.append('metadata', JSON.stringify({ name: 'Áo thử nghiệm', category: 'top', colors: [], styles: [], seasons: [], occasions: [] }));
+  body.append('metadata', JSON.stringify({ name: 'Áo thử nghiệm', category: 'top', colors: [], styles: [], seasons: [], occasions: [], ...extra }));
   body.append('image', new Blob([bytes], { type: 'image/png' }), 'cutout.png');
   body.append('original', new Blob([bytes], { type: 'image/png' }), 'original.png');
   return body;
@@ -83,6 +83,28 @@ test('atomic item upload records both image IDs and repeat requests reuse one re
   assert.equal(first.body.data._id, second.body.data._id);
   assert.ok(first.body.data.originalImagePublicId);
   assert.equal(uploads - before, 2);
+});
+
+test('the kind auto-tag saw is kept when the user files the item in another group, and fixes the kind on regroup', async () => {
+  const created = await request('/items/with-images', { method: 'POST', body: form(randomUUID(), png, { detectedKind: 'shorts' }) });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  assert.equal(created.body.data.kind, 'other');
+  assert.equal(created.body.data.detectedKind, 'shorts');
+  const regrouped = await request(`/items/${created.body.data._id}`, { method: 'PATCH', ...json({ category: 'bottom' }) });
+  assert.equal(regrouped.status, 200, JSON.stringify(regrouped.body));
+  assert.equal(regrouped.body.data.kind, 'shorts');
+  assert.equal((await ClothingItem.findById(created.body.data._id)).kind, 'shorts');
+});
+
+test('an item keeps the gender auto-tag saw, and the user can change or clear it', async () => {
+  const created = await request('/items/with-images', { method: 'POST', body: form(randomUUID(), png, { gender: 'female' }) });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  assert.equal(created.body.data.gender, 'female');
+  const id = created.body.data._id;
+  assert.equal((await request(`/items/${id}`, { method: 'PATCH', ...json({ gender: 'male' }) })).body.data.gender, 'male');
+  assert.equal((await request(`/items/${id}`, { method: 'PATCH', ...json({ gender: 'robot' }) })).status, 400);
+  const cleared = await request(`/items/${id}`, { method: 'PATCH', ...json({ gender: null }) });
+  assert.equal(cleared.body.data.gender, undefined);
 });
 
 test('concurrent item retries create exactly one item and reclaim losing uploads', async () => {
