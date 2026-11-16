@@ -30,6 +30,7 @@ export const createItemSchema = z.object({
     sportswear: z.boolean().optional(),
     pattern: z.enum(ITEM_PATTERNS).optional(),
     distressed: z.boolean().optional(),
+    sleeve: z.enum(['long', 'short', 'none']).optional(),
   }).strict().optional(),
   originalImageUrl: z.string().url(),
   imageUrl: z.string().url(),

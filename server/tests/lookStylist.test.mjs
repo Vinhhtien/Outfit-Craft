@@ -57,6 +57,9 @@ test('the review keeps only known labels, clamps scores and needs a comment', ()
     ['B', { score: 1, comment: 'Quá xuề xòa' }],
   ]);
   for (const broken of [null, '', 'not json', '{"outfits":"x"}']) assert.equal(parseLookReview(broken, ['A']).size, 0);
+  // Gemini that tra 'Bộ A' (vi danh sach ghi 'Bộ A: ...'): van doc duoc.
+  const real = JSON.stringify({ outfits: [{ label: 'Bộ A', score: 9, comment: 'Lịch lãm' }, { label: 'bo b:', score: 4, comment: 'Jeans rách kém trang trọng' }] });
+  assert.deepEqual([...parseLookReview(real, ['A', 'B'])].map(([l, r]) => [l, r.score]), [['A', 9], ['B', 4]]);
 });
 
 test('outfits are re-ordered by the look score; unreviewed ones keep their place after them', () => {
@@ -146,4 +149,22 @@ test('when nothing looks good the stylist says so and what to add, even without 
   const rule = await writeHonestReply('đi làm mặc gì', weather, 'work', reasons);
   assert.equal(rule.source, 'rule');
   assert.match(rule.advice, /chưa phối được bộ nào thật sự đẹp cho dịp đi làm: .*Nên bổ sung: quần âu\/quần tây/);
+});
+
+test('a busy Gemini (503) is retried before falling back to rules', async () => {
+  const { callGemini } = await import('../src/services/stylist.service.ts');
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    if (calls === 1) return new Response('overloaded', { status: 503 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok sau khi thử lại' }] } }] }), { status: 200 });
+  };
+  assert.equal(await callGemini('xin chào', { temperature: 0 }), 'ok sau khi thử lại');
+  assert.equal(calls, 2);
+
+  // Loi khong tam thoi (400) thi khong thu lai.
+  calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response('bad', { status: 400 }); };
+  assert.equal(await callGemini('xin chào', { temperature: 0 }), null);
+  assert.equal(calls, 1);
 });

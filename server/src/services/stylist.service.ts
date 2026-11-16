@@ -15,6 +15,9 @@ import {
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 /** Model doi moi co the dung token de suy luan truoc khi tra loi, nen de du cho cau tra loi. */
 const MAX_OUTPUT_TOKENS = 2048;
+/** Loi tam thoi cua Gemini (qua tai, vuot han muc, loi may chu): thu lai sau cac khoang cho nay. */
+const RETRYABLE_STATUS = [429, 500, 503];
+const GEMINI_RETRY_DELAYS_MS = [800, 2000];
 
 interface GeminiConfig {
   temperature: number;
@@ -39,16 +42,26 @@ export async function callGemini(
 ): Promise<string | null> {
   if (!env.geminiKey) return null;
   const input: GeminiPart[] = typeof prompt === 'string' ? [...(image ? [image] : []), prompt] : prompt;
+  const body = JSON.stringify({
+    contents: [{ parts: input.map(toGeminiPart) }],
+    generationConfig: { ...config, maxOutputTokens: MAX_OUTPUT_TOKENS },
+  });
   try {
-    const res = await fetch(`${GEMINI_BASE_URL}/${env.geminiModel}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.geminiKey },
-      body: JSON.stringify({
-        contents: [{ parts: input.map(toGeminiPart) }],
-        generationConfig: { ...config, maxOutputTokens: MAX_OUTPUT_TOKENS },
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    let res: Response | undefined;
+    // Gemini hay bao 503 (qua tai) / 429 trong vai giay: thu lai ngan truoc khi quay ve quy tac.
+    // Loi qua thoi gian cho thi khong thu lai (nem ra catch) de khong vuot gioi han 60 giay cua request.
+    for (let attempt = 0; ; attempt++) {
+      res = await fetch(`${GEMINI_BASE_URL}/${env.geminiModel}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.geminiKey },
+        body,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const delay = GEMINI_RETRY_DELAYS_MS.at(attempt);
+      if (res.ok || !RETRYABLE_STATUS.includes(res.status) || delay === undefined) break;
+      console.warn(`[stylist] Gemini tra ve ${res.status}, thu lai sau ${delay}ms (lan ${attempt + 1})`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
 
     if (!res.ok) {
       console.warn(`[stylist] Gemini tra ve ${res.status} (model ${env.geminiModel})`);

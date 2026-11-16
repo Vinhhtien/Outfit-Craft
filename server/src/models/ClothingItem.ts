@@ -1,6 +1,6 @@
 import { Schema, model, Document, Types } from 'mongoose';
 import {
-  CATEGORIES, STYLES, SEASONS, OCCASIONS, ITEM_KINDS, ITEM_GENDERS, ITEM_PATTERNS,
+  CATEGORIES, STYLES, SEASONS, OCCASIONS, ITEM_KINDS, ITEM_GENDERS, ITEM_PATTERNS, ITEM_SLEEVES,
   Category, Style, Season, Occasion, ItemKind, ItemGender, VisualTraits,
 } from '../types/index.js';
 
@@ -87,6 +87,7 @@ const clothingItemSchema = new Schema<IClothingItem>(
           sportswear: { type: Boolean },
           pattern: { type: String, enum: ITEM_PATTERNS },
           distressed: { type: Boolean },
+          sleeve: { type: String, enum: ITEM_SLEEVES },
           analyzedAt: { type: Date, required: true },
         },
         { _id: false }
