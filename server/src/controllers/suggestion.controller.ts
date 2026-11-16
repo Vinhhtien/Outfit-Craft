@@ -9,10 +9,12 @@ import { User } from '../models/User.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { getWeather } from '../services/weather.service.js';
-import { buildOutfitOptions, scoreItem } from '../services/suggestion.service.js';
+import { Wearer, buildOutfitOptions, explainFit, scoreItem } from '../services/suggestion.service.js';
+import { LOOK_CANDIDATES, judgeOutfit, pickOutfitsByLook } from '../services/lookStylist.service.js';
 import {
   MAX_WARDROBE_FOR_AI, StylistRequestState, describeWardrobeItem, getRuleAdvice, getStylistAdvice, mergeStylistRequest,
-  outfitItems, readStylistIntent, toStylistBodyContext, weatherForRequest, writeStylistReply,
+  outfitItems, readStylistIntent, toStylistBodyContext, wantedFromMessage, weatherForRequest, writeHonestReply,
+  writeStylistReply,
 } from '../services/stylist.service.js';
 import { ensureItemKinds } from '../services/itemKind.service.js';
 import { COLOR_GROUPS, Occasion, OCCASIONS, SEASONS } from '../types/index.js';
@@ -42,6 +44,10 @@ function listParam<T extends string>(raw: unknown, allowed: readonly T[], label:
   if (values.some((v) => !allowed.includes(v as T))) throw ApiError.badRequest(`${label} không hợp lệ.`);
   return values as T[];
 }
+
+/** Nguoi mac nu / nam theo ho so dang nguoi; trung tinh hoac chua khai -> undefined. */
+const wearerOf = (gender?: string): Wearer | undefined =>
+  gender === 'female' || gender === 'male' ? gender : undefined;
 
 /**
  * GET /api/suggestions?city=Hanoi&occasion=work&anchor=<id>&seasons=summer,autumn&colorGroups=red
@@ -79,11 +85,30 @@ export const getSuggestion = asyncHandler(async (req, res) => {
   }
 
   const weather = await getWeather(city);
-  const { options, weatherWarning, seasonWarning, missing } = buildOutfitOptions(items, weather, occasion, {
+  const wearer = wearerOf(user?.bodyProfile?.gender);
+  // Xao tron: bam lien tuc nen chi dung thuat toan. Lan dau: lay them ung vien de Stylist AI xem anh roi chon.
+  const useLook = !isShuffle;
+  const built = buildOutfitOptions(items, weather, occasion, {
     anchor: anchorItem,
     filters,
     shuffle: isShuffle ? { seen } : undefined,
+    wearer,
+    optionCount: useLook ? LOOK_CANDIDATES : undefined,
   });
+  const { weatherWarning, seasonWarning, missing, misfiled } = built;
+  const look = useLook && !built.blocked
+    ? await pickOutfitsByLook(built.options, { weather, occasion, wearer })
+    : { options: built.options, checked: false };
+  const { options } = look;
+  // AI doi bo dung dau -> loi nhac phai tinh lai cho dung bo dang hien.
+  const { weatherFit, occasionFit, genderFit } = look.checked
+    ? explainFit(options[0], { weather, occasion, wearer, anchor: anchorItem })
+    : built;
+  // Loi khuyen AI phai biet bo do chua hop dip / gioi tinh / thoi tiet de khong khen sai.
+  const adviceNotes = [
+    ...(options[0]?.lookComment ? [`Nhận xét khi xem ảnh bộ này: ${options[0].lookComment}`] : []),
+    ...genderFit, ...occasionFit, ...weatherFit,
+  ];
 
   let anchor;
   let anchorContext;
@@ -95,14 +120,22 @@ export const getSuggestion = asyncHandler(async (req, res) => {
     anchorContext = { name: anchorItem.name, isDormant };
   }
 
-  const { advice, source } = isShuffle
+  // Stylist tu duyet bo dau: chua dep thi noi that (client hien thong bao, nguoi dung van xem duoc bo gan nhat).
+  const verdict = built.blocked ? { ok: true, reasons: [] } : judgeOutfit(options[0], look.checked);
+  const notGood = verdict.ok ? undefined : verdict.reasons.join('. ');
+  const { advice, source } = built.blocked
+    ? { advice: built.blocked, source: 'rule' as const }
+    : notGood
+    ? await writeHonestReply('Gợi ý bộ đồ cho hôm nay', weather, occasion, [...verdict.reasons, ...missing])
+    : isShuffle
     ? getRuleAdvice(options[0], weather, anchorContext)
     : await getStylistAdvice(
         options[0],
         weather,
         occasion,
         toStylistBodyContext(user?.bodyProfile), // NEW: Body Profile
-        anchorContext
+        anchorContext,
+        adviceNotes
       );
 
   res.json({
@@ -114,6 +147,13 @@ export const getSuggestion = asyncHandler(async (req, res) => {
       anchor,
       seasonWarning,
       missing,
+      weatherFit,
+      occasionFit,
+      genderFit,
+      misfiled,
+      lookChecked: look.checked,
+      blocked: built.blocked,
+      notGood,
       advice,
       adviceSource: source,
     },
@@ -262,7 +302,12 @@ export const chatWithStylist = asyncHandler(async (req, res) => {
   }
 
   // Giu yeu cau dang ap dung (mua, nhiet do, mau...), chi ghi de phan user vua noi moi.
-  const turnInclude = toIds(intent.includeItems);
+  // AI hay bo sot "toi muon mac vay": khong dien mon nao thi code tu nhan loai do trong cau.
+  const wanted = intent.includeItems.length === 0
+    ? wantedFromMessage(message, items.slice(0, MAX_WARDROBE_FOR_AI))
+    : { ids: [], missing: [] };
+  const turnInclude = intent.includeItems.length > 0 ? toIds(intent.includeItems) : wanted.ids;
+  const unavailable = intent.unavailable ?? (wanted.missing.length > 0 ? wanted.missing.join(', ') : undefined);
   const turnExclude = toIds(intent.excludeItems);
   const last = conversation?.lastRequest;
   const previous: StylistRequestState | null = last
@@ -291,22 +336,46 @@ export const chatWithStylist = asyncHandler(async (req, res) => {
 
   const occasion = request.occasion ?? currentOccasion;
   const outfitWeather = weatherForRequest(weather, request.temperature);
-  const { options, seasonWarning, missing, weatherWarning, pinned, weatherFit } = buildOutfitOptions(items, outfitWeather, occasion, {
+  const wearer = wearerOf(user?.bodyProfile?.gender);
+  const built = buildOutfitOptions(items, outfitWeather, occasion, {
+    wearer,
     include,
     exclude,
     filters: { seasons: request.seasons, colorGroups: request.colorGroups, styles: request.styles },
     shuffle: wantsDifferent ? { seen, avoid: lastOutfit } : undefined,
+    optionCount: wantsDifferent ? undefined : LOOK_CANDIDATES,
   });
+  const { seasonWarning, missing, weatherWarning, pinned, misfiled } = built;
+  // "Doi bo khac" can nhanh va khac bo cu: dung thuat toan. Con lai Stylist AI xem anh roi chon bo dep nhat.
+  const look = wantsDifferent || built.blocked
+    ? { options: built.options, checked: false }
+    : await pickOutfitsByLook(built.options, { weather: outfitWeather, occasion, wearer });
+  const { options } = look;
+  const { weatherFit, occasionFit, genderFit } = look.checked
+    ? explainFit(options[0], { weather: outfitWeather, occasion, wearer, anchor: pinned })
+    : built;
   const notes = [
     ...(kept.length > 0 ? [`Vẫn theo yêu cầu trước: ${kept.join(', ')}`] : []),
-    ...(intent.unavailable ? [`Tủ chưa có ${intent.unavailable}, đây là bộ gần nhất`] : []),
+    ...(options[0]?.lookComment ? [`Nhận xét khi xem ảnh: ${options[0].lookComment}`] : []),
+    ...(unavailable ? [`Tủ chưa có ${unavailable}, đây là bộ gần nhất`] : []),
     ...missing,
+    ...genderFit,
+    ...occasionFit,
     ...weatherFit,
+    ...misfiled,
     // Canh bao "mua da chon lech thoi tiet hom nay" thua khi user tu neu nhiet do muon mac.
     ...(seasonWarning && request.temperature === undefined ? [seasonWarning] : []),
     ...(weatherWarning && pinned ? [`${pinned.name}: ${weatherWarning}`] : []),
   ];
-  const { advice, source } = await writeStylistReply(
+  // Stylist tu duyet truoc khi gioi thieu: bo chua dep (thieu phan chinh / AI xem anh cham thap) thi
+  // noi thang va khuyen bo sung, khong dua bo do ra. Mon trai gioi tinh nguoi mac: noi thang, khong phoi.
+  const verdict = judgeOutfit(options[0], look.checked);
+  const presentable = !built.blocked && verdict.ok;
+  const { advice, source } = built.blocked
+    ? { advice: built.blocked, source: 'rule' as const }
+    : !verdict.ok
+    ? await writeHonestReply(message, outfitWeather, occasion, [...verdict.reasons, ...missing])
+    : await writeStylistReply(
     message,
     options[0],
     outfitWeather,
@@ -315,15 +384,19 @@ export const chatWithStylist = asyncHandler(async (req, res) => {
     notes
   );
 
-  const pieces = outfitItems(options[0]);
+  const pieces = presentable ? outfitItems(options[0]) : [];
   const saved = await saveChatTurn(owner, conversation, message, {
     text: advice,
     source,
-    notes,
+    // Khong gioi thieu bo nao: giu ngu canh (yeu cau dang ap dung, mon xep nham nhom) va loi nhac nen bo sung gi,
+    // bo cac ghi chu ve tung mon cua bo khong duoc dua ra.
+    notes: presentable ? notes : notes.filter((n) =>
+      n.startsWith('Vẫn theo yêu cầu trước') || n.startsWith('Tủ chưa có') || missing.includes(n) || misfiled.includes(n)),
     occasion,
     weather: { ...weather },
     items: pieces.map((item) => item._id),
     outfitKey: pieces.length > 0 ? options[0].key : undefined,
+    styling: presentable ? options[0].styling : undefined,
   }, { excludedItems: exclude, lastRequest: { ...request, includeItems: include } });
   res.json({ success: true, data: saved });
 });

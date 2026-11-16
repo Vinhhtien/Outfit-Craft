@@ -7,17 +7,30 @@ import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { uploadBuffer, destroyImage, saveWithImages, queueImageCleanup } from '../services/upload.service.js';
 import { suggestItemTags } from '../services/autoTag.service.js';
-import { ensureItemKindsInBackground, kindFits } from '../services/itemKind.service.js';
+import {
+  ensureItemKinds, ensureItemKindsInBackground, kindFits, kindForCategory, needsItemInfo,
+} from '../services/itemKind.service.js';
 import { ownsImage, ownedImageIdFromUrl, validateImageBuffer } from '../utils/imageValidation.js';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
-import { CATEGORIES, STYLES, SEASONS, OCCASIONS, ITEM_KINDS } from '../types/index.js';
+import { CATEGORIES, STYLES, SEASONS, OCCASIONS, ITEM_KINDS, ITEM_GENDERS, ITEM_PATTERNS } from '../types/index.js';
 
 export const createItemSchema = z.object({
   name: z.string().trim().min(1).max(100),
   category: z.enum(CATEGORIES),
   /** Loai chi tiet (thuong do auto-tag goi y). Bo trong -> AI nhan dien o nen sau khi luu. */
   kind: z.enum(ITEM_KINDS).optional(),
+  /** Loai AI auto-tag nhin thay trong anh, giu ca khi user chon nhom khac (de phat hien xep sai nhom). */
+  detectedKind: z.enum(ITEM_KINDS).optional(),
+  /** Do nu / nam / unisex (thuong do auto-tag goi y). Bo trong -> AI nhan dien o nen. */
+  gender: z.enum(ITEM_GENDERS).optional(),
+  /** Dac diem auto-tag nhin tu anh. Server tu ghi thoi diem phan tich. */
+  visual: z.object({
+    formality: z.number().int().min(0).max(3).optional(),
+    sportswear: z.boolean().optional(),
+    pattern: z.enum(ITEM_PATTERNS).optional(),
+    distressed: z.boolean().optional(),
+  }).strict().optional(),
   originalImageUrl: z.string().url(),
   imageUrl: z.string().url(),
   imagePublicId: z.string().optional(),
@@ -48,6 +61,8 @@ export const updateItemSchema = z
     category: z.enum(CATEGORIES),
     // Loai chi tiet user tu sua; null = de AI nhan dien lai tu anh.
     kind: z.enum(ITEM_KINDS).nullable(),
+    // Do nu / nam / unisex user tu sua; null = de AI nhan dien lai.
+    gender: z.enum(ITEM_GENDERS).nullable(),
     colors: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(10),
     styles: z.array(z.enum(STYLES)),
     seasons: z.array(z.enum(SEASONS)),
@@ -173,7 +188,9 @@ export const createItem = asyncHandler(async (req, res) => {
   const category = await Category.findOne({ code: body.category });
   const tempRange = body.tempRange ?? (category ? { min: category.defaultTempMin, max: category.defaultTempMax } : undefined);
   if (body.kind && !kindFits(body.category, body.kind)) delete body.kind;
-  const item = await ClothingItem.create({ ...body, tempRange, owner: req.user!.sub });
+  if (!body.kind && body.detectedKind) body.kind = kindForCategory(body.category, body.detectedKind);
+  const visual = body.visual ? { ...body.visual, analyzedAt: new Date() } : undefined;
+  const item = await ClothingItem.create({ ...body, visual, tempRange, owner: req.user!.sub });
   ensureItemKindsInBackground([item]);
   res.status(201).json({ success: true, data: item });
 });
@@ -189,6 +206,8 @@ export const createItemWithImages = asyncHandler(async (req, res) => {
   catch { throw ApiError.badRequest('Thông tin món đồ không đúng định dạng.'); }
   const body = itemMetadataSchema.parse(metadata);
   if (body.kind && !kindFits(body.category, body.kind)) delete body.kind;
+  if (!body.kind && body.detectedKind) body.kind = kindForCategory(body.category, body.detectedKind);
+  const visual = body.visual ? { ...body.visual, analyzedAt: new Date() } : undefined;
   if (!body.tempRange) {
     const category = await Category.findOne({ code: body.category });
     if (category) body.tempRange = { min: category.defaultTempMin, max: category.defaultTempMax };
@@ -203,7 +222,7 @@ export const createItemWithImages = asyncHandler(async (req, res) => {
     const item = await saveWithImages([
       () => uploadBuffer(image.buffer, `outfitcraft/${owner}/items`),
       () => uploadBuffer(original.buffer, `outfitcraft/${owner}/items`),
-    ], ([cutout, source]) => ClothingItem.create({ ...body, owner, creationKey, imageUrl: cutout.url, imagePublicId: cutout.publicId, originalImageUrl: source.url, originalImagePublicId: source.publicId }));
+    ], ([cutout, source]) => ClothingItem.create({ ...body, visual, owner, creationKey, imageUrl: cutout.url, imagePublicId: cutout.publicId, originalImageUrl: source.url, originalImagePublicId: source.publicId }));
     ensureItemKindsInBackground([item]);
     res.status(201).json({ success: true, data: item });
   } catch (error) {
@@ -249,7 +268,10 @@ export const updateItem = asyncHandler(async (req, res) => {
   );
   // ===== END NEW =====
   if (!item) throw ApiError.notFound('Không tìm thấy món đồ.');
-  if (!item.kind) ensureItemKindsInBackground([item]);
+  // Da biet anh la gi (detectedKind) -> suy ra loai cho nhom moi ngay, khong goi AI.
+  if (!item.kind && item.detectedKind) await ensureItemKinds([item], 0);
+  // Con thieu loai hoac do nam / nu -> AI nhan dien o nen.
+  if (needsItemInfo(item)) ensureItemKindsInBackground([item]);
   res.json({ success: true, data: item });
 });
 

@@ -22,7 +22,7 @@ export const ITEM_KINDS = [
   'jeans', 'trousers', 'pants', 'shorts', 'skirt', 'joggers', 'leggings',
   'jacket', 'denim_jacket', 'blazer', 'coat', 'puffer', 'windbreaker',
   'dress', 'jumpsuit', 'set',
-  'sneakers', 'heels', 'flats', 'sandals', 'boots', 'loafers',
+  'sneakers', 'heels', 'flats', 'sandals', 'slippers', 'boots', 'loafers',
   'bag', 'accessory', 'other',
 ] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
@@ -36,7 +36,8 @@ export const ITEM_KIND_LABELS: Record<ItemKind, string> = {
   jacket: 'Áo khoác', denim_jacket: 'Áo khoác jean', blazer: 'Áo blazer / vest', coat: 'Áo măng tô / áo dạ',
   puffer: 'Áo phao', windbreaker: 'Áo gió',
   dress: 'Váy liền', jumpsuit: 'Jumpsuit', set: 'Đồ bộ',
-  sneakers: 'Giày thể thao', heels: 'Giày cao gót', flats: 'Giày bệt / búp bê', sandals: 'Sandal / dép',
+  sneakers: 'Giày thể thao', heels: 'Giày cao gót', flats: 'Giày bệt / búp bê', sandals: 'Sandal có quai',
+  slippers: 'Dép lê / dép sục / dép tổ ong',
   boots: 'Bốt', loafers: 'Giày lười / giày da',
   bag: 'Túi', accessory: 'Phụ kiện', other: 'Khác',
 };
@@ -48,10 +49,48 @@ export const KINDS_BY_CATEGORY: Record<Category, readonly ItemKind[]> = {
   outerwear: ['jacket', 'denim_jacket', 'blazer', 'coat', 'puffer', 'windbreaker', 'cardigan', 'hoodie'],
   dress: ['dress', 'jumpsuit'],
   set: ['set'],
-  shoes: ['sneakers', 'heels', 'flats', 'sandals', 'boots', 'loafers'],
+  shoes: ['sneakers', 'heels', 'flats', 'sandals', 'slippers', 'boots', 'loafers'],
   bag: ['bag'],
   accessory: ['accessory'],
 };
+
+/** Món dành cho nữ, nam hay cả hai. */
+export const ITEM_GENDERS = ['female', 'male', 'unisex'] as const;
+export type ItemGender = (typeof ITEM_GENDERS)[number];
+export const ITEM_GENDER_LABELS: Record<ItemGender, string> = { female: 'Nữ', male: 'Nam', unisex: 'Unisex' };
+
+/** Hoa tiết AI nhìn thấy trên món. */
+export type ItemPattern = 'plain' | 'striped' | 'checked' | 'floral' | 'graphic' | 'other';
+export const ITEM_PATTERN_LABELS: Record<ItemPattern, string> = {
+  plain: 'Trơn', striped: 'Kẻ sọc', checked: 'Kẻ ô / caro', floral: 'Hoa', graphic: 'In hình / chữ', other: 'Khác',
+};
+export const FORMALITY_LABELS = ['Rất thoải mái', 'Thường ngày', 'Lịch sự', 'Sang trọng'] as const;
+
+/** Đặc điểm AI nhìn từ ảnh (độ trang trọng thật, đồ thể thao, họa tiết, rách). */
+export interface VisualTraits {
+  formality?: number;
+  sportswear?: boolean;
+  pattern?: ItemPattern;
+  distressed?: boolean;
+  analyzedAt?: string;
+}
+
+/** Nhóm đầu tiên chứa loại này (vd shorts -> bottom); "other" không thuộc nhóm nào. */
+export function categoryOfKind(kind: ItemKind): Category | undefined {
+  if (kind === 'other') return undefined;
+  return (Object.keys(KINDS_BY_CATEGORY) as Category[]).find((c) => KINDS_BY_CATEGORY[c].includes(kind));
+}
+
+/**
+ * Món bị xếp nhầm nhóm: ảnh là loại thuộc nhóm khác (vd quần short để ở nhóm Áo) - giống isMisfiled ở server.
+ * Người dùng tự chọn loại hợp nhóm thì tin người dùng.
+ */
+export function isMisfiled(item: Pick<ClothingItem, 'category' | 'kind' | 'detectedKind'>): boolean {
+  const seen = item.detectedKind;
+  return Boolean(
+    seen && seen !== 'other' && (!item.kind || item.kind === 'other') && !KINDS_BY_CATEGORY[item.category].includes(seen)
+  );
+}
 
 /** Layer mặc định trên canvas: số lớn = nằm trên. */
 export const CATEGORY_Z_INDEX: Record<Category, number> = {
@@ -191,6 +230,12 @@ export interface ClothingItem {
   category: Category;
   /** Chưa có = AI chưa nhận diện xong. */
   kind?: ItemKind | null;
+  /** Loại AI nhìn thấy trong ảnh, kể cả khi khác nhóm người dùng chọn. */
+  detectedKind?: ItemKind | null;
+  /** Đồ nữ / nam / unisex; chưa có = AI chưa nhận diện. */
+  gender?: ItemGender | null;
+  /** Đặc điểm AI nhìn từ ảnh; chưa có = chưa phân tích. */
+  visual?: VisualTraits | null;
   originalImageUrl: string;
   imageUrl: string;
   imagePublicId?: string;
@@ -344,6 +389,15 @@ export interface Suggestion {
   key?: string;
   totalScore: number;
   reasons: string[];
+  /** Bộ có món chính chưa hợp dịp (tủ không có món hợp hơn). */
+  occasionMismatch?: boolean;
+  /** Bộ lẫn đồ nam và nữ, hoặc có món không hợp giới tính người mặc. */
+  genderMismatch?: boolean;
+  /** Điểm 1-10 và nhận xét khi Stylist AI xem ảnh thật của bộ này. */
+  lookScore?: number;
+  lookComment?: string;
+  /** Tên phong cách + cách mặc (sơ vin, xắn tay...); source ai = Stylist AI viết sau khi xem ảnh. */
+  styling?: { title: string; tips: string[]; source: 'ai' | 'rule' };
 }
 
 /** 1 doan chat tren thanh lich su. */
@@ -363,6 +417,8 @@ export interface StylistChatMessage {
   weather?: Weather;
   notes: string[];
   source?: 'ai' | 'rule';
+  /** Tên phong cách + cách mặc của bộ đồ trong tin trả lời. */
+  styling?: { title: string; tips: string[]; source: 'ai' | 'rule' };
 }
 
 /** AI goi y khi them do moi. */
@@ -373,6 +429,8 @@ export interface ItemTagSuggestion {
   category?: Category;
   /** Luôn hợp với category nếu có. */
   kind?: ItemKind;
+  gender?: ItemGender;
+  visual?: VisualTraits;
   /** Tên ngắn gợi ý, chỉ dùng khi người dùng chưa tự đặt tên. */
   name?: string;
 }

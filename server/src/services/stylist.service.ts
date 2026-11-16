@@ -3,11 +3,11 @@ import { IClothingItem } from '../models/ClothingItem.js';
 import { WeatherInfo } from './weather.service.js';
 import {
   CATEGORY_NAMES_VI, COLOR_NAMES_VI, OCCASION_NAMES_VI, OutfitSuggestion, SEASON_NAMES_VI, STYLE_NAMES_VI,
-  colorGroupOf, kindLabel,
+  colorGroupOf, effectiveKind, genderOf, isMisfiled, kindLabel,
 } from './suggestion.service.js';
 // ===== NEW: Body Profile =====
 import {
-  BodyProfile, BodyShape, BodyGender, ITEM_KIND_NAMES_VI,
+  BodyProfile, BodyShape, BodyGender, ITEM_GENDER_NAMES_VI, ITEM_KIND_NAMES_VI,
   COLOR_GROUPS, ColorGroup, OCCASIONS, Occasion, SEASONS, STYLES, Season, Style,
 } from '../types/index.js';
 // ===== END NEW =====
@@ -71,10 +71,17 @@ export const outfitItems = (s: OutfitSuggestion) =>
     .filter(Boolean) as IClothingItem[];
 
 /** Mo ta gui cho AI: ten, loai, mau, phong cach. Khong gui anh hay gia. */
+/** 'do nu' / 'do nam' de AI khong phoi lan; unisex thi khong ghi. */
+function genderLabel(item: IClothingItem): string | null {
+  const gender = genderOf(item);
+  return gender === 'unisex' ? null : ITEM_GENDER_NAMES_VI[gender];
+}
+
 function describeForAi(item: IClothingItem): string {
   const group = colorGroupOf(item.colors[0]);
   const details = [
     kindLabel(item),
+    genderLabel(item),
     group ? `màu ${COLOR_NAMES_VI[group]}` : null,
     item.styles.length ? `phong cách ${item.styles.map((s) => STYLE_NAMES_VI[s]).join(', ')}` : null,
   ].filter(Boolean);
@@ -152,6 +159,16 @@ function withAnchor(prompt: string, anchor?: StylistAnchorContext): string {
 Bộ đồ được phối xoay quanh món "${anchor.name}". Hãy tập trung vào cách làm nổi bật món này.${dormant}`;
 }
 
+/** Cach noi khi bo do co mon chua hop dip / thoi tiet: thanh that, chi ro nen sam them gi. */
+const HONEST_FIT_RULE = 'Nếu lưu ý cho biết món nào chưa hợp dịp hoặc chưa hợp nhiệt độ, hãy nói thật điều đó, không khen bộ này hợp dịp hay hợp thời tiết, và gợi ý người dùng nên bổ sung loại đồ nào vào tủ.';
+
+function withNotes(prompt: string, notes: string[]): string {
+  if (notes.length === 0) return prompt;
+  return `${prompt}
+Lưu ý cho người dùng: ${notes.join('; ')}.
+${HONEST_FIT_RULE}`;
+}
+
 /**
  * Sinh loi tu van phoi do bang LLM.
  * Neu chua co API key hoac goi that bai -> tra ve text tu rule-based,
@@ -162,12 +179,16 @@ export async function getStylistAdvice(
   weather: WeatherInfo,
   occasion?: string,
   body?: StylistBodyContext, // NEW: Body Profile
-  anchor?: StylistAnchorContext
+  anchor?: StylistAnchorContext,
+  /** Mon chua hop dip / thoi tiet ma tu khong co lua chon hon: AI phai noi that, khong khen sai. */
+  notes: string[] = []
 ): Promise<{ advice: string; source: 'ai' | 'rule' }> {
   const items = outfitItems(suggestion);
   if (items.length === 0) return getRuleAdvice(suggestion, weather, anchor);
 
-  const prompt = withAnchor(buildStylistPrompt(items.map(describeForAi), weather, occasion, body), anchor);
+  const tips = suggestion.styling?.tips ?? [];
+  const prompt = withNotes(withAnchor(buildStylistPrompt(items.map(describeForAi), weather, occasion, body), anchor), notes)
+    + (tips.length ? `\nHướng dẫn ngắn cách mặc theo các mẹo: ${tips.join('; ')}.` : '');
   const text = await callGemini(prompt, { temperature: 0.8 });
   return text ? { advice: text, source: 'ai' } : getRuleAdvice(suggestion, weather, anchor);
 }
@@ -300,10 +321,14 @@ export const MAX_WARDROBE_FOR_AI = 200;
 /** Dong mo ta 1 mon trong danh sach tu do gui AI: loai chi tiet (neu da nhan dien) + mau. */
 export function describeWardrobeItem(item: IClothingItem): string {
   const group = colorGroupOf(item.colors[0]);
-  const type = item.kind && item.kind !== 'other'
-    ? ITEM_KIND_NAMES_VI[item.kind]
-    : item.category === 'bottom' ? 'quần/chân váy' : CATEGORY_NAMES_VI[item.category];
-  const details = [type, group ? `màu ${COLOR_NAMES_VI[group]}` : null].filter(Boolean);
+  const kind = effectiveKind(item);
+  // Anh la loai khac nhom (vd quan short xep vao nhom Ao): noi ro de AI khong chon nham khi user hoi "ao".
+  const type = isMisfiled(item)
+    ? `${ITEM_KIND_NAMES_VI[item.detectedKind!]}, đang xếp nhầm nhóm ${CATEGORY_NAMES_VI[item.category]}`
+    : kind
+      ? ITEM_KIND_NAMES_VI[kind]
+      : item.category === 'bottom' ? 'quần/chân váy' : CATEGORY_NAMES_VI[item.category];
+  const details = [type, genderLabel(item), group ? `màu ${COLOR_NAMES_VI[group]}` : null].filter(Boolean);
   return `${item.name} (${details.join(', ')})`;
 }
 
@@ -450,13 +475,83 @@ export async function writeStylistReply(
   const items = outfitItems(suggestion);
   if (items.length === 0) return getRuleAdvice(suggestion, weather);
 
+  const tips = suggestion.styling?.tips ?? [];
   const prompt = `${buildStylistPrompt(items.map(describeForAi), weather, occasion, body)}
 Yêu cầu của người dùng: "${message}".
+Hãy trả lời như một stylist riêng đang tư vấn trực tiếp, tối đa 5 câu: giới thiệu bộ đồ và vì sao các món đẹp khi đi cùng nhau (màu sắc, chất liệu, phom dáng, độ trang trọng), rồi hướng dẫn cách mặc${tips.length ? ` theo các mẹo: ${tips.join('; ')}` : ''}, cuối cùng thêm 1 gợi ý nhỏ để hoàn thiện vẻ ngoài (kiểu tóc, cách phối phụ kiện có trong bộ).
 Chỉ nói về các món trong bộ đồ trên, không nhắc đến món đồ khác như thể họ đang có. Gọi đúng tên từng món, không gọi món này thành loại đồ khác (ví dụ không gọi áo phông là áo len).
 Nếu người dùng vừa chê một món, đừng nói như thể món đó vẫn còn trong bộ.
 Nếu có lưu ý món hơi mỏng hoặc hơi nóng so với nhiệt độ, nói thật điều đó và gợi ý cách khắc phục (mặc thêm lớp, nên sắm thêm đồ gì), không khen bộ này hợp thời tiết.${
-    notes.length ? `\nLưu ý cho người dùng: ${notes.join('; ')}.` : ''
+    notes.length ? `\nLưu ý cho người dùng: ${notes.join('; ')}.\n${HONEST_FIT_RULE}` : ''
   }`;
   const text = await callGemini(prompt, { temperature: 0.8 }, 20_000);
   return text ? { advice: text, source: 'ai' } : getRuleAdvice(suggestion, weather);
+}
+
+/**
+ * Stylist that khong gioi thieu bo chua dep: noi thang chua phoi duoc, vi sao, va nen bo sung gi.
+ * reasons = nhan xet khi xem anh / bo thieu phan chinh / cac loi nhac "Tủ chưa có ... Nên bổ sung: ...".
+ */
+export async function writeHonestReply(
+  message: string,
+  weather: WeatherInfo,
+  occasion: Occasion | undefined,
+  reasons: string[]
+): Promise<{ advice: string; source: 'ai' | 'rule' }> {
+  const occasionName = occasion ? OCCASION_NAMES_VI[occasion] : 'hằng ngày';
+  const prompt = `Bạn là stylist riêng, thẳng thắn và tinh tế. Người dùng yêu cầu: "${message}".
+Dịp: ${occasionName}. Thời tiết: ${weather.city}, ${weather.temp}°C, ${weather.description}.
+Sau khi xem kỹ tủ đồ, bạn thấy chưa phối được bộ nào thật sự đẹp vì: ${reasons.join('; ')}.
+Hãy trả lời tối đa 4 câu tiếng Việt: nói thật là tủ hiện chưa có bộ đẹp cho yêu cầu này, giải thích ngắn lý do, và gợi ý cụ thể nên bổ sung món gì để lần sau phối đẹp.
+Không khen bộ chưa đẹp, không nói như thể người dùng đang có món đồ chưa có trong tủ.`;
+  const text = await callGemini(prompt, { temperature: 0.6 }, 20_000);
+  if (text) return { advice: text, source: 'ai' };
+  return {
+    advice: `Mình đã xem kỹ tủ đồ nhưng chưa phối được bộ nào thật sự đẹp cho dịp ${occasionName}: ${reasons.join('; ')}. Bổ sung thêm vài món như gợi ý trên, mình sẽ phối lại cho bạn ngay.`,
+    source: 'rule',
+  };
+}
+
+/* ---------- Loai do user noi muon mac (bu khi AI bo sot) ---------- */
+
+interface WantedType {
+  pattern: RegExp;
+  label: string;
+  matches: (item: IClothingItem) => boolean;
+}
+
+const kindOf = (item: IClothingItem) => effectiveKind(item);
+/** Loai do hay gap trong cau chat. "váy" khong tinh khi la "chân váy". */
+const WANTED_TYPES: WantedType[] = [
+  { pattern: /chân váy/, label: 'chân váy', matches: (i) => kindOf(i) === 'skirt' },
+  { pattern: /(?<!chân\s)(váy|đầm)/, label: 'váy', matches: (i) => i.category === 'dress' && kindOf(i) !== 'jumpsuit' },
+  { pattern: /jumpsuit/, label: 'jumpsuit', matches: (i) => kindOf(i) === 'jumpsuit' },
+  { pattern: /áo khoác|blazer|áo vest/, label: 'áo khoác', matches: (i) => i.category === 'outerwear' },
+  { pattern: /áo len|cardigan/, label: 'áo len', matches: (i) => kindOf(i) === 'sweater' || kindOf(i) === 'cardigan' },
+  { pattern: /sơ mi/, label: 'áo sơ mi', matches: (i) => kindOf(i) === 'shirt' },
+  { pattern: /hoodie/, label: 'áo hoodie', matches: (i) => kindOf(i) === 'hoodie' },
+  { pattern: /quần (jeans?|bò)/, label: 'quần jeans', matches: (i) => kindOf(i) === 'jeans' },
+  { pattern: /quần (short|soóc|sooc|đùi)/, label: 'quần short', matches: (i) => kindOf(i) === 'shorts' },
+  { pattern: /cao gót/, label: 'giày cao gót', matches: (i) => kindOf(i) === 'heels' },
+  { pattern: /sneaker|giày thể thao/, label: 'giày thể thao', matches: (i) => kindOf(i) === 'sneakers' },
+];
+/** Tu phu dinh dung ngay truoc loai do ("không muốn mặc váy") -> khong tinh la muon mac. */
+const NEGATION_BEFORE = /(không|đừng|chẳng|chả|ko|k|hông)(\s+\S+){0,3}\s*$/;
+
+/**
+ * Bu cho AI khi doc yeu cau: AI hay bo sot "toi muon mac vay" (includeItems rong) du tu co vay.
+ * Tra ve id cac mon khop loai user nhac toi, va loai user muon nhung tu khong co.
+ */
+export function wantedFromMessage(message: string, items: IClothingItem[]): { ids: string[]; missing: string[] } {
+  const text = message.toLowerCase();
+  const ids = new Set<string>();
+  const missing: string[] = [];
+  for (const type of WANTED_TYPES) {
+    const match = type.pattern.exec(text);
+    if (!match || NEGATION_BEFORE.test(text.slice(0, match.index))) continue;
+    const found = items.filter(type.matches);
+    if (found.length === 0) missing.push(type.label);
+    for (const item of found) ids.add(String(item._id));
+  }
+  return { ids: [...ids], missing };
 }

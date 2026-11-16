@@ -1,7 +1,8 @@
 import {
-  CATEGORIES, Category, ITEM_KINDS, ITEM_KIND_NAMES_VI, ItemKind, OCCASIONS, Occasion, SEASONS, STYLES, Season, Style,
+  CATEGORIES, Category, ITEM_GENDERS, ITEM_KINDS, ITEM_KIND_NAMES_VI, ItemGender, ItemKind, OCCASIONS, Occasion, SEASONS,
+  STYLES, Season, Style, ITEM_PATTERNS, VisualTraits,
 } from '../types/index.js';
-import { KINDS_BY_CATEGORY, kindFits } from './itemKind.service.js';
+import { GENDER_RULE, KINDS_BY_CATEGORY, VISUAL_RULE, kindFits, parseVisualTraits } from './itemKind.service.js';
 import { callGemini } from './stylist.service.js';
 
 export interface ItemTags {
@@ -11,6 +12,10 @@ export interface ItemTags {
   category?: Category;
   /** Loai chi tiet (ao len, ao phong...). Luon hop voi category neu co. */
   kind?: ItemKind;
+  /** Do nu / nam / unisex. */
+  gender?: ItemGender;
+  /** Dac diem chi nhin anh moi biet (do trang trong that, do the thao, hoa tiet, rach). */
+  visual?: VisualTraits;
   /** Ten ngan goi y, dung khi user chua tu dat ten. */
   name?: string;
 }
@@ -20,19 +25,26 @@ const TAG_SCHEMA = {
   properties: {
     category: { type: 'STRING', enum: [...CATEGORIES] },
     kind: { type: 'STRING', enum: [...ITEM_KINDS] },
+    gender: { type: 'STRING', enum: [...ITEM_GENDERS] },
+    formality: { type: 'INTEGER' },
+    sportswear: { type: 'BOOLEAN' },
+    pattern: { type: 'STRING', enum: [...ITEM_PATTERNS] },
+    distressed: { type: 'BOOLEAN' },
     name: { type: 'STRING' },
     styles: { type: 'ARRAY', items: { type: 'STRING', enum: [...STYLES] } },
     seasons: { type: 'ARRAY', items: { type: 'STRING', enum: [...SEASONS] } },
     occasions: { type: 'ARRAY', items: { type: 'STRING', enum: [...OCCASIONS] } },
   },
-  required: ['category', 'kind', 'styles', 'seasons', 'occasions'],
+  required: ['category', 'kind', 'gender', 'formality', 'sportswear', 'pattern', 'distressed', 'styles', 'seasons', 'occasions'],
 };
 
 const KIND_LIST = ITEM_KINDS.filter((k) => k !== 'other').map((k) => `${k} = ${ITEM_KIND_NAMES_VI[k]}`).join('; ');
 
 const TAG_PROMPT = `Đây là ảnh một món đồ trong tủ quần áo của người dùng ở Việt Nam. Hãy phân loại món đồ này và trả về JSON.
 - category: nhóm của món. top là áo, bottom là quần hoặc chân váy, outerwear là áo khoác, dress là váy liền hoặc jumpsuit, set là đồ bộ, shoes là giày dép, bag là túi, accessory là phụ kiện.
-- kind: loại chi tiết, phải thuộc đúng nhóm. Phân biệt theo chất liệu và kiểu dáng: áo len (sweater) là vải dệt kim sợi len, dày, có vân đan hoặc lông; áo phông/áo thun (tshirt) là vải cotton mỏng, phẳng; áo sơ mi (shirt) có cổ bẻ và hàng khuy; cardigan là áo len cài khuy phía trước; hoodie có mũ. Các loại: ${KIND_LIST}. Chỉ dùng "other" khi không thuộc loại nào.
+- kind: loại chi tiết, phải thuộc đúng nhóm. Phân biệt theo chất liệu và kiểu dáng: áo len (sweater) là vải dệt kim sợi len, dày, có vân đan hoặc lông; áo phông/áo thun (tshirt) là vải cotton mỏng, phẳng; áo sơ mi (shirt) có cổ bẻ và hàng khuy; cardigan là áo len cài khuy phía trước; hoodie có mũ; sandal (sandals) có quai giữ gót hoặc quai chéo; dép lê, dép tông, dép xỏ ngón, dép sục kiểu Crocs, dép tổ ong là slippers. Các loại: ${KIND_LIST}. Chỉ dùng "other" khi không thuộc loại nào.
+- ${GENDER_RULE}
+${VISUAL_RULE}
 - name: tên ngắn tiếng Việt, 2 đến 6 chữ, gồm loại đồ, màu và đặc điểm nổi bật, ví dụ "Áo len đỏ hình búp bê".
 - styles: 1 đến 2 phong cách rõ nhất.
 - seasons: các mùa mặc được, dựa vào độ dày và chất liệu nhìn thấy. Món mặc quanh năm thì chọn cả 4 mùa.
@@ -68,6 +80,10 @@ export function parseItemTags(raw: string | null): ItemTags | null {
   if (category) tags.category = category;
   // Loai lech nhom thi bo, tranh luu "giay - chan vay".
   if (kind && category && kindFits(category, kind)) tags.kind = kind;
+
+  if (ITEM_GENDERS.includes(data?.gender as ItemGender)) tags.gender = data?.gender as ItemGender;
+  const visual = parseVisualTraits(data ?? {});
+  if (Object.keys(visual).length > 0) tags.visual = visual;
 
   const name = typeof data?.name === 'string' ? data.name.replace(/\s+/g, ' ').trim() : '';
   if (name && name.length <= 60) tags.name = name;

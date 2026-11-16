@@ -4,7 +4,7 @@ import { useCategoryLabels } from '@/store/categoryStore';
 // ===== NEW: Xem/Sua Item =====
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pencil, Plus, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, Pencil, Plus, Sparkles, X } from 'lucide-react';
 import { VButton, VInput, VSelect, VChip, VModal, VLabel, VSpinner } from '@/components/ui/vintage';
 import { CloudImage } from '@/components/ui/CloudImage';
 import { useResource } from '@/hooks/useResource';
@@ -14,9 +14,10 @@ import type { UpdateItemPayload } from '@/lib/services';
 import { getErrorMessage } from '@/lib/api';
 import {
   CATEGORIES, STYLES, SEASONS, SEASON_LABELS,
-  OCCASIONS, OCCASION_LABELS, ITEM_KIND_LABELS, KINDS_BY_CATEGORY,
+  OCCASIONS, OCCASION_LABELS, ITEM_KIND_LABELS, KINDS_BY_CATEGORY, categoryOfKind, isMisfiled,
+  ITEM_GENDERS, ITEM_GENDER_LABELS, FORMALITY_LABELS, ITEM_PATTERN_LABELS,
 } from '@/types';
-import type { Category, ClothingItem, Style, Season, Occasion, ItemKind } from '@/types';
+import type { Category, ClothingItem, Style, Season, Occasion, ItemKind, ItemGender } from '@/types';
 
 const MAX_COLORS = 5;
 
@@ -25,6 +26,8 @@ type FormState = {
   category: Category;
   /** '' = để AI tự nhận diện từ ảnh. */
   kind: ItemKind | '';
+  /** '' = để AI tự nhận diện từ ảnh. */
+  gender: ItemGender | '';
   colors: string[];
   styles: Style[];
   seasons: Season[];
@@ -41,6 +44,7 @@ function toForm(item: ClothingItem): FormState {
     name: item.name,
     category: item.category,
     kind: item.kind ?? '',
+    gender: item.gender ?? '',
     colors: [...item.colors],
     styles: [...item.styles],
     seasons: [...item.seasons],
@@ -132,6 +136,24 @@ export function ItemDetailModal({
     setForm({ ...form, colors: [...form.colors, c] });
   };
 
+  /** Chuyển món xếp nhầm nhóm sang nhóm khớp với ảnh; server tự suy ra loại từ ảnh đã biết. */
+  const moveToCategory = async (category: Category) => {
+    if (!item || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const updated = await itemApi.update(item._id, { category });
+      setItem(updated);
+      onUpdated(updated);
+    } catch (err) {
+      setSaveError(getErrorMessage(err));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!item || !form || savingRef.current) return;
     const name = form.name.trim();
@@ -146,6 +168,7 @@ export function ItemDetailModal({
       name,
       category: form.category,
       kind: form.kind || null,
+      gender: form.gender || null,
       colors: form.colors,
       styles: form.styles,
       seasons: form.seasons,
@@ -241,7 +264,51 @@ export function ItemDetailModal({
                       <span className="self-center text-xs text-[#6B7B76]">Chưa nhận diện loại đồ</span>
                     )}
                   </div>
+                  {isMisfiled(item) && item.detectedKind && (() => {
+                    const target = categoryOfKind(item.detectedKind);
+                    return (
+                      <div role="status" className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                        <p className="flex items-start gap-1.5">
+                          <AlertTriangle size={13} className="mt-px shrink-0" />
+                          <span>
+                            Ảnh trông giống <b>{ITEM_KIND_LABELS[item.detectedKind].toLowerCase()}</b> nhưng món đang ở
+                            nhóm <b>{CATEGORY_LABELS[item.category]}</b>, nên chưa được dùng khi gợi ý phối đồ.
+                          </span>
+                        </p>
+                        {target && (
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => void moveToCategory(target)}
+                            className="mt-2 rounded-full border border-amber-700 px-3 py-1 font-semibold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60"
+                          >
+                            Chuyển sang nhóm {CATEGORY_LABELS[target]}
+                          </button>
+                        )}
+                        {saveError && <p role="alert" className="mt-1 text-red-700">{saveError}</p>}
+                      </div>
+                    );
+                  })()}
                 </ViewRow>
+
+                <ViewRow label="Dành cho">
+                  <p className={`text-sm ${item.gender ? 'font-medium text-[#1F453E]' : 'text-[#6B7B76]'}`}>
+                    {item.gender ? ITEM_GENDER_LABELS[item.gender] : 'Chưa nhận diện'}
+                  </p>
+                </ViewRow>
+
+                {item.visual && (item.visual.formality !== undefined || item.visual.sportswear || item.visual.distressed || item.visual.pattern) && (
+                  <ViewRow label="AI nhìn ảnh">
+                    <div className="flex flex-wrap gap-2">
+                      {item.visual.formality !== undefined && <Tag>{FORMALITY_LABELS[item.visual.formality]}</Tag>}
+                      {item.visual.sportswear && <Tag>Đồ thể thao</Tag>}
+                      {item.visual.distressed && <Tag>Rách / wash bạc</Tag>}
+                      {item.visual.pattern && item.visual.pattern !== 'plain' && item.visual.pattern !== 'other' && (
+                        <Tag>{ITEM_PATTERN_LABELS[item.visual.pattern]}</Tag>
+                      )}
+                    </div>
+                  </ViewRow>
+                )}
 
                 <ViewRow label="Thương hiệu">
                   <p className={`text-sm ${item.brand ? 'font-medium text-[#1F453E]' : 'text-[#6B7B76]'}`}>
@@ -349,6 +416,17 @@ export function ItemDetailModal({
                       <option value="other">{ITEM_KIND_LABELS.other}</option>
                     </VSelect>
                   )}
+
+                  <VSelect
+                    label="Dành cho"
+                    value={form.gender}
+                    onChange={(e) => setForm({ ...form, gender: e.target.value as ItemGender | '' })}
+                  >
+                    <option value="">Để AI tự nhận diện</option>
+                    {ITEM_GENDERS.map((g) => (
+                      <option key={g} value={g}>{ITEM_GENDER_LABELS[g]}</option>
+                    ))}
+                  </VSelect>
 
                   <VInput
                     label="Thương hiệu (không bắt buộc)"

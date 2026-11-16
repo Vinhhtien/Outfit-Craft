@@ -2,7 +2,7 @@
 import { useCategoryLabels } from '@/store/categoryStore';
 
 import { useState, useRef, useEffect } from 'react';
-import { Camera, Check, Upload, Wand2, X } from 'lucide-react';
+import { AlertTriangle, Camera, Check, Upload, Wand2, X } from 'lucide-react';
 import { VButton, VInput, VSelect, VChip, VModal, VLabel } from '@/components/ui/vintage';
 import { removeBackground, resizeImage } from '@/lib/backgroundRemoval';
 import { extractColors } from '@/lib/colorExtract';
@@ -10,9 +10,9 @@ import { itemApi } from '@/lib/services';
 import { getErrorMessage, getFieldErrors } from '@/lib/api';
 import {
   CATEGORIES, STYLES, SEASONS, SEASON_LABELS,
-  OCCASIONS, OCCASION_LABELS, ITEM_KIND_LABELS, KINDS_BY_CATEGORY,
+  OCCASIONS, OCCASION_LABELS, ITEM_KIND_LABELS, KINDS_BY_CATEGORY, ITEM_GENDERS, ITEM_GENDER_LABELS,
 } from '@/types';
-import type { Category, Style, Season, Occasion, ItemKind } from '@/types';
+import type { Category, Style, Season, Occasion, ItemKind, ItemGender, VisualTraits } from '@/types';
 
 type Step = 'pick' | 'processing' | 'form';
 
@@ -95,8 +95,12 @@ export function AddItemModal({
   const [cutoutBlob, setCutoutBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [autoTagState, setAutoTagState] = useState<'idle' | 'loading' | 'done' | 'failed'>('idle');
+  /** Nhóm + loại AI nhìn thấy trong ảnh - để cảnh báo khi người dùng chọn nhóm khác. */
+  const [aiGuess, setAiGuess] = useState<{ category: Category; kind?: ItemKind } | null>(null);
+  /** Đặc điểm AI nhìn từ ảnh, gửi kèm khi lưu để gợi ý phối đồ dùng ngay. */
+  const [aiVisual, setAiVisual] = useState<VisualTraits | undefined>();
   /** Người dùng đã tự chọn danh mục/loại hoặc tự đặt tên -> AI không ghi đè. */
-  const touched = useRef({ category: false, name: false });
+  const touched = useRef({ category: false, name: false, gender: false });
   /** Tên lấy từ tên file, AI được phép thay nếu người dùng chưa sửa. */
   const fileName = useRef('');
 
@@ -105,6 +109,8 @@ export function AddItemModal({
     category: 'top' as Category,
     /** '' = để AI tự nhận diện sau khi lưu. */
     kind: '' as ItemKind | '',
+    /** '' = để AI tự nhận diện. */
+    gender: '' as ItemGender | '',
     colors: [] as string[],
     styles: [] as Style[],
     seasons: [] as Season[],
@@ -130,11 +136,13 @@ export function AddItemModal({
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl('');
     setAutoTagState('idle');
-    touched.current = { category: false, name: false };
+    touched.current = { category: false, name: false, gender: false };
     fileName.current = '';
     setForm({
-      name: '', category: 'top', kind: '', colors: [], styles: [], seasons: [], occasions: [], brand: '', purchasePrice: '',
+      name: '', category: 'top', kind: '', gender: '', colors: [], styles: [], seasons: [], occasions: [], brand: '', purchasePrice: '',
     });
+    setAiGuess(null);
+    setAiVisual(undefined);
   };
 
   const handleClose = () => {
@@ -149,6 +157,8 @@ export function AddItemModal({
     try {
       const tags = await itemApi.autoTag(image);
       if (current !== operation.current) return;
+      if (tags.category) setAiGuess({ category: tags.category, kind: tags.kind });
+      setAiVisual(tags.visual);
       setForm((f) => {
         const pickCategory = !touched.current.category && tags.category;
         const category = pickCategory ? tags.category! : f.category;
@@ -160,6 +170,7 @@ export function AddItemModal({
           category,
           kind,
           name: useName ? tags.name! : f.name,
+          gender: !touched.current.gender && tags.gender ? tags.gender : f.gender,
           styles: f.styles.length > 0 ? f.styles : tags.styles,
         seasons: f.seasons.length > 0 ? f.seasons : tags.seasons,
           occasions: f.occasions.length > 0 ? f.occasions : tags.occasions,
@@ -227,7 +238,12 @@ export function AddItemModal({
     try {
       const parsedPrice = form.purchasePrice ? Number(form.purchasePrice) : undefined;
       await itemApi.createWithImages({
-        name: form.name.trim(), category: form.category, kind: form.kind || undefined, colors: form.colors,
+        name: form.name.trim(), category: form.category, kind: form.kind || undefined,
+        // Giữ loại AI thấy để server phát hiện món xếp nhầm nhóm khi gợi ý phối đồ.
+        detectedKind: aiGuess?.kind && aiGuess.kind !== 'other' ? aiGuess.kind : undefined,
+        gender: form.gender || undefined,
+        visual: aiVisual,
+        colors: form.colors,
         styles: form.styles, seasons: form.seasons, occasions: form.occasions,
         brand: form.brand.trim() || undefined,
         purchasePrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : undefined,
@@ -350,6 +366,31 @@ export function AddItemModal({
               ))}
             </VSelect>
 
+            {aiGuess && aiGuess.category !== form.category && (
+              <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                <p className="flex items-start gap-1.5">
+                  <AlertTriangle size={13} className="mt-px shrink-0" />
+                  <span>
+                    AI nhận thấy đây là{' '}
+                    <b>
+                      {aiGuess.kind && aiGuess.kind !== 'other'
+                        ? ITEM_KIND_LABELS[aiGuess.kind].toLowerCase()
+                        : CATEGORY_LABELS[aiGuess.category].toLowerCase()}
+                    </b>{' '}
+                    (nhóm {CATEGORY_LABELS[aiGuess.category]}), bạn đang chọn <b>{CATEGORY_LABELS[form.category]}</b>.
+                    Nếu giữ nhóm này mà không chọn Loại, món sẽ không được dùng khi gợi ý phối đồ.
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, category: aiGuess.category, kind: aiGuess.kind ?? '' })}
+                  className="mt-2 rounded-full border border-amber-700 px-3 py-1 font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+                >
+                  Đổi sang {CATEGORY_LABELS[aiGuess.category]}
+                </button>
+              </div>
+            )}
+
             {KINDS_BY_CATEGORY[form.category].length > 1 && (
               <VSelect
                 label="Loại (AI tự nhận diện từ ảnh, sửa nếu chưa đúng)"
@@ -368,6 +409,20 @@ export function AddItemModal({
                 <option value="other">{ITEM_KIND_LABELS.other}</option>
               </VSelect>
             )}
+
+            <VSelect
+              label="Dành cho (AI tự nhận diện từ ảnh, sửa nếu chưa đúng)"
+              value={form.gender}
+              onChange={(e) => {
+                touched.current.gender = true;
+                setForm({ ...form, gender: e.target.value as ItemGender | '' });
+              }}
+            >
+              <option value="">{autoTagState === 'loading' ? 'AI đang nhận diện…' : 'Để AI tự nhận diện sau khi lưu'}</option>
+              {ITEM_GENDERS.map((g) => (
+                <option key={g} value={g}>{ITEM_GENDER_LABELS[g]}</option>
+              ))}
+            </VSelect>
 
             <VInput
               label="Thương hiệu (không bắt buộc)"

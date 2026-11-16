@@ -1,7 +1,7 @@
 import { Schema, model, Document, Types } from 'mongoose';
 import {
-  CATEGORIES, STYLES, SEASONS, OCCASIONS, ITEM_KINDS,
-  Category, Style, Season, Occasion, ItemKind,
+  CATEGORIES, STYLES, SEASONS, OCCASIONS, ITEM_KINDS, ITEM_GENDERS, ITEM_PATTERNS,
+  Category, Style, Season, Occasion, ItemKind, ItemGender, VisualTraits,
 } from '../types/index.js';
 
 // ===== NEW: Ghi nho fit =====
@@ -29,6 +29,15 @@ export interface IClothingItem extends Document {
   category: Category;
   /** Loai chi tiet (ao len, ao phong...). Chua co -> AI se tu nhan tu anh (itemKind.service). */
   kind?: ItemKind;
+  /**
+   * Loai AI nhin thay trong anh, ke ca khi khac nhom user chon (vd quan short nhung user de nhom Ao).
+   * Anh khong doi sau khi tao nen gia tri nay dung duoc mai, ke ca khi user doi nhom.
+   */
+  detectedKind?: ItemKind;
+  /** Do nu / nam / unisex: AI nhan tu anh, user sua duoc. Chua co = chua nhan dien. */
+  gender?: ItemGender;
+  /** Dac diem AI nhin tu anh (do trang trong that, do the thao, hoa tiet, rach). Chua co = chua phan tich. */
+  visual?: VisualTraits;
   /** Anh goc user upload - giu lai de co the tach nen lai neu ket qua xau. */
   originalImageUrl: string;
   /** PNG da tach nen - day moi la anh dung tren canvas. */
@@ -69,6 +78,21 @@ const clothingItemSchema = new Schema<IClothingItem>(
     name: { type: String, required: true, trim: true, maxlength: 100 },
     category: { type: String, enum: CATEGORIES, required: true },
     kind: { type: String, enum: ITEM_KINDS },
+    detectedKind: { type: String, enum: ITEM_KINDS },
+    gender: { type: String, enum: ITEM_GENDERS },
+    visual: {
+      type: new Schema<VisualTraits>(
+        {
+          formality: { type: Number, min: 0, max: 3 },
+          sportswear: { type: Boolean },
+          pattern: { type: String, enum: ITEM_PATTERNS },
+          distressed: { type: Boolean },
+          analyzedAt: { type: Date, required: true },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
     originalImageUrl: { type: String, required: true },
     imageUrl: { type: String, required: true },
     imagePublicId: { type: String },

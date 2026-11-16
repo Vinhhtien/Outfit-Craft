@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildOutfitOptions, colorGroupOf, itemMatchesColor, kindLabel } from '../src/services/suggestion.service.ts';
 import {
-  colorsFromXanh, describeWardrobeItem, mergeStylistRequest, parseStylistIntent, weatherForRequest,
+  colorsFromXanh, describeWardrobeItem, mergeStylistRequest, parseStylistIntent, wantedFromMessage, weatherForRequest,
 } from '../src/services/stylist.service.ts';
-import { parseItemKinds } from '../src/services/itemKind.service.ts';
+import { parseItemKinds, parseVisualTraits } from '../src/services/itemKind.service.ts';
 import { parseItemTags } from '../src/services/autoTag.service.ts';
 
 const weather = { city: 'Hanoi', temp: 27, feelsLike: 29, humidity: 70, condition: 'Clear', description: 'trời quang', icon: '01d', isRaining: false };
@@ -305,7 +305,12 @@ test('item kinds from the AI are checked against the item group', () => {
     { index: 1, kind: 'sweater' }, { index: 2, kind: 'sneakers' }, { index: 3, kind: 'boots' },
     { index: 4, kind: 'jeans' }, { index: 0, kind: 'tshirt' }, { index: 1.5, kind: 'tshirt' }, { index: 3, kind: 'pirate' },
   ] });
-  assert.deepEqual([...parseItemKinds(raw, categories)], [[0, 'sweater'], [1, 'other'], [2, 'boots']]);
+  // Loai lech nhom luu 'other' nhung van giu loai AI thay o detectedKind (de phat hien mon xep nham nhom).
+  assert.deepEqual([...parseItemKinds(raw, categories)], [
+    [0, { kind: 'sweater', detectedKind: 'sweater' }],
+    [1, { kind: 'other', detectedKind: 'sneakers' }],
+    [2, { kind: 'boots', detectedKind: 'boots' }],
+  ]);
   for (const broken of [null, '', 'not json', 'null', '{"items":"x"}']) assert.equal(parseItemKinds(broken, categories).size, 0);
 });
 
@@ -322,6 +327,30 @@ test('auto-tag suggests the group, kind and name, and drops a kind from the wron
   assert.equal(wrong.kind, undefined);
   assert.equal(wrong.name, undefined);
   assert.deepEqual(parseItemTags(JSON.stringify(base)), base);
+  // Do nam / nu: chi nhan gia tri hop le.
+  assert.equal(parseItemTags(JSON.stringify({ ...base, category: 'shoes', kind: 'loafers', gender: 'male' })).gender, 'male');
+  assert.equal(parseItemTags(JSON.stringify({ ...base, gender: 'robot' })).gender, undefined);
+});
+
+test('visual traits from the AI are checked one by one', () => {
+  assert.deepEqual(parseVisualTraits({ formality: 0, sportswear: true, pattern: 'graphic', distressed: false }), {
+    formality: 0, sportswear: true, pattern: 'graphic', distressed: false,
+  });
+  assert.deepEqual(parseVisualTraits({ formality: 7, sportswear: 'yes', pattern: 'leopard', distressed: 1 }), {});
+  assert.deepEqual(parseVisualTraits({ formality: 2.5 }), {});
+  const raw = JSON.stringify({ items: [{ index: 1, kind: 'tshirt', gender: 'unisex', formality: 0, sportswear: true, pattern: 'graphic', distressed: false }] });
+  assert.deepEqual(parseItemKinds(raw, ['top']).get(0).visual, { formality: 0, sportswear: true, pattern: 'graphic', distressed: false });
+});
+
+test('item gender from the AI is kept only when valid', () => {
+  const raw = JSON.stringify({ items: [
+    { index: 1, kind: 'loafers', gender: 'male' }, { index: 2, kind: 'dress', gender: 'female' }, { index: 3, kind: 'tshirt', gender: 'alien' },
+  ] });
+  assert.deepEqual([...parseItemKinds(raw, ['shoes', 'dress', 'top'])], [
+    [0, { kind: 'loafers', detectedKind: 'loafers', gender: 'male' }],
+    [1, { kind: 'dress', detectedKind: 'dress', gender: 'female' }],
+    [2, { kind: 'tshirt', detectedKind: 'tshirt' }],
+  ]);
 });
 
 test('the stylist names pieces by their recognised kind', () => {
@@ -330,6 +359,11 @@ test('the stylist names pieces by their recognised kind', () => {
   assert.equal(kindLabel({ category: 'bottom' }), 'quần');
   assert.equal(describeWardrobeItem(item('top', '#ffc0cb', { name: 'Áo Snoopy', kind: 'sweater' })), 'Áo Snoopy (áo len, màu hồng)');
   assert.equal(describeWardrobeItem(item('bottom', '#000000', { name: 'Váy xếp ly' })), 'Váy xếp ly (quần/chân váy, màu trung tính)');
+  // Anh la quan short nhung user de nhom Ao: noi ro cho AI.
+  assert.equal(
+    describeWardrobeItem(item('top', '#000000', { name: 'Quần đùi', kind: 'other', detectedKind: 'shorts' })),
+    'Quần đùi (quần short, đang xếp nhầm nhóm áo, màu trung tính)'
+  );
 });
 
 test('the ambiguous word "xanh" is understood even when the AI skips it', () => {
@@ -345,4 +379,19 @@ test('broken AI responses are rejected instead of crashing', () => {
   for (const raw of [null, '', 'not json', 'null', '[]', '{"intent":"other"}', '{"intent":"question"}', '{"intent":"question","reply":"  "}']) {
     assert.equal(parseStylistIntent(raw), null, String(raw));
   }
+});
+
+test('the stylist catches the piece the user asked for when the AI misses it', () => {
+  const dress = item('dress', '#e64fb3', { name: 'Váy hồng', kind: 'dress' });
+  const skirt = item('bottom', '#ffffff', { name: 'Chân váy trắng', kind: 'skirt' });
+  const blazer = item('outerwear', '#000000', { name: 'Blazer đen', kind: 'blazer' });
+  const wardrobe = [dress, skirt, blazer, item('top', '#fff', { kind: 'tshirt' })];
+
+  assert.deepEqual(wantedFromMessage('phối đồ đi tiệc , tôi muốn mặc váy', wardrobe), { ids: [dress._id], missing: [] });
+  assert.deepEqual(wantedFromMessage('Muốn mặc CHÂN VÁY đi học', wardrobe), { ids: [skirt._id], missing: [] });
+  assert.deepEqual(wantedFromMessage('váy với áo khoác blazer', wardrobe), { ids: [dress._id, blazer._id], missing: [] });
+  // Phu dinh thi khong tinh; tu khong co thi bao thieu.
+  assert.deepEqual(wantedFromMessage('mình không muốn mặc váy hôm nay', wardrobe), { ids: [], missing: [] });
+  assert.deepEqual(wantedFromMessage('cho mình bộ với giày cao gót', wardrobe), { ids: [], missing: ['giày cao gót'] });
+  assert.deepEqual(wantedFromMessage('đi chơi mặc gì đẹp', wardrobe), { ids: [], missing: [] });
 });

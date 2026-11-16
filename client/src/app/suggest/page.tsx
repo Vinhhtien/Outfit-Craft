@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Sparkles, CloudRain, Thermometer, Droplets, RefreshCw, Bot, ListOrdered, FolderPlus,
-  CalendarCheck, Shirt, Pin, X, ChevronLeft, ChevronRight, Clock, AlertTriangle, Shuffle,
+  CalendarCheck, Shirt, Pin, X, ChevronLeft, ChevronRight, Clock, AlertTriangle, Shuffle, Eye,
 } from 'lucide-react';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { ScallopBanner } from '@/components/layout/ScallopBanner';
@@ -13,7 +13,9 @@ import { LoadingState, ErrorState } from '@/components/ui/AsyncState';
 import { VToast } from '@/components/ui/vintage';
 import { CloudImage } from '@/components/ui/CloudImage';
 import { useResource } from '@/hooks/useResource';
-import { outfitApi, scheduleApi, suggestionApi } from '@/lib/services';
+import { bodyProfileApi, outfitApi, scheduleApi, suggestionApi } from '@/lib/services';
+import { DEFAULT_MANNEQUIN, resolveMannequinProfile } from '@/lib/mannequin';
+import { OutfitLook } from '@/components/suggest/OutfitLook';
 import { getErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { RankedItemsView } from '@/components/suggest/RankedItemsView';
@@ -24,7 +26,7 @@ import {
   COLOR_GROUPS, COLOR_GROUP_LABELS, COLOR_GROUP_SWATCHES, OCCASIONS, OCCASION_LABELS, SEASONS, SEASON_LABELS,
   CATEGORY_Z_INDEX,
 } from '@/types';
-import type { ClothingItem, ColorGroup, Occasion, Season } from '@/types';
+import type { ClothingItem, ColorGroup, MannequinProfile, Occasion, Season } from '@/types';
 
 /** Gui lai toi da tung nay bo vua hien khi xao tron (khop gioi han o server). */
 const MAX_SEEN_KEYS = 30;
@@ -50,6 +52,17 @@ export default function SuggestPage() {
   const [seasonFilter, setSeasonFilter] = useState<Season[]>([]);
   const [colorFilter, setColorFilter] = useState<ColorGroup[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  /** Key bộ gần nhất người dùng đã chọn "vẫn xem" dù Stylist thấy chưa đẹp. */
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  /** Dáng người của chính người dùng để mặc thử bộ gợi ý; chưa khai thì dùng dáng mặc định. */
+  const [mannequinProfile, setMannequinProfile] = useState<MannequinProfile>(DEFAULT_MANNEQUIN);
+  useEffect(() => {
+    const controller = new AbortController();
+    bodyProfileApi.get(controller.signal)
+      .then((raw) => setMannequinProfile(resolveMannequinProfile(raw)))
+      .catch(() => { /* Không tải được thì vẫn dùng dáng mặc định. */ });
+    return () => controller.abort();
+  }, []);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [chatOutfitToSave, setChatOutfitToSave] = useState<StylistOutfit | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -384,6 +397,7 @@ export default function SuggestPage() {
               occasion={occasion}
               onOpenItem={(id) => setSelectedItemId(id)}
               onSaveOutfit={setChatOutfitToSave}
+              mannequinProfile={mannequinProfile}
             />
           </div>
 
@@ -451,6 +465,32 @@ export default function SuggestPage() {
                 </div>
               ) : null}
 
+              {/* Tu chua co mon hop dip / nhiet do, hoac co mon xep nham nhom: noi that va chi cach bo sung. */}
+              {data && (data.genderFit?.length || data.occasionFit?.length || data.weatherFit?.length || data.misfiled?.length) ? (
+                <div role="status" className="mb-4 space-y-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800">
+                  <p className="flex items-center gap-1.5 font-bold">
+                    <AlertTriangle size={13} className="shrink-0" /> Tủ đồ chưa có món thật sự phù hợp
+                  </p>
+                  {[...(data.genderFit ?? []), ...(data.occasionFit ?? []), ...(data.weatherFit ?? []), ...(data.misfiled ?? [])].map((m) => (
+                    <p key={m}>• {m}</p>
+                  ))}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Link
+                      href="/wardrobe"
+                      className="rounded-full border border-amber-700 px-3 py-1 font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+                    >
+                      Thêm món vào tủ đồ
+                    </Link>
+                    <Link
+                      href="/wishlist"
+                      className="rounded-full border border-amber-700 px-3 py-1 font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+                    >
+                      Lên danh sách cần mua
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
+
               {error && <ErrorState message={error} onRetry={() => void fetchSuggestion()} busy={loading} />}
               {error && data && <p className="mb-3 text-xs text-[#52665F]">Đang hiển thị dữ liệu của lần tải thành công gần nhất.</p>}
               {loading && data && <LoadingState compact label="Đang cập nhật gợi ý…" />}
@@ -463,6 +503,61 @@ export default function SuggestPage() {
                   <p className="mt-1 max-w-md text-xs text-[#6B7B76] sm:text-sm">
                     Nhập thành phố và bấm Làm mới để nhận gợi ý trang phục theo thời tiết.
                   </p>
+                </div>
+              ) : data.blocked || !current ? (
+                // Mon ghim trai gioi tinh nguoi mac (hoac khong co bo nao): noi ro, khong phoi bua.
+                <div role="status" className="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center sm:p-12">
+                  <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+                    <AlertTriangle size={22} />
+                  </span>
+                  <p className="font-serif-display text-xl font-semibold text-[#1F453E]">Chưa phối được bộ nào</p>
+                  <p className="mt-2 max-w-lg text-sm text-amber-900">
+                    {data.blocked ?? 'Tủ đồ chưa có món phù hợp để phối thành bộ. Hãy thêm vài món nữa.'}
+                  </p>
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    {anchorId && (
+                      <button
+                        type="button"
+                        onClick={() => setAnchor(null)}
+                        className="rounded-full border border-[#1F453E] bg-[#1F453E] px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#16352F]"
+                      >
+                        Bỏ ghim, xem gợi ý khác
+                      </button>
+                    )}
+                    <Link
+                      href="/profile"
+                      className="rounded-full border border-[#1F453E] px-4 py-1.5 text-xs font-semibold text-[#1F453E] transition-colors hover:bg-[#E2ECC8]/60"
+                    >
+                      Kiểm tra hồ sơ dáng người
+                    </Link>
+                  </div>
+                </div>
+              ) : data.notGood && revealedKey !== (options[0]?.key ?? '') ? (
+                // Stylist tu duyet: bo gan nhat chua du dep -> noi that, nguoi dung van xem duoc neu muon.
+                <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center sm:p-10">
+                  <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+                    <Sparkles size={22} />
+                  </span>
+                  <p className="font-serif-display text-xl font-semibold text-[#1F453E]">Tủ đồ chưa có bộ thật sự đẹp cho lúc này</p>
+                  <p className="mx-auto mt-2 max-w-lg text-sm text-amber-900">{data.notGood}</p>
+                  {data.advice && (
+                    <p className="mx-auto mt-3 max-w-lg whitespace-pre-line text-sm italic text-[#2C4C45]">“{data.advice}”</p>
+                  )}
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <Link
+                      href="/wardrobe"
+                      className="rounded-full border border-[#1F453E] bg-[#1F453E] px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#16352F]"
+                    >
+                      Thêm món vào tủ đồ
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setRevealedKey(options[0]?.key ?? '')}
+                      className="rounded-full border border-[#1F453E] px-4 py-1.5 text-xs font-semibold text-[#1F453E] transition-colors hover:bg-[#E2ECC8]/60"
+                    >
+                      Vẫn xem bộ gần nhất
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
@@ -511,6 +606,27 @@ export default function SuggestPage() {
                         <span className="rounded-full border border-[#1F453E]/15 bg-[#E2ECC8] px-3 py-1 text-xs font-semibold text-[#1F453E]">
                           Độ phù hợp {Math.min(100, Math.max(0, Math.round(current.totalScore)))}/100
                         </span>
+                        {current.occasionMismatch && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                            <AlertTriangle size={12} /> Chưa thật sự hợp dịp
+                          </span>
+                        )}
+                        {current.genderMismatch && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                            <AlertTriangle size={12} /> Lẫn đồ nam và nữ
+                          </span>
+                        )}
+                        {data.lookChecked && current.lookScore !== undefined && (
+                          <span
+                            title="Stylist AI đã xem ảnh thật của các món và chấm bộ này"
+                            className="inline-flex items-center gap-1 rounded-full border border-[#1F453E]/15 bg-white px-2.5 py-1 text-xs font-semibold text-[#1F453E]"
+                          >
+                            <Eye size={12} /> Stylist AI xem ảnh: {current.lookScore}/10
+                          </span>
+                        )}
+                        {current.lookComment && (
+                          <p className="basis-full text-xs italic text-[#2C4C45]">“{current.lookComment}”</p>
+                        )}
                         {options.length > 1 && (
                           <span className="inline-flex items-center gap-0.5 rounded-full border border-[#1F453E]/15 bg-white px-1 py-0.5 text-xs font-semibold text-[#1F453E]">
                             <button
@@ -570,10 +686,49 @@ export default function SuggestPage() {
 
                     {picks.length === 0 ? (
                       <p className="py-10 text-center text-sm text-[#6B7B76]">
-                        Tủ đồ chưa đủ món để ghép thành bộ. Hãy thêm vài món nữa.
+                        Tủ đồ chưa đủ món để phối thành bộ. Hãy thêm vài món nữa.
                       </p>
                     ) : (
-                      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4">
+                      <div className="grid gap-5 md:grid-cols-[minmax(0,260px)_1fr]">
+                        {/* Bo do mac tren nguoi mau: nhin thay ca bo da phoi, khong chi la cac mon roi. */}
+                        <figure className="rounded-2xl bg-[#FAF9F5] p-3">
+                          <OutfitLook
+                            items={picks.map(({ item }) => item!)}
+                            profile={mannequinProfile}
+                            title={current.styling?.title}
+                            className="mx-auto h-[380px] w-full sm:h-[420px]"
+                          />
+                          {current.styling?.title && (
+                            <figcaption className="mt-2 text-center font-serif-display text-lg font-semibold text-[#1F453E]">
+                              {current.styling.title}
+                            </figcaption>
+                          )}
+                        </figure>
+
+                        <div className="min-w-0 space-y-4">
+                          {current.styling && current.styling.tips.length > 0 && (
+                            <div className="rounded-2xl border border-[#E2ECC8] bg-[#F8FAF2] p-4">
+                              <p className="mb-2 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1F453E]">
+                                <Sparkles size={13} /> Cách mặc
+                                {current.styling.source === 'ai' && (
+                                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-[#52665F]">
+                                    Stylist AI viết sau khi xem ảnh
+                                  </span>
+                                )}
+                              </p>
+                              <ol className="space-y-1.5 text-sm text-[#2C4C45]">
+                                {current.styling.tips.map((tip, idx) => (
+                                  <li key={`${tip}-${idx}`} className="flex gap-2">
+                                    <span className="font-semibold text-[#1F453E]">{idx + 1}.</span>
+                                    {tip}
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+
+                          <p className="text-xs font-bold uppercase tracking-wider text-[#1F453E]">Các món trong bộ</p>
+                      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3">
                         {picks.map(({ label, item }) => {
                           const isAnchor = anchor?.item._id === item!._id;
                           return (
@@ -606,6 +761,8 @@ export default function SuggestPage() {
                           </div>
                           );
                         })}
+                      </div>
+                        </div>
                       </div>
                     )}
 
